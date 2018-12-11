@@ -10,7 +10,7 @@ c.execute("""CREATE TABLE transactiontable (
 			id INTEGER PRIMARY KEY AUTOINCREMENT, 
 			address TEXT,
 			parentid INT,
-			transferBalance INT
+			transferBalance REAL
 	)""")
 
 c.execute("DROP TABLE IF EXISTS transferlogs")
@@ -32,9 +32,10 @@ c.execute("""CREATE TABLE webtable (
 c.execute("DROP TABLE IF EXISTS transactionHistory")
 c.execute("""CREATE TABLE transactionHistory (
 			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			blockno INT,
 			fromAddress TEXT,
 			toAddress TEXT,
-			amount INT,
+			amount REAL,
 			blockchainReference TEXT
 	)""")
 
@@ -46,14 +47,6 @@ conn.commit()
 #take in root address
 root_address = "oPounjEbJxY7YCBaVBm61Lf2ym9DgFnAdu"
 root_init_value = 21000
-
-c.execute("INSERT INTO transactiontable ( address, parentid, transferBalance) VALUES (?,?,?)", (root_address, 0, root_init_value ))
-conn.commit()
-
-transferDescription = "Root address = " + str(root_address) + " has been initialized with "+ str(root_init_value)+ " tokens"
-blockchainReference = 'https://testnet.florincoin.info/tx/'
-c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
-											VALUES (?,?,?,?)""", ( 1, transferDescription, 0, blockchainReference))
 
 #find root address's block 
 string = "https://testnet.florincoin.info/ext/getaddress/" + str(root_address)
@@ -78,6 +71,17 @@ root_block_index = content["height"]
 #root_block_index = 26066
 
 print("root_block_index = " + str(root_block_index))
+
+c.execute("INSERT INTO transactiontable ( address, parentid, transferBalance) VALUES (?,?,?)", (root_address, 0, root_init_value ))
+conn.commit()
+
+transferDescription = "Root address = " + str(root_address) + " has been initialized with "+ str(root_init_value)+ " tokens"
+blockchainReference = 'https://testnet.florincoin.info/tx/'
+c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
+											VALUES (?,?,?,?)""", ( 1, transferDescription, 0, blockchainReference))
+
+c.execute('''INSERT INTO transactionHistory (blockno, fromAddress, toAddress, amount, blockchainReference) VALUES (?,?,?,?,?)''', (root_block_index, '',root_address, root_init_value, blockchainReference))
+
 
 # get current block count 
 response = requests.get("https://testnet.florincoin.info/api/getblockcount")
@@ -300,6 +304,11 @@ def dothemagic(blockindex):
 								c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, blockchainReference)
 											VALUES (?,?,?)""", ( pid, transferDescription, blockchainReference))
 
+								## transaction history table ##
+								c.execute(
+									'''INSERT INTO transactionHistory (blockno, fromAddress, toAddress, amount, blockchainReference) VALUES (?,?,?,?,?)''',
+									(blockindex, inputlist[0][0], outputlist[0][0], str(balance), blockchainReference))
+
 								##webpage table section ##
 								transferDescription = str(commentTransferAmount[i]) + " tokens transferred from " + str(inputlist[0][0]) + " to " + str(outputlist[i][0]) 
 								c.execute("""INSERT INTO webtable (transferDescription, blockchainReference) 
@@ -332,6 +341,10 @@ def dothemagic(blockindex):
 								c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, blockchainReference)
 											VALUES (?,?,?)""", ( pid, transferDescription, blockchainReference))
 
+								## transaction history table ##
+								c.execute(
+									'''INSERT INTO transactionHistory (blockno, fromAddress, toAddress, amount, blockchainReference) VALUES (?,?,?,?,?)''',
+									(blockindex, inputlist[0][0], outputlist[0][0], str(balance), blockchainReference))
 
 								balance = balance - temp
 								conn.commit()
