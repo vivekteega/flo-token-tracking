@@ -1,92 +1,9 @@
 import requests
 import json 
 import sqlite3
+import argparse
+import configparser
 
-conn = sqlite3.connect('tree.db')
-c = conn.cursor()
-
-c.execute("DROP TABLE IF EXISTS transactiontable")
-c.execute("""CREATE TABLE transactiontable (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, 
-			address TEXT,
-			parentid INT,
-			transferBalance REAL
-	)""")
-
-c.execute("DROP TABLE IF EXISTS transferlogs")
-c.execute("""CREATE TABLE transferlogs (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			primaryIDReference INTEGER,
-			transferDescription TEXT,
-			transferIDConsumed INT,
-			blockchainReference TEXT
-	)""")
-
-c.execute("DROP TABLE IF EXISTS webtable")
-c.execute("""CREATE TABLE webtable (
-			id INTEGER PRIMARY KEY AUTOINCREMENT, 
-			transferDescription TEXT,
-			blockchainReference TEXT
-	)""")
-
-c.execute("DROP TABLE IF EXISTS transactionHistory")
-c.execute("""CREATE TABLE transactionHistory (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			blockno INT,
-			fromAddress TEXT,
-			toAddress TEXT,
-			amount REAL,
-			blockchainReference TEXT
-	)""")
-
-c.execute("DROP TABLE IF EXISTS extra")
-c.execute("CREATE TABLE extra ( id INTEGER PRIMARY KEY , lastblockscanned INT)")
-conn.commit()
-
-
-#take in root address
-root_address = "oPounjEbJxY7YCBaVBm61Lf2ym9DgFnAdu"
-root_init_value = 21000
-
-#find root address's block 
-string = "https://testnet.florincoin.info/ext/getaddress/" + str(root_address)
-response = requests.get(string)
-content = json.loads(response.content.decode("utf-8"))
-root_trans_hash = ''
-for cur in content["last_txs"]:
-	if cur["type"] == "vout":
-		root_trans_hash = cur["addresses"]
-		break
-
-
-string = "https://testnet.florincoin.info/api/getrawtransaction?txid=" + str(root_trans_hash) +"&decrypt=1"
-response = requests.get(string)
-content = json.loads(response.content.decode("utf-8"))
-root_block_hash = content["blockhash"]
-
-string = "https://testnet.florincoin.info/api/getblock?hash=" + str(root_block_hash)
-response = requests.get(string)
-content = json.loads(response.content.decode("utf-8"))
-root_block_index = content["height"]
-#root_block_index = 26066
-
-print("root_block_index = " + str(root_block_index))
-
-c.execute("INSERT INTO transactiontable ( address, parentid, transferBalance) VALUES (?,?,?)", (root_address, 0, root_init_value ))
-conn.commit()
-
-transferDescription = "Root address = " + str(root_address) + " has been initialized with "+ str(root_init_value)+ " tokens"
-blockchainReference = 'https://testnet.florincoin.info/tx/'
-c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
-											VALUES (?,?,?,?)""", ( 1, transferDescription, 0, blockchainReference))
-
-c.execute('''INSERT INTO transactionHistory (blockno, fromAddress, toAddress, amount, blockchainReference) VALUES (?,?,?,?,?)''', (root_block_index, '',root_address, root_init_value, blockchainReference))
-
-
-# get current block count 
-response = requests.get("https://testnet.florincoin.info/api/getblockcount")
-current_index = json.loads(response.content.decode("utf-8"))
-print("current_block_index : " + str(current_index))
 
 def listcheck(lst):
 	for element in lst:
@@ -97,7 +14,7 @@ def listcheck(lst):
 			return 1
 	return 0
 
-def dothemagic(blockindex):
+def startTracking(blockindex, config, conn, c):
 	string = "https://testnet.florincoin.info/api/getblockhash?index=" + str(blockindex)
 	response = requests.get(string)
 	blockhash = response.content.decode("utf-8")
@@ -114,8 +31,8 @@ def dothemagic(blockindex):
 		text = text[5:]
 		comment_list = text.split("#")
 
-		if comment_list[0] == 'ranchimalltest':
-			print("I just saw ranchimalltest")
+		if comment_list[0] == config['DEFAULT']['PREFIX']:
+			print("I just saw "+config['DEFAULT']['PREFIX'])
 			commentTransferAmount = comment_list[1:]
 			
 			#if not all(isinstance(x, (int, float)) for x in commentTransferAmount):
@@ -190,67 +107,6 @@ def dothemagic(blockindex):
 			elif availableTokens < sum(commentTransferAmount):
 				print("\nThe transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
 				continue
-
-				# commentTransferAmount = availableTokens
-
-				# for output in outputlist:
-				# 	if output[0] == inputlist[0][0]:
-				# 		continue
-
-				# 	c.execute("SELECT * FROM transactiontable WHERE address=?",(inputlist[0][0],))
-				# 	table = c.fetchall()
-
-				# 	pidlst = []
-				# 	checksum = 0
-				# 	for row in table:
-				# 		if checksum >= outputlist[0][1]:
-				# 			break
-				# 		pidlst.append(row[0])
-				# 		checksum = checksum + row[3]
-
-				# 	balance = commentTransferAmount
-
-				# 	for pid in pidlst:
-				# 			c.execute("SELECT transferBalance FROM transactiontable WHERE id=?", (pid,))
-				# 			temp = c.fetchall()
-				# 			temp = temp[0][0]
-
-				# 			if balance <= temp:
-				# 				c.execute("INSERT INTO transactiontable (address, parentid, transferBalance) VALUES (?,?,?)", (output[0],pid,balance))
-				# 				c.execute("UPDATE transactiontable SET transferBalance=? WHERE id=?", (temp-balance, pid))
-								
-				# 				c.execute("SELECT id FROM transactiontable ORDER BY id DESC LIMIT 1")
-				# 				lastid = c.fetchall()[0][0]
-				# 				transferDescription = "$$ " +str(balance) + " tokens transferred to " + str(output[0]) + " from pid = " + str(pid)
-				# 				blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
-				# 				c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
-				# 							VALUES (?,?,?,?)""", ( lastid, transferDescription, pid, blockchainReference))
-
-				# 				transferDescription = "$$ balance in id = " + str(pid) + " UPDATED from " + str(temp) + " to " + str(temp-balance)
-				# 				blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
-				# 				c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription)
-				# 							VALUES (?,?)""", ( pid, transferDescription))
-
-				# 				balance = 0
-				# 				conn.commit()
-				# 			elif balance > temp:
-				# 				c.execute("INSERT INTO transactiontable (address, parentid, transferBalance) VALUES (?,?,?)", (output[0], pid, temp ))
-				# 				c.execute("UPDATE transactiontable SET transferBalance=? WHERE id=?", (0, pid))
-
-				# 				c.execute("SELECT id FROM transactiontable ORDER BY id DESC LIMIT 1")
-				# 				lastid = c.fetchall()[0][0]
-				# 				transferDescription = "$$ " + str(temp) + " tokens transferred to " + str(output[0]) + " from pid = " + str(pid)
-				# 				blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
-				# 				c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
-				# 							VALUES (?,?,?,?)""", ( lastid, transferDescription, pid, blockchainReference))
-
-				# 				transferDescription = "$$ balance in id = " + str(pid) + " UPDATED from " + str(temp) + " to " + str(0)
-				# 				blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
-				# 				c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription)
-				# 							VALUES (?,?)""", ( pid, transferDescription))
-
-				# 				balance = balance - temp
-				# 				conn.commit()
 
 			elif availableTokens >= sum(commentTransferAmount):
 				if len(commentTransferAmount) != len(outputlist):
@@ -349,16 +205,131 @@ def dothemagic(blockindex):
 								balance = balance - temp
 								conn.commit()
 
+def resetDatabase(c, conn):
+	c.execute("DROP TABLE IF EXISTS transactiontable")
+	c.execute("""CREATE TABLE transactiontable (
+				id INTEGER PRIMARY KEY AUTOINCREMENT, 
+				address TEXT,
+				parentid INT,
+				transferBalance REAL
+		)""")
 
-#current_index = 19431
-#root_block_index = 19428
+	c.execute("DROP TABLE IF EXISTS transferlogs")
+	c.execute("""CREATE TABLE transferlogs (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				primaryIDReference INTEGER,
+				transferDescription TEXT,
+				transferIDConsumed INT,
+				blockchainReference TEXT
+		)""")
 
-c.execute("INSERT INTO extra (id, lastblockscanned) VALUES (?,?)", (1, root_block_index))
-# run loop and pass blockno 
-for blockindex in range(root_block_index + 1, current_index+1):
-	print(blockindex)
-	dothemagic(blockindex)
-	c.execute("UPDATE extra SET lastblockscanned=? WHERE id=?", (blockindex,1))
+	c.execute("DROP TABLE IF EXISTS webtable")
+	c.execute("""CREATE TABLE webtable (
+				id INTEGER PRIMARY KEY AUTOINCREMENT, 
+				transferDescription TEXT,
+				blockchainReference TEXT
+		)""")
 
-conn.commit()
-conn.close()
+	c.execute("DROP TABLE IF EXISTS transactionHistory")
+	c.execute("""CREATE TABLE transactionHistory (
+				id INTEGER PRIMARY KEY AUTOINCREMENT,
+				blockno INT,
+				fromAddress TEXT,
+				toAddress TEXT,
+				amount REAL,
+				blockchainReference TEXT
+		)""")
+
+	c.execute("DROP TABLE IF EXISTS extra")
+	c.execute("CREATE TABLE extra ( id INTEGER PRIMARY KEY , lastblockscanned INT)")
+	conn.commit()
+
+
+def main():
+	# Read configuration
+	config = configparser.ConfigParser()
+	config.read('config.ini')
+
+
+	# Read command line arguments
+	parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash')
+	parser.add_argument('-r', '--reset', nargs='?', const=1, type=int, help='Purge existing db and rebuild it. 0 -> Keep db. 1 -> Purge db ')
+	args = parser.parse_args()
+
+	# Connect to db
+	conn = sqlite3.connect(config['DEFAULT']['DB_NAME'])
+	c = conn.cursor()
+
+	# get current block height
+	response = requests.get("https://testnet.florincoin.info/api/getblockcount")
+	current_index = json.loads(response.content.decode("utf-8"))
+	print("current_block_height : " + str(current_index))
+
+	if args.reset == 1:
+		resetDatabase(c, conn)
+		# Read root address
+		root_address = config['DEFAULT']['ROOT_ADDRESS']
+		root_init_value = int(config['DEFAULT']['INIT_TOKEN_NO'])
+
+		# Find root address's block no
+		string = "https://testnet.florincoin.info/ext/getaddress/" + str(root_address)
+		response = requests.get(string)
+		content = json.loads(response.content.decode("utf-8"))
+		root_trans_hash = ''
+		for cur in content["last_txs"]:
+			if cur["type"] == "vout":
+				root_trans_hash = cur["addresses"]
+				break
+
+		string = "https://testnet.florincoin.info/api/getrawtransaction?txid=" + str(root_trans_hash) + "&decrypt=1"
+		response = requests.get(string)
+		content = json.loads(response.content.decode("utf-8"))
+		root_block_hash = content["blockhash"]
+
+		string = "https://testnet.florincoin.info/api/getblock?hash=" + str(root_block_hash)
+		response = requests.get(string)
+		content = json.loads(response.content.decode("utf-8"))
+		root_block_index = content["height"]
+		# root_block_index = 26066
+
+		print("root_block_index = " + str(root_block_index))
+
+		c.execute("INSERT INTO transactiontable ( address, parentid, transferBalance) VALUES (?,?,?)",
+				  (root_address, 0, root_init_value))
+		conn.commit()
+
+		transferDescription = "Root address = " + str(root_address) + " has been initialized with " + str(
+			root_init_value) + " tokens"
+		blockchainReference = 'https://testnet.florincoin.info/tx/'
+		c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
+														VALUES (?,?,?,?)""",
+				  (1, transferDescription, 0, blockchainReference))
+
+		c.execute(
+			'''INSERT INTO transactionHistory (blockno, fromAddress, toAddress, amount, blockchainReference) VALUES (?,?,?,?,?)''',
+			(root_block_index, '', root_address, root_init_value, blockchainReference))
+
+		c.execute("INSERT INTO extra (id, lastblockscanned) VALUES (?,?)", (1, root_block_index))
+		conn.commit()
+		lastblockscanned = root_block_index
+
+	else:
+		response = requests.get("https://testnet.florincoin.info/api/getblockcount")
+		current_index = json.loads(response.content.decode("utf-8"))
+
+		c.execute("SELECT lastblockscanned FROM extra WHERE id=1")
+		lastblockscanned = c.fetchall()[0][0]
+
+
+	# run loop and pass blockno
+	for blockindex in range(lastblockscanned + 1, current_index+1):
+		print(blockindex)
+		startTracking(blockindex, config, conn, c)
+		c.execute("UPDATE extra SET lastblockscanned=? WHERE id=?", (blockindex,1))
+		conn.commit()
+
+	conn.commit()
+	conn.close()
+
+if __name__ == "__main__":
+    main()
