@@ -5,6 +5,23 @@ import argparse
 import configparser
 
 
+# Read configuration
+config = configparser.ConfigParser()
+config.read('config.ini')
+
+# Read command line arguments
+parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash')
+parser.add_argument('-r', '--reset', nargs='?', const=1, type=int, help='Purge existing db and rebuild it')
+args = parser.parse_args()
+
+if config['DEFAULT']['NET'] == 'mainnet':
+	neturl = 'https://florincoin.info/'
+elif config['DEFAULT']['NET'] == 'testnet':
+	neturl = 'https://testnet.florincoin.info/'
+else:
+	print('NET parameter is wrong')
+
+
 def listcheck(lst):
 	for element in lst:
 		try:
@@ -15,16 +32,16 @@ def listcheck(lst):
 	return 0
 
 def startTracking(blockindex, config, conn, c):
-	string = "https://testnet.florincoin.info/api/getblockhash?index=" + str(blockindex)
+	string = "{}api/getblockhash?index={}".format(neturl, str(blockindex))
 	response = requests.get(string)
 	blockhash = response.content.decode("utf-8")
 
-	string = "https://testnet.florincoin.info/api/getblock?hash=" + str(blockhash)
+	string = "{}api/getblock?hash={}".format(neturl, str(blockhash))
 	response = requests.get(string)
 	blockinfo = json.loads(response.content.decode("utf-8"))
 
 	for transaction in blockinfo["tx"]:
-		string = "https://testnet.florincoin.info/api/getrawtransaction?txid="+ str(transaction) +"&decrypt=1"
+		string = "{}api/getrawtransaction?txid={}&decrypt=1".format(neturl, str(transaction))
 		response = requests.get(string)
 		data = json.loads(response.content.decode("utf-8"))
 		text = data["floData"]
@@ -32,7 +49,7 @@ def startTracking(blockindex, config, conn, c):
 		comment_list = text.split("#")
 
 		if comment_list[0] == config['DEFAULT']['PREFIX']:
-			print("I just saw "+config['DEFAULT']['PREFIX'])
+			print("I just saw "+str(config['DEFAULT']['PREFIX']))
 			commentTransferAmount = comment_list[1:]
 			
 			#if not all(isinstance(x, (int, float)) for x in commentTransferAmount):
@@ -59,7 +76,7 @@ def startTracking(blockindex, config, conn, c):
 			inputadd = ''
 
 			for query in querylist:
-				string = "https://testnet.florincoin.info/api/getrawtransaction?txid="+ str(query[0]) +"&decrypt=1"
+				string = "{}api/getrawtransaction?txid={}&decrypt=1".format(neturl, str(query[0]))
 				response = requests.get(string)
 				content = json.loads(response.content.decode("utf-8"))
 
@@ -151,12 +168,12 @@ def startTracking(blockindex, config, conn, c):
 								c.execute("SELECT id FROM transactiontable ORDER BY id DESC LIMIT 1")
 								lastid = c.fetchall()[0][0]
 								transferDescription = str(balance) + " tokens transferred to " + str(outputlist[i][0]) + " from " + str(inputlist[0][0])
-								blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
+								blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
 								c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
 											VALUES (?,?,?,?)""", ( lastid, transferDescription, pid, blockchainReference))
 
 								transferDescription = str(inputlist[0][0]) + " balance UPDATED from " + str(temp) + " to " + str(temp-balance)
-								blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
+								blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
 								c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, blockchainReference)
 											VALUES (?,?,?)""", ( pid, transferDescription, blockchainReference))
 
@@ -188,12 +205,12 @@ def startTracking(blockindex, config, conn, c):
 								c.execute("SELECT id FROM transactiontable ORDER BY id DESC LIMIT 1")
 								lastid = c.fetchall()[0][0]
 								transferDescription = str(temp) + " tokens transferred to " + str(outputlist[i][0]) + " from " + str(inputlist[0][0])
-								blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
+								blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
 								c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
 											VALUES (?,?,?,?)""", ( lastid, transferDescription, pid, blockchainReference))
 
 								transferDescription = str() + " balance UPDATED from " + str(temp) + " to " + str(0)
-								blockchainReference = 'https://testnet.florincoin.info/tx/' + str(transaction)
+								blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
 								c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, blockchainReference)
 											VALUES (?,?,?)""", ( pid, transferDescription, blockchainReference))
 
@@ -246,22 +263,14 @@ def resetDatabase(c, conn):
 
 
 def main():
-	# Read configuration
-	config = configparser.ConfigParser()
-	config.read('config.ini')
-
-
-	# Read command line arguments
-	parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash')
-	parser.add_argument('-r', '--reset', nargs='?', const=1, type=int, help='Purge existing db and rebuild it. 0 -> Keep db. 1 -> Purge db ')
-	args = parser.parse_args()
 
 	# Connect to db
 	conn = sqlite3.connect(config['DEFAULT']['DB_NAME'])
 	c = conn.cursor()
 
 	# get current block height
-	response = requests.get("https://testnet.florincoin.info/api/getblockcount")
+	string = "{}api/getblockcount".format(neturl)
+	response = requests.get(string)
 	current_index = json.loads(response.content.decode("utf-8"))
 	print("current_block_height : " + str(current_index))
 
@@ -272,7 +281,7 @@ def main():
 		root_init_value = int(config['DEFAULT']['INIT_TOKEN_NO'])
 
 		# Find root address's block no
-		string = "https://testnet.florincoin.info/ext/getaddress/" + str(root_address)
+		string = "{}ext/getaddress/{}/".format(neturl, str(root_address))
 		response = requests.get(string)
 		content = json.loads(response.content.decode("utf-8"))
 		root_trans_hash = ''
@@ -281,12 +290,12 @@ def main():
 				root_trans_hash = cur["addresses"]
 				break
 
-		string = "https://testnet.florincoin.info/api/getrawtransaction?txid=" + str(root_trans_hash) + "&decrypt=1"
+		string = "{}api/getrawtransaction?txid={}&decrypt=1".format(neturl, str(root_trans_hash))
 		response = requests.get(string)
 		content = json.loads(response.content.decode("utf-8"))
 		root_block_hash = content["blockhash"]
 
-		string = "https://testnet.florincoin.info/api/getblock?hash=" + str(root_block_hash)
+		string = "{}api/getblock?hash={}".format(neturl, str(root_block_hash))
 		response = requests.get(string)
 		content = json.loads(response.content.decode("utf-8"))
 		root_block_index = content["height"]
@@ -300,7 +309,7 @@ def main():
 
 		transferDescription = "Root address = " + str(root_address) + " has been initialized with " + str(
 			root_init_value) + " tokens"
-		blockchainReference = 'https://testnet.florincoin.info/tx/'
+		blockchainReference = '{}tx/'.format(neturl)
 		c.execute("""INSERT INTO transferlogs (primaryIDReference, transferDescription, transferIDConsumed, blockchainReference)
 														VALUES (?,?,?,?)""",
 				  (1, transferDescription, 0, blockchainReference))
@@ -314,7 +323,7 @@ def main():
 		lastblockscanned = root_block_index
 
 	else:
-		response = requests.get("https://testnet.florincoin.info/api/getblockcount")
+		response = requests.get("{}api/getblockcount".format(neturl))
 		current_index = json.loads(response.content.decode("utf-8"))
 
 		c.execute("SELECT lastblockscanned FROM extra WHERE id=1")
@@ -323,6 +332,8 @@ def main():
 
 	# run loop and pass blockno
 	for blockindex in range(lastblockscanned + 1, current_index+1):
+		if blockindex == 3127800:
+			print('hi')
 		print(blockindex)
 		startTracking(blockindex, config, conn, c)
 		c.execute("UPDATE extra SET lastblockscanned=? WHERE id=?", (blockindex,1))
