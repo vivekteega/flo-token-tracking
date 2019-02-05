@@ -3,6 +3,7 @@ import json
 import sqlite3
 import argparse
 import configparser
+import subprocess
 
 
 # Read configuration
@@ -16,8 +17,10 @@ args = parser.parse_args()
 
 if config['DEFAULT']['NET'] == 'mainnet':
 	neturl = 'https://florincoin.info/'
+	localapi = config['DEFAULT']['FLO_CLI_PATH']
 elif config['DEFAULT']['NET'] == 'testnet':
 	neturl = 'https://testnet.florincoin.info/'
+	localapi = '{} --testnet'.format(config['DEFAULT']['FLO_CLI_PATH'])
 else:
 	print('NET parameter is wrong')
 
@@ -32,18 +35,18 @@ def listcheck(lst):
 	return 0
 
 def startTracking(blockindex, config, conn, c):
-	string = "{}api/getblockhash?index={}".format(neturl, str(blockindex))
-	response = requests.get(string)
-	blockhash = response.content.decode("utf-8")
+	string = "{} getblockhash {}".format(localapi, str(blockindex))
+	response = subprocess.check_output(string, shell=True)
+	blockhash = response.decode("utf-8")
 
-	string = "{}api/getblock?hash={}".format(neturl, str(blockhash))
-	response = requests.get(string)
-	blockinfo = json.loads(response.content.decode("utf-8"))
+	string = "{} getblock {}".format(localapi, str(blockhash))
+	response = subprocess.check_output(string, shell=True)
+	blockinfo = json.loads(response.decode("utf-8"))
 
 	for transaction in blockinfo["tx"]:
-		string = "{}api/getrawtransaction?txid={}&decrypt=1".format(neturl, str(transaction))
-		response = requests.get(string)
-		data = json.loads(response.content.decode("utf-8"))
+		string = "{} getrawtransaction {} 1".format(localapi, str(transaction))
+		response = subprocess.check_output(string, shell=True)
+		data = json.loads(response.decode("utf-8"))
 		text = data["floData"]
 		text = text[5:]
 		comment_list = text.split("#")
@@ -76,9 +79,9 @@ def startTracking(blockindex, config, conn, c):
 			inputadd = ''
 
 			for query in querylist:
-				string = "{}api/getrawtransaction?txid={}&decrypt=1".format(neturl, str(query[0]))
-				response = requests.get(string)
-				content = json.loads(response.content.decode("utf-8"))
+				string = "{} getrawtransaction {} 1".format(localapi, str(query[0]))
+				response = subprocess.check_output(string, shell=True)
+				content = json.loads(response.decode("utf-8"))
 
 				for objec in content["vout"]:
 					if objec["n"] == query[1]:
@@ -269,9 +272,9 @@ def main():
 	c = conn.cursor()
 
 	# get current block height
-	string = "{}api/getblockcount".format(neturl)
-	response = requests.get(string)
-	current_index = json.loads(response.content.decode("utf-8"))
+	string = "{} getblockcount".format(localapi)
+	response = subprocess.check_output(string, shell=True)
+	current_index = json.loads(response.decode("utf-8"))
 	print("current_block_height : " + str(current_index))
 
 	if args.reset == 1:
@@ -290,14 +293,14 @@ def main():
 				root_trans_hash = cur["addresses"]
 				break
 
-		string = "{}api/getrawtransaction?txid={}&decrypt=1".format(neturl, str(root_trans_hash))
-		response = requests.get(string)
-		content = json.loads(response.content.decode("utf-8"))
+		string = "{} getrawtransaction {} 1".format(localapi, str(root_trans_hash))
+		response = subprocess.check_output(string, shell=True)
+		content = json.loads(response.decode("utf-8"))
 		root_block_hash = content["blockhash"]
 
-		string = "{}api/getblock?hash={}".format(neturl, str(root_block_hash))
-		response = requests.get(string)
-		content = json.loads(response.content.decode("utf-8"))
+		string = "{} getblock {}".format(localapi, str(root_block_hash))
+		response = subprocess.check_output(string, shell=True)
+		content = json.loads(response.decode("utf-8"))
 		root_block_index = content["height"]
 		# root_block_index = 26066
 
@@ -324,7 +327,9 @@ def main():
 
 	else:
 		response = requests.get("{}api/getblockcount".format(neturl))
-		current_index = json.loads(response.content.decode("utf-8"))
+		string = "{} getblockcount".format(localapi)
+		response = subprocess.check_output(string, shell=True)
+		current_index = json.loads(response.decode("utf-8"))
 
 		c.execute("SELECT lastblockscanned FROM extra WHERE id=1")
 		lastblockscanned = c.fetchall()[0][0]
