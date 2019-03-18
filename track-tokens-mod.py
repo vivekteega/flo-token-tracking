@@ -8,7 +8,7 @@ import sys
 import parsing
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import create_engine, func, desc
-from models import Extra, TransactionHistory, TransactionTable, TransferLogs, Webtable, Base
+from models import Extra, TransactionHistory, TransactionTable, TransferLogs, Webtable, Base, ContractStructure
 
 
 def startWorking(transaction_data, parsed_data):
@@ -74,9 +74,27 @@ def startWorking(transaction_data, parsed_data):
             print("This transaction will be discarded")
             continue
 
-        # Check if the transaction is of the type 'incorporation'
-        if parsed_data['type'] == 'incorporation':
+        # Check if the transaction is of the type 'incorporation' or 'smartcontract'
+        if parsed_data['type'] == 'smartcontract':
+            print("I JUST FOUND THE INCORPORATION OF SMART CONTRACT \n" + str(parsed_data))
+            if parsed_data['contracttype'] == 'betting*':
+                print("Smart contract is of the type betting")
+                if parsed_data['contractname'] is not None and parsed_data['contractaddress'][:-1] == outputlist[0][0]:
+                    print("Hey I have passed the first test for smart contract")
+                    #check if a db with contractname exists
+                    scengine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractname'][:-1]), echo=True)
+                    Base.metadata.create_all(bind=scengine)
+                    scsession = sessionmaker(bind=scengine)()
+                    scsession.add(ContractStructure(attribute='contracttype', index=0, value=parsed_data['contracttype'][:-1]))
+                    scsession.add(ContractStructure(attribute='contractname', index=0, value=parsed_data['contractname'][:-1]))
+                    scsession.add(
+                        ContractStructure(attribute='marker', index=0, value=parsed_data['marker'][:-1]))
 
+                    scsession.commit()
+                    scsession.close()
+
+            sys.exit(0)
+        elif parsed_data['type'] == 'incorporation':
             session.add(TransactionTable(address=outputlist[0][0], parentid=0, transferBalance=parsed_data['initTokens']))
             session.commit()
             #transferDescription = "Root address = " + str(root_address) + " has been initialized with " + str(root_init_value) + " tokens"
@@ -93,8 +111,7 @@ def startWorking(transaction_data, parsed_data):
             print("The input address dosen't exist in our database ")
 
         elif availableTokens < commentTransferAmount:
-            print(
-                "\nThe transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
+            print("\nThe transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
             continue
 
         elif availableTokens >= commentTransferAmount:
@@ -216,6 +233,8 @@ def startWorking(transaction_data, parsed_data):
     session.commit()
     session.close()
 
+
+
 # Read configuration
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -255,6 +274,7 @@ response = subprocess.check_output(string, shell=True)
 current_index = json.loads(response.decode("utf-8"))
 print("current_block_height : " + str(current_index))
 
+
 for blockindex in range( startblock, current_index ):
     print(blockindex)
 
@@ -280,4 +300,3 @@ for blockindex in range( startblock, current_index ):
             print(blockindex)
             print(parsed_data['type'])
             startWorking(transaction_data, parsed_data)
-

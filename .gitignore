@@ -1,3 +1,5 @@
 tree.db
 .idea/
 flo_addresses.txt
+__pycache__/
+*.swp
