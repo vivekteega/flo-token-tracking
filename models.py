@@ -3,6 +3,7 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey
 
 Base = declarative_base()
 ContractBase = declarative_base()
+SystemBase = declarative_base()
 
 class Extra(Base):
     __tablename__ = "extra"
@@ -52,4 +53,18 @@ class ContractStructure(ContractBase):
     index = Column('index', Integer)
     value = Column('value', String)
 
+class ContractParticipants(ContractBase):
+    __tablename__ = "contractparticipants"
+
+    id = Column('id', Integer, primary_key=True)
+    participantAddress = Column('participantAddress', String)
+    tokenAmount = Column('tokenAmount', Float)
+    contractCondition = Column('contractCondition', String)
+
+class ActiveContracts(SystemBase):
+    __tablename__ = "activecontracts"
+
+    id = Column('id', Integer, primary_key=True)
+    contractName = Column('contractName', String)
+    contractAddress = Column('contractAddress', String)
 

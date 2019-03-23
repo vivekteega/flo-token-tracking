@@ -7,7 +7,7 @@ amount = None
 
 
 def isTransfer(text):
-    wordlist = ['transfer','send','give'] #keep everything lowercase
+    wordlist = ['transfer','send','give'] # keep everything lowercase
     textList = text.split(' ')
     for word in wordlist:
         if word in textList:
@@ -27,7 +27,9 @@ def isIncorp(text):
 def isSmartContract(text):
     textList = text.split(' ')
     for word in textList:
-        if word[-1] == '@':
+        if word == '':
+            continue
+        if word.endswith('@'):
             return word
     return False
 
@@ -48,27 +50,13 @@ def isSmartContractPay(text):
         return False
 
 
-def extractOperation(text):
-    operationList = ['send', 'transfer', 'give'] # keep everything lowercase
-    count = 0
-    returnval = None
-    for operation in operationList:
-        count = count + text.count(operation)
-        if count > 1:
-            return 'Too many'
-        if count == 1 and (returnval is None):
-            returnval = operation
-    return returnval
-
-
-# todo pass marker to the function and support all types
-def extractAmount(text):
+def extractAmount(text, marker):
     count = 0
     returnval = None
     splitText = re.split("\W+", text)
 
     for word in splitText:
-        word = word.replace('rmt', '')
+        word = word.replace(marker, '')
         try:
             float(word)
             count = count + 1
@@ -84,7 +72,9 @@ def extractAmount(text):
 def extractMarker(text):
     textList = text.split(' ')
     for word in textList:
-        if word[-1] == '#':
+        if word == '':
+            continue
+        if word.endswith('#'):
             return word
     return False
 
@@ -97,17 +87,20 @@ def extractInitTokens(text):
             result = float(word)
             if textList[idx+1] in base_units:
                 return result*base_units[textList[idx+1]]
-            return res
+            return result
         except:
             continue
+    return None
 
 
 def extractAddress(text):
     textList = text.split(' ')
     for word in textList:
+        if word == '':
+            continue
         if word[-1] == '$':
             return word
-    return False
+    return None
 
 
 def extractContractType(text):
@@ -124,7 +117,11 @@ def extractContractType(text):
 
 
 def extractContractCondition(text):
-    return text.split("contractcondition:")[1][1:-1]
+    result = text.split("contractcondition:")
+    if len(result) != 1:
+        return result[1].strip()[1:-1]
+    else:
+        return None
 
 
 def extractContractConditions(text, contracttype, marker):
@@ -149,9 +146,19 @@ def extractContractConditions(text, contracttype, marker):
                 else:
                     print("something is wrong with smartcontractpays conditions")
 
+        if 'userassetcommitment' in extractedRules and 'smartcontractpays' in extractedRules:
+            return extractedRules
+        else:
+            return None
+    return None
 
-        return extractedRules
-    return False
+
+def extractTriggerCondition(text):
+    searchResult = re.search('\".*\"', text)
+    if searchResult is None:
+        searchResult = re.search('\'.*\'', text)
+        return searchResult
+    return searchResult
 
 
 # Combine test
@@ -163,45 +170,83 @@ def parse_flodata(string):
     nospacestring = re.sub(' +', ' ', string)
     cleanstring = nospacestring.lower()
 
+    atList = []
+    hashList = []
 
-    if isTransfer(cleanstring):
-        if isSmartContract(cleanstring):
-            contractname = isSmartContract(cleanstring)
-            marker = extractMarker(cleanstring)
-            operation = extractOperation(cleanstring)
-            amount = extractAmount(cleanstring)
-            contractcondition = extractContractCondition(cleanstring)
-            parsed_data = { 'type': 'transfer', 'transferType': 'smartContract', 'flodata': string, 'tokenIdentification': marker[:-1],
-                           'operation': operation, 'tokenAmount': amount, 'contractName': contractname, 'contractCondition': contractcondition}
-        else:
-            marker = extractMarker(cleanstring)
-            operation = extractOperation(cleanstring)
-            amount = extractAmount(cleanstring)
-            address = extractAddress(nospacestring)
-            parsed_data = {'type': 'transfer', 'transferType': 'token', 'flodata': string, 'tokenIdentification': marker[:-1], 'operation': operation,
-                           'amount': amount, 'address': address}
+    for word in cleanstring.split(' '):
+        if word.endswith('@'):
+            atList.append(word)
+        if word.endswith('#'):
+            hashList.append(word)
 
-    elif isSmartContractPay(nospacestring):
-        contractConditions = isSmartContractPay(nospacestring)
-        parsed_data = {'type': 'smartContractPays', 'flodata': string, 'smartContractTrigger':contractConditions['smartContractTrigger'], 'smartContractName':contractConditions['smartContractName']}
-
-    elif isSmartContract(cleanstring):
-        contractname = isSmartContract(cleanstring)
-        marker = extractMarker(cleanstring)
-        contracttype = extractContractType(cleanstring)
-        contractaddress = extractAddress(nospacestring)
-        contractconditions = extractContractConditions(cleanstring, 'betting*', marker)
-        parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1], 'tokenIdentification': marker[:-1], 'contractName': contractname[:-1], 'contractAddress':contractaddress[:-1], 'flodata': string, 'contractConditions': contractconditions}
-
-    elif isIncorp(cleanstring):
-        incMarker = extractMarker(cleanstring)
-        initTokens = extractInitTokens(cleanstring)
-        parsed_data = {'type': 'tokenIncorporation', 'flodata': string, 'tokenIdentification': incMarker[:-1], 'tokenAmount': initTokens}
-
-    else:
+    # Filter noise first - check if the words end with either @ or #
+    if (len(atList)==0 and len(hashList)==0) or len(atList)>1 or len(hashList)>1:
         parsed_data = {'type': 'noise'}
+
+    elif len(hashList)==1 and len(atList)==0:
+        # Passing the above check means token creation or transfer
+        incorporation = isIncorp(cleanstring)
+        transfer = isTransfer(cleanstring)
+
+        if incorporation and not transfer:
+            initTokens = extractInitTokens(cleanstring)
+            if initTokens is not None:
+                parsed_data = {'type': 'tokenIncorporation', 'flodata': string, 'tokenIdentification': hashList[0][:-1],
+                           'tokenAmount': initTokens}
+            else:
+                parsed_data = {'type': 'noise'}
+        elif not incorporation and transfer:
+            amount = extractAmount(cleanstring, hashList[0][:-1])
+            address = extractAddress(nospacestring)
+            if None not in [amount, address]:
+                parsed_data = {'type': 'transfer', 'transferType': 'token', 'flodata': string,
+                           'tokenIdentification': hashList[0][:-1],
+                           'tokenAmount': amount, 'address': address[:-1]}
+            else:
+                parsed_data = {'type': 'noise'}
+        else:
+            parsed_data = {'type': 'noise'}
+
+    elif len(hashList)==1 and len(atList)==1:
+        # Passing the above check means Smart Contract creation or transfer
+        incorporation = isIncorp(cleanstring)
+        transfer = isTransfer(cleanstring)
+
+        if incorporation and not transfer:
+            contracttype = extractContractType(cleanstring)
+            contractaddress = extractAddress(nospacestring)
+            contractconditions = extractContractConditions(cleanstring, 'betting*', marker)
+
+            if None not in [contracttype, contractaddress, contractconditions]:
+                parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1],
+                           'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1],
+                           'contractAddress': contractaddress[:-1], 'flodata': string,
+                           'contractConditions': contractconditions}
+            else:
+                parsed_data = {'type': 'noise'}
+        elif not incorporation and transfer:
+            amount = extractAmount(cleanstring, hashList[0][:-1])
+            contractcondition = extractContractCondition(cleanstring)
+            if None not in [amount, contractcondition]:
+                parsed_data = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': string,
+                           'tokenIdentification': hashList[0][:-1],
+                           'operation': 'transfer', 'tokenAmount': amount, 'contractName': atList[0][:-1],
+                           'contractCondition': contractcondition}
+            else:
+                parsed_data = {'type': 'noise'}
+        else:
+            parsed_data = {'type': 'noise'}
+
+
+    elif len(hashList)==0 and len(atList)==1:
+        # Passing the above check means Smart Contract pays | exitcondition triggered from the committee
+        triggerCondition = extractTriggerCondition(cleanstring)
+        if triggerCondition is not None:
+            parsed_data = {'type': 'smartContractPays', 'contractName': atList[0][:-1], 'triggerCondition': triggerCondition.group().strip()[1:-1]}
+        else:
+            parsed_data = {'type':'noise'}
 
     return parsed_data
 
-result = parse_flodata('create electionbetting@ at address oM4pCYsbT5xg7bqLNCTXmoADUs6zBwLfXi$ of type betting* using the token rmt# with contractconditions: 1. userAssetCommitment="1rmt" 2. smartContractPays="NAMO=WIN | NAMO=LOOSE 3. expirydate=1553040000"')
+result = parse_flodata("for contractname@ Smart Contract System says 'NAMO=WIN'")
 print(result)

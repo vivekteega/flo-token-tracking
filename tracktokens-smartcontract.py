@@ -10,7 +10,121 @@ import os
 import shutil
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import create_engine, func, desc
-from models import Extra, TransactionHistory, TransactionTable, TransferLogs, Webtable, Base, ContractStructure, ContractBase
+from models import Extra, TransactionHistory, TransactionTable, TransferLogs, Webtable, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts
+
+
+committeeAddressList = ['oUc4dVvxwK7w5MHUHtev8UawN3eDjiZnNx']
+
+def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress):
+    engine = create_engine('sqlite:///tokens/{}.db'.format(tokenIdentification), echo=True)
+    Base.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+    availableTokens = session.query(func.sum(TransactionTable.transferBalance)).filter_by(address=inputAddress).all()[0][0]
+    commentTransferAmount = tokenAmount
+    if availableTokens is None:
+        print("The input address dosen't exist in our database ")
+        session.close()
+        return None
+
+    elif availableTokens < commentTransferAmount:
+        print(
+            "\nThe transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
+        session.close()
+        return None
+
+    elif availableTokens >= commentTransferAmount:
+        table = session.query(TransactionTable).filter(TransactionTable.address==inputAddress, TransactionTable.transferBalance>0).all()
+        pidlst = []
+        checksum = 0
+        for row in table:
+            if checksum >= commentTransferAmount:
+                break
+            pidlst.append(row.id)
+            checksum = checksum + row.transferBalance
+
+        balance = commentTransferAmount
+        opbalance = session.query(func.sum(TransactionTable.transferBalance)).filter_by(address=outputAddress).all()[0][0]
+
+        if opbalance is None:
+            opbalance = 0
+
+        ipbalance = availableTokens
+
+        for pid in pidlst:
+            temp = session.query(TransactionTable.transferBalance).filter_by(id=pid).all()[0][0]
+
+            if balance <= temp:
+
+                session.add(TransactionTable(address=outputAddress, parentid=pid, transferBalance=balance))
+                entry = session.query(TransactionTable).filter(TransactionTable.id == pid).all()
+                entry[0].transferBalance = temp - balance
+                session.commit()
+
+                ## transaction logs section ##
+                result = session.query(TransactionTable.id).order_by(desc(TransactionTable.id)).all()
+                lastid = result[-1].id
+                transferDescription = str(balance) + " tokens transferred to " + str(
+                    outputAddress) + " from " + str(inputAddress)
+                blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
+                session.add(TransferLogs(primaryIDReference=lastid, transferDescription=transferDescription,
+                                         transferIDConsumed=pid, blockchainReference=blockchainReference))
+                transferDescription = str(inputAddress) + " balance UPDATED from " + str(
+                    temp) + " to " + str(temp - balance)
+                blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
+                session.add(TransferLogs(primaryIDReference=pid, transferDescription=transferDescription,
+                                         blockchainReference=blockchainReference))
+
+                ## transaction history table ##
+                session.add(TransactionHistory(blockno=blockindex, fromAddress=inputAddress,
+                                               toAddress=outputAddress, amount=str(balance),
+                                               blockchainReference=blockchainReference))
+
+                ##webpage table section ##
+                transferDescription = str(commentTransferAmount) + " tokens transferred from " + str(
+                    inputAddress) + " to " + str(outputAddress)
+                session.add(
+                    Webtable(transferDescription=transferDescription, blockchainReference=blockchainReference))
+
+                transferDescription = "UPDATE " + str(outputAddress) + " balance from " + str(
+                    opbalance) + " to " + str(opbalance + commentTransferAmount)
+                session.add(
+                    Webtable(transferDescription=transferDescription, blockchainReference=blockchainReference))
+
+                transferDescription = "UPDATE " + str(inputAddress) + " balance from " + str(
+                    ipbalance) + " to " + str(ipbalance - commentTransferAmount)
+                session.add(
+                    Webtable(transferDescription=transferDescription, blockchainReference=blockchainReference))
+
+                balance = 0
+                session.commit()
+
+            elif balance > temp:
+                session.add(TransactionTable(address=outputAddress, parentid=pid, transferBalance=temp))
+                entry = session.query(TransactionTable).filter(TransactionTable.id == pid).all()
+                entry[0].transferBalance = 0
+                session.commit()
+
+                ##transaction logs section ##
+                result = session.query(TransactionTable.id).order_by(desc(TransactionTable.id)).all()
+                lastid = result[-1].id
+                transferDescription = str(temp) + " tokens transferred to " + str(outputAddress) + " from " + str(inputAddress)
+                blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
+                session.add(TransferLogs(primaryIDReference=lastid, transferDescription=transferDescription,
+                                             transferIDConsumed=pid, blockchainReference=blockchainReference))
+
+                transferDescription = str() + " balance UPDATED from " + str(temp) + " to " + str(0)
+                blockchainReference = '{}tx/{}'.format(neturl, str(transaction))
+                session.add(TransferLogs(primaryIDReference=pid, transferDescription=transferDescription,
+                                             blockchainReference=blockchainReference))
+
+                ## transaction history table ##
+                session.add(TransactionHistory(blockno=blockindex, fromAddress=inputAddress,
+                                               toAddress=outputAddress, amount=str(balance),
+                                               blockchainReference=blockchainReference))
+                balance = balance - temp
+                session.commit()
+        session.close()
+        return 1
 
 
 def startWorking(transaction_data, parsed_data):
@@ -67,25 +181,30 @@ def startWorking(transaction_data, parsed_data):
     if parsed_data['type'] == 'transfer':
         print('Found a transaction of the type transfer')
 
-        if parsed_data['transferType'] == 'smartContract':
-            print('do something')
+        if parsed_data['transferType'] == 'token':
 
-        elif parsed_data['transferType'] == 'token':
-            engine = create_engine('sqlite:///tokens/{}.db'.format(parsed_data['tokenIdentification']), echo=True)
-            Base.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
-            availableTokens = session.query(func.sum(TransactionTable.transferBalance)).filter_by(address=inputlist[0][0]).all()[0][0]
-            commentTransferAmount = parsed_data['amount']
-            if availableTokens is None:
-                print("The input address dosen't exist in our database ")
+            returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0][0], outputlist[0][0])
+            if returnval is None:
+                print("Something went wrong in the token transfer method")
 
-            elif availableTokens < commentTransferAmount:
-                print(
-                    "\nThe transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
-                return
+        elif parsed_data['transferType'] == 'smartContract':
 
-            elif availableTokens >= commentTransferAmount:
-                print("well i've reached here")
+            # Check if the tokenAmount being transferred exists in the address & do the token transfer
+            returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0][0], outputlist[0][0])
+            if returnval is not None:
+                # Store participant details in the smart contract's db
+                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+                Base.metadata.create_all(bind=engine)
+                session = sessionmaker(bind=engine)()
+                session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
+                                                 contractCondition=parsed_data['contractCondition']))
+                session.commit()
+                session.close()
+
+
+            else:
+                print("Something went wrong in the smartcontract token transfer method")
+
 
     elif parsed_data['type'] == 'tokenIncorporation':
         if not os.path.isfile('./tokens/{}.db'.format(parsed_data['tokenIdentification'])):
@@ -112,7 +231,7 @@ def startWorking(transaction_data, parsed_data):
                     session.add(
                         ContractStructure(attribute='tokenIdentification', index=0, value=parsed_data['tokenIdentification']))
                     session.add(
-                        ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress'][:-1]))
+                        ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
                     session.add(
                         ContractStructure(attribute='flodata', index=0,
                                           value=parsed_data['flodata']))
@@ -123,11 +242,50 @@ def startWorking(transaction_data, parsed_data):
                         session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
                     session.commit()
                     session.close()
+
+                    # Store smart contract address in system's db, to be ignored during future transfers
+                    engine = create_engine('sqlite:///system.db',
+                                           echo=True)
+                    SystemBase.metadata.create_all(bind=engine)
+                    session = sessionmaker(bind=engine)()
+                    session.add(
+                        ActiveContracts(contractName=parsed_data['contractName'], contractAddress=parsed_data['contractAddress']))
+                    session.commit()
+                    session.close()
         else:
             print('Transaction rejected as a smartcontract with same name has already been incorporated')
     elif parsed_data['type'] == 'smartContractPays':
         print('Found a transaction of the type smartContractPays')
 
+        # Check if input address is a committee address
+        if inputlist[0][0] in committeeAddressList:
+
+            # Check if the output address is an active Smart contract address
+            engine = create_engine('sqlite:///system.db', echo=True)
+            connection = engine.connect()
+            activeContracts = connection.execute('select * from activecontracts').fetchall()
+            connection.close()
+
+            # Change columns into rows - https://stackoverflow.com/questions/44360162/how-to-access-a-column-in-a-list-of-lists-in-python
+            activeContracts = list(zip(*activeContracts))
+            if outputlist[0][0] in activeContracts[2] and parsed_data['contractName'] in activeContracts[1]:
+
+                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+                connection = engine.connect()
+                contractWinners = connection.execute('select * from contractparticipants where contractCondition="{}"'.format(parsed_data['triggerCondition'])).fetchall()
+                tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                connection.close()
+
+                contractWinners = list(zip(*contractWinners))
+                for address in contractWinners[1]:
+                    transferToken(tokenIdentification, tokenSum/len(contractWinners[1]), outputlist[0][0], address)
+
+            else:
+                print('This trigger doesn\'t apply to an active contract. It will be discarded')
+
+        else:
+            print('Input address is not part of the committee address list. This trigger is rejected')
 
 
 
@@ -150,6 +308,13 @@ elif config['DEFAULT']['NET'] == 'testnet':
 else:
     print("NET parameter is wrong\nThe script will exit now ")
 
+apppath = os.path.dirname(os.path.realpath(__file__))
+dirpath = os.path.join(apppath, 'tokens')
+if not os.path.isdir(dirpath):
+    os.mkdir(dirpath)
+dirpath = os.path.join(apppath, 'smartContracts')
+if not os.path.isdir(dirpath):
+    os.mkdir(dirpath)
 
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:
@@ -160,6 +325,9 @@ if args.reset == 1:
     dirpath = os.path.join(apppath, 'smartContracts')
     shutil.rmtree(dirpath)
     os.mkdir(dirpath)
+    dirpath = os.path.join(apppath, 'system.db')
+    if os.path.exists(dirpath):
+        os.remove(dirpath)
 
 
 # Read start block no
@@ -190,6 +358,9 @@ for blockindex in range( startblock, current_index ):
         response = subprocess.check_output(string, shell=True)
         transaction_data = json.loads(response.decode("utf-8"))
         text = transaction_data["floData"]
+
+        if blockindex == 498385:
+            print('debug point')
 
         parsed_data = parsing.parse_flodata(text)
         if parsed_data['type'] != 'noise':
