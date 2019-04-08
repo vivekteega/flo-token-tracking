@@ -5,44 +5,36 @@ Base = declarative_base()
 ContractBase = declarative_base()
 SystemBase = declarative_base()
 
-class Extra(Base):
-    __tablename__ = "extra"
-
-    id = Column('id', Integer, primary_key=True)
-    lastblockscanned = Column('lastblockscanned', Integer)
-
-class TransactionHistory(Base):
-    __tablename__ = "transactionhistory"
-
-    id = Column('id', Integer, primary_key=True)
-    blockno = Column('blockno', Integer)
-    fromAddress = Column('fromAddress', String)
-    toAddress = Column('toAddress', String)
-    amount = Column('amount', Float)
-    blockchainReference = Column('blockchainReference', String)
-
-class TransactionTable(Base):
-    __tablename__ = "transactiontable"
+class ActiveTable(Base):
+    __tablename__ = "activeTable"
 
     id = Column('id', Integer, primary_key=True)
     address = Column('address', String)
     parentid = Column('parentid', Integer)
+    consumedpid = Column('consumedpid', String)
+    transferBalance = Column('transferBalance', Float)
+
+class ConsumedTable(Base):
+    __tablename__ = "consumedTable"
+
+    primaryKey = Column('primaryKey', Integer, primary_key=True)
+    id = Column('id', Integer)
+    address = Column('address', String)
+    parentid = Column('parentid', Integer)
+    consumedpid = Column('consumedpid', String)
     transferBalance = Column('transferBalance', Float)
 
 class TransferLogs(Base):
     __tablename__ = "transferlogs"
 
-    id = Column('id', Integer, primary_key=True)
-    primaryIDReference = Column('primaryIDReference', Integer)
-    transferDescription = Column('transferDescription', String)
-    transferIDConsumed = Column('transferIDConsumed', Integer)
-    blockchainReference = Column('blockchainReference', String)
-
-class Webtable(Base):
-    __tablename__ = "webtable"
-
-    id = Column('id', Integer, primary_key=True)
-    transferDescription = Column('transferDescription', String)
+    primary_key = Column('id', Integer, primary_key=True)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    sourceId = Column('sourceId', Integer)
+    destinationId = Column('destinationId', Integer)
+    blockNumber = Column('blockNumber', Integer)
+    time = Column('time', Integer)
     blockchainReference = Column('blockchainReference', String)
 
 class ContractStructure(ContractBase):
@@ -59,7 +51,7 @@ class ContractParticipants(ContractBase):
     id = Column('id', Integer, primary_key=True)
     participantAddress = Column('participantAddress', String)
     tokenAmount = Column('tokenAmount', Float)
-    contractCondition = Column('contractCondition', String)
+    userPreference = Column('userPreference', String)
 
 class ActiveContracts(SystemBase):
     __tablename__ = "activecontracts"
@@ -67,4 +59,11 @@ class ActiveContracts(SystemBase):
     id = Column('id', Integer, primary_key=True)
     contractName = Column('contractName', String)
     contractAddress = Column('contractAddress', String)
+
+class SystemData(SystemBase):
+    __tablename__ = "systemData"
+
+    id = Column('id', Integer, primary_key=True)
+    attribute = Column('attribute', String)
+    value = Column('value', String)
 
