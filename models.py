@@ -35,6 +35,18 @@ class TransferLogs(Base):
     destinationId = Column('destinationId', Integer)
     blockNumber = Column('blockNumber', Integer)
     time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
+
+class TransactionHistory(Base):
+    __tablename__ = "transactionHistory"
+
+    primary_key = Column('id', Integer, primary_key=True)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    blockNumber = Column('blockNumber', Integer)
+    time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
 
 class ContractStructure(ContractBase):

@@ -11,7 +11,7 @@ import os
 import shutil
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import create_engine, func, desc
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts
 
 
 committeeAddressList = ['oUc4dVvxwK7w5MHUHtev8UawN3eDjiZnNx']
@@ -57,7 +57,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress)
                 session.add(TransferLogs(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
                                          transferAmount=entry[0].transferBalance, sourceId=piditem[0], destinationId=lastid+1,
                                          blockNumber=block_data['height'], time=block_data['time'],
-                                         blockchainReference=transaction_data['txid']))
+                                         transactionHash=transaction_data['txid']))
                 entry[0].transferBalance = 0
 
             if len(consumedpid_string)>1:
@@ -100,7 +100,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress)
                                              transferAmount=entry[0].transferBalance, sourceId=piditem[0],
                                              destinationId=lastid + 1,
                                              blockNumber=block_data['height'], time=block_data['time'],
-                                             blockchainReference=transaction_data['txid']))
+                                             transactionHash=transaction_data['txid']))
                     entry[0].transferBalance = 0
                     consumedpid_string = consumedpid_string + '{},'.format(piditem[0])
                 else:
@@ -108,7 +108,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress)
                                              transferAmount=piditem[1]-(checksum - commentTransferAmount), sourceId=piditem[0],
                                              destinationId=lastid + 1,
                                              blockNumber=block_data['height'], time=block_data['time'],
-                                             blockchainReference=transaction_data['txid']))
+                                             transactionHash=transaction_data['txid']))
                     entry[0].transferBalance = checksum - commentTransferAmount
 
 
@@ -140,6 +140,15 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress)
                 session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
                 session.commit()
             session.commit()
+
+        string = "{} getblock {}".format(localapi, transaction_data['blockhash'])
+        response = subprocess.check_output(string, shell=True)
+        block_data = json.loads(response.decode("utf-8"))
+        blockchainReference = neturl + 'tx/' + transaction_data['txid']
+        session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
+                                 transferAmount=tokenAmount, blockNumber=block_data['height'], time=block_data['time'],
+                                 transactionHash=transaction_data['txid'], blockchainReference=blockchainReference))
+        session.commit()
         session.close()
         return 1
 
@@ -232,9 +241,12 @@ def startWorking(transaction_data, parsed_data):
 
         # todo Rule 45 - If the transfer type is token, then call the function transferToken to adjust the balances
         if parsed_data['transferType'] == 'token':
-            returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
-            if returnval is None:
-                print("Something went wrong in the token transfer method")
+            if parsed_data['address'] == outputlist[0]:
+                returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
+                if returnval is None:
+                    print("Something went wrong in the token transfer method")
+            else:
+                print('Address mentioned in flodata doesn\'t match the address in blockchain\'s outputlist')
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
@@ -266,7 +278,13 @@ def startWorking(transaction_data, parsed_data):
             string = "{} getblock {}".format(localapi, transaction_data['blockhash'])
             response = subprocess.check_output(string, shell=True)
             block_data = json.loads(response.decode("utf-8"))
-            session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0][0], transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1, blockNumber=block_data['height'], time=block_data['time'], blockchainReference=transaction_data['txid']))
+            session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1, blockNumber=block_data['height'], time=block_data['time'], transactionHash=transaction_data['txid']))
+            blockchainReference = neturl + 'tx/' + transaction_data['txid']
+            session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                                           transferAmount=parsed_data['tokenAmount'], blockNumber=block_data['height'],
+                                           time=block_data['time'],
+                                           transactionHash=transaction_data['txid'],
+                                           blockchainReference=blockchainReference))
             session.commit()
             session.close()
         else:

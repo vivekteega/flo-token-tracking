@@ -85,19 +85,20 @@ def extractInitTokens(text):
     counter = 0
     value = None
     for idx,word in enumerate(textList):
-        for unit in base_units:
-            result = word.split(unit)
-            if len(result) == 1:
-                try:
-                    result = float(word)
-                    if textList[idx+1] in base_units:
-                        value = result*base_units[textList[idx+1]]
-                        counter = counter + 1
-                except:
-                    continue
-            elif len(result) == 2 and result[1]=='':
-                value = float(result[0])*base_units[unit]
+        try:
+            result = float(word)
+            if textList[idx + 1] in base_units:
+                value = result * base_units[textList[idx + 1]]
                 counter = counter + 1
+        except:
+            for unit in base_units:
+                result = word.split(unit)
+                if len(result) == 2 and result[1]=='' and result[0]!='':
+                    try:
+                        value = float(result[0])*base_units[unit]
+                        counter = counter + 1
+                    except:
+                        continue
 
     if counter == 1:
         return value
