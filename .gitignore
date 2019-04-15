@@ -1,5 +1,6 @@
-tree.db
+*.db
 .idea/
-flo_addresses.txt
 __pycache__/
 *.swp
+tokens/
+smartContracts/
