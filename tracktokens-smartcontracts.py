@@ -241,12 +241,9 @@ def startWorking(transaction_data, parsed_data):
 
         # todo Rule 45 - If the transfer type is token, then call the function transferToken to adjust the balances
         if parsed_data['transferType'] == 'token':
-            if parsed_data['address'] == outputlist[0]:
-                returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
-                if returnval is None:
-                    print("Something went wrong in the token transfer method")
-            else:
-                print('Address mentioned in flodata doesn\'t match the address in blockchain\'s outputlist')
+            returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
+            if returnval is None:
+                print("Something went wrong in the token transfer method")
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
@@ -274,13 +271,13 @@ def startWorking(transaction_data, parsed_data):
             engine = create_engine('sqlite:///tokens/{}.db'.format(parsed_data['tokenIdentification']), echo=True)
             Base.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
-            session.add(ActiveTable(address=outputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount']))
+            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount']))
             string = "{} getblock {}".format(localapi, transaction_data['blockhash'])
             response = subprocess.check_output(string, shell=True)
             block_data = json.loads(response.decode("utf-8"))
             session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1, blockNumber=block_data['height'], time=block_data['time'], transactionHash=transaction_data['txid']))
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+            session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress='-',
                                            transferAmount=parsed_data['tokenAmount'], blockNumber=block_data['height'],
                                            time=block_data['time'],
                                            transactionHash=transaction_data['txid'],
@@ -394,10 +391,10 @@ config.read('config.ini')
 
 # Assignment the flo-cli command
 if config['DEFAULT']['NET'] == 'mainnet':
-    neturl = 'https://florincoin.info/'
+    neturl = 'https://flosight.duckdns.org/'
     localapi = config['DEFAULT']['FLO_CLI_PATH']
 elif config['DEFAULT']['NET'] == 'testnet':
-    neturl = 'https://testnet.florincoin.info/'
+    neturl = 'https://testnet-flosight.duckdns.org/'
     localapi = '{} --testnet'.format(config['DEFAULT']['FLO_CLI_PATH'])
 else:
     print("NET parameter is wrong\nThe script will exit now ")
@@ -449,6 +446,9 @@ print("current_block_height : " + str(current_index))
 for blockindex in range( startblock, current_index ):
     print(blockindex)
 
+    if blockindex == 3387978:
+        print('hello')
+
     # Scan every block
     string = "{} getblockhash {}".format(localapi, str(blockindex))
     response = subprocess.check_output(string, shell=True)
@@ -466,9 +466,6 @@ for blockindex in range( startblock, current_index ):
         response = subprocess.check_output(string, shell=True)
         transaction_data = json.loads(response.decode("utf-8"))
         text = transaction_data["floData"]
-
-        if blockindex == 525362:
-            print('debug point')
 
     # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
 

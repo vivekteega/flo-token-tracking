@@ -232,11 +232,10 @@ def parse_flodata(string):
         # todo Rule 31 - Extract number of tokens to be sent and the address to which to be sent, both data is mandatory
         elif not incorporation and transfer:
             amount = extractAmount(cleanstring, hashList[0][:-1])
-            address = extractAddress(nospacestring)
-            if None not in [amount, address]:
+            if None not in [amount]:
                 parsed_data = {'type': 'transfer', 'transferType': 'token', 'flodata': string,
                            'tokenIdentification': hashList[0][:-1],
-                           'tokenAmount': amount, 'address': address[:-1]}
+                           'tokenAmount': amount}
             else:
                 parsed_data = {'type': 'noise'}
 
