@@ -90,6 +90,9 @@ def extractInitTokens(text):
             if textList[idx + 1] in base_units:
                 value = result * base_units[textList[idx + 1]]
                 counter = counter + 1
+            else:
+                value = result
+                counter = counter + 1
         except:
             for unit in base_units:
                 result = word.split(unit)

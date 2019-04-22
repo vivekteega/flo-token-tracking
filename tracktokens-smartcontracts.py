@@ -198,6 +198,7 @@ def startWorking(transaction_data, parsed_data):
             continue
         if item[0] != temp:
             print('System has found more than one address as part of vin')
+            print('This transaction will be rejected')
             return
 
     inputlist = [vinlist[0][0], totalinputval]
@@ -475,11 +476,11 @@ for blockindex in range( startblock, current_index ):
             print(parsed_data['type'])
             startWorking(transaction_data, parsed_data)
 
-        engine = create_engine('sqlite:///system.db')
-        SystemBase.metadata.create_all(bind=engine)
-        session = sessionmaker(bind=engine)()
-        entry = session.query(SystemData).filter(SystemData.attribute == 'lastblockscanned').all()[0]
-        entry.value = str(blockindex)
-        session.commit()
-        session.close()
+    engine = create_engine('sqlite:///system.db')
+    SystemBase.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+    entry = session.query(SystemData).filter(SystemData.attribute == 'lastblockscanned').all()[0]
+    entry.value = str(blockindex)
+    session.commit()
+    session.close()
 
