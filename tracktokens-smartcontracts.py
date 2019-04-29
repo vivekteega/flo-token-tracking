@@ -293,8 +293,8 @@ def startWorking(transaction_data, parsed_data):
     elif parsed_data['type'] == 'smartContractIncorporation':
         if not os.path.isfile('./smartContracts/{}.db'.format(parsed_data['contractName'])):
             # todo Rule 49 - If the contract name hasn't been taken before, check if the contract type is an authorized type by the system
-            if parsed_data['contractType'] == 'betting':
-                print("Smart contract is of the type betting")
+            if parsed_data['contractType'] == 'one-time-event':
+                print("Smart contract is of the type one-time-event")
                 # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
                 #    henceforth we will not consider any flo private key initiated comment as valid from this address
                 #    Unlocking can only be done through smart contract system address
@@ -313,8 +313,11 @@ def startWorking(transaction_data, parsed_data):
                         ContractStructure(attribute='flodata', index=0,
                                           value=parsed_data['flodata']))
                     session.add(
-                        ContractStructure(attribute='userassetcommitment', index=0,
-                                          value=parsed_data['contractConditions']['userassetcommitment'].split(parsed_data['tokenIdentification'][:-1])[0]))
+                        ContractStructure(attribute='contractamount', index=0,
+                                          value=parsed_data['contractConditions']['contractamount'].split(parsed_data['tokenIdentification'][:-1])[0]))
+                    session.add(
+                        ContractStructure(attribute='expirytime', index=0,
+                                          value=parsed_data['contractConditions']['expirytime']))
                     for key, value in parsed_data['contractConditions']['smartcontractpays'].items():
                         session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
                     session.commit()

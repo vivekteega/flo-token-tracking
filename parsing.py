@@ -1,4 +1,5 @@
 import re
+import arrow
 
 marker = None
 operation = None
@@ -120,7 +121,7 @@ def extractAddress(text):
 
 
 def extractContractType(text):
-    operationList = ['betting*'] # keep everything lowercase
+    operationList = ['one-time-event*'] # keep everything lowercase
     count = 0
     returnval = None
     for operation in operationList:
@@ -143,30 +144,33 @@ def extractContractCondition(text):
 def extractContractConditions(text, contracttype, marker):
     rulestext = re.split('contractconditions:\s*', text)[-1]
     rulelist = re.split('\d\.\s*', rulestext)
-    if contracttype == 'betting*':
+    if contracttype == 'one-time-event*':
         extractedRules = {}
         for rule in rulelist:
             if rule=='':
                 continue
-            elif rule[:19]=='userassetcommitment':
-                pattern = re.compile('[^userassetcommitment="].*[^"]')
+            elif rule[:14]=='contractamount':
+                pattern = re.compile('[^contractamount=].*')
                 searchResult = pattern.search(rule).group(0)
-                extractedRules['userassetcommitment'] = searchResult.split(marker)[0]
-            elif rule[:17]=='smartcontractpays':
-                conditions = rule.split('smartcontractpays=')[1]
-                if conditions[0]=='"' or conditions[0]=="'" or conditions[-1]=='"' or conditions[-1]=="'":
-                    conditionlist = conditions[1:-1].split('|')
-                    extractedRules['smartcontractpays'] = {}
-                    for idx, condition in enumerate(conditionlist):
-                        extractedRules['smartcontractpays'][idx] = condition.strip()
+                contractamount = searchResult.split(marker)[0]
+                try:
+                    extractedRules['contractamount'] = float(contractamount)
+                except:
+                    print("something is wrong with userchoices conditions")
+            elif rule[:11]=='userchoices':
+                conditions = rule.split('userchoices=')[1]
+                conditionlist = conditions.split('|')
+                extractedRules['userchoices'] = {}
+                for idx, condition in enumerate(conditionlist):
+                    extractedRules['userchoices'][idx] = condition.strip()
                 else:
-                    print("something is wrong with smartcontractpays conditions")
+                    print("something is wrong with userchoices conditions")
             elif rule[:10]=='expirytime':
-                pattern = re.compile('[^expirytime="].*[^"]')
+                pattern = re.compile('[^expirytime=].*')
                 searchResult = pattern.search(rule).group(0)
                 extractedRules['expirytime'] = searchResult
 
-        if 'userassetcommitment' in extractedRules and 'smartcontractpays' in extractedRules:
+        if 'contractamount' in extractedRules and 'userchoices' in extractedRules and 'expirytime' in extractedRules:
             return extractedRules
         else:
             return None
@@ -256,7 +260,7 @@ def parse_flodata(string):
         elif incorporation and not transfer:
             contracttype = extractContractType(cleanstring)
             contractaddress = extractAddress(nospacestring)
-            contractconditions = extractContractConditions(cleanstring, 'betting*', marker)
+            contractconditions = extractContractConditions(cleanstring, 'one-time-event*', marker=hashList[0][:-1])
 
             if None not in [contracttype, contractaddress, contractconditions]:
                 parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1],
@@ -293,3 +297,9 @@ def parse_flodata(string):
         parsed_data = {'type': 'noise'}
 
     return parsed_data
+
+
+flodata = 'Create Smart Contract with the name elections@ of the type one-time-event* using the asset rmt# at the address FLO Address$ with contractconditions: 1. contractAmount=5rmt 2. userchoices=NAMO=WIN | NAMO=LOSE 3. expirytime= Tue May 21 2019 18:55:00 GMT+0530'
+
+parsed_flodata = parse_flodata(flodata)
+print(parsed_flodata)
