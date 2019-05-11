@@ -6,3 +6,4 @@ tokens/
 smartContracts/
 *.sh
 system.db
+config.ini

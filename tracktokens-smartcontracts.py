@@ -14,6 +14,20 @@ from sqlalchemy import create_engine, func, desc
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts
 
 
+months = { 'jan' : 1,
+'feb' : 2,
+'mar' : 3,
+'apr' : 4,
+'may' : 5,
+'jun' : 6,
+'jul' : 7,
+'aug' : 8,
+'sep' : 9,
+'oct' : 10,
+'nov' : 11,
+'dec' : 12 }
+
+
 committeeAddressList = ['oUc4dVvxwK7w5MHUHtev8UawN3eDjiZnNx']
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress):
@@ -153,7 +167,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress)
         return 1
 
 
-def startWorking(transaction_data, parsed_data):
+def startWorking(transaction_data, parsed_data, blockinfo):
 
     # Do the necessary checks for the inputs and outputs
 
@@ -249,9 +263,24 @@ def startWorking(transaction_data, parsed_data):
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
             # Check if the contract has expired
-            if parsed_data['expiryTime'] and time.time()>parsed_data['expiryTime']:
-                print('Contract has expired and will not accept any user participation')
-                return
+            engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+            Base.metadata.create_all(bind=engine)
+            session = sessionmaker(bind=engine)()
+            result = session.query(ContractStructure).filter_by(attribute='expirytime').all()
+
+            if result:
+                #now parse the expiry time in python
+                expirytime = result[0].value.strip()
+                expirytime_split = expirytime.split(' ')
+                parse_string = '{}/{}/{} {}'.format( expirytime_split[3], months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
+                blocktime_object = parsing.arrow.get(blockinfo['time'])
+
+                if blocktime_object > expirytime_object:
+                    print('Contract has expired and will not accept any user participation')
+                    return
+            session.close()
+
             # Check if the tokenAmount being transferred exists in the address & do the token transfer
             returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
             if returnval is not None:
@@ -259,7 +288,7 @@ def startWorking(transaction_data, parsed_data):
                 engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
                 Base.metadata.create_all(bind=engine)
                 session = sessionmaker(bind=engine)()
-                session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'], userPreference=parsed_data['userPreference']))
+                session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'], userChoice=parsed_data['userChoice']))
                 session.commit()
                 session.close()
             else:
@@ -298,7 +327,7 @@ def startWorking(transaction_data, parsed_data):
                 # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
                 #    henceforth we will not consider any flo private key initiated comment as valid from this address
                 #    Unlocking can only be done through smart contract system address
-                if parsed_data['contractAddress'] == outputlist[0]:
+                if parsed_data['contractAddress'] == inputadd:
                     print("Hey I have passed the first test for smart contract")
                     engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
                     ContractBase.metadata.create_all(bind=engine)
@@ -314,11 +343,11 @@ def startWorking(transaction_data, parsed_data):
                                           value=parsed_data['flodata']))
                     session.add(
                         ContractStructure(attribute='contractamount', index=0,
-                                          value=parsed_data['contractConditions']['contractamount'].split(parsed_data['tokenIdentification'][:-1])[0]))
+                                          value=parsed_data['contractConditions']['contractamount']))
                     session.add(
                         ContractStructure(attribute='expirytime', index=0,
                                           value=parsed_data['contractConditions']['expirytime']))
-                    for key, value in parsed_data['contractConditions']['smartcontractpays'].items():
+                    for key, value in parsed_data['contractConditions']['userchoices'].items():
                         session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
                     session.commit()
                     session.close()
@@ -352,7 +381,7 @@ def startWorking(transaction_data, parsed_data):
 
                 engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
                 connection = engine.connect()
-                contractWinners = connection.execute('select * from contractparticipants where userPreference="{}"'.format(parsed_data['triggerCondition'])).fetchall()
+                contractWinners = connection.execute('select * from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
                 tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                 tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
                 connection.close()
@@ -431,7 +460,7 @@ if args.reset == 1:
 engine = create_engine('sqlite:///system.db', echo=True)
 SystemBase.metadata.create_all(bind=engine)
 session = sessionmaker(bind=engine)()
-startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned').all()[0].value)
+startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned').all()[0].value) + 1
 session.commit()
 session.close()
 
@@ -450,7 +479,7 @@ print("current_block_height : " + str(current_index))
 for blockindex in range( startblock, current_index ):
     print(blockindex)
 
-    if blockindex == 3387978:
+    if blockindex == 590327:
         print('hello')
 
     # Scan every block
@@ -470,6 +499,7 @@ for blockindex in range( startblock, current_index ):
         response = subprocess.check_output(string, shell=True)
         transaction_data = json.loads(response.decode("utf-8"))
         text = transaction_data["floData"]
+        text = text.replace("\n"," \n ")
 
     # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
 
@@ -477,7 +507,7 @@ for blockindex in range( startblock, current_index ):
         if parsed_data['type'] != 'noise':
             print(blockindex)
             print(parsed_data['type'])
-            startWorking(transaction_data, parsed_data)
+            startWorking(transaction_data, parsed_data, blockinfo)
 
     engine = create_engine('sqlite:///system.db')
     SystemBase.metadata.create_all(bind=engine)

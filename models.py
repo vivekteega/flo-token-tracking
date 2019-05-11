@@ -63,7 +63,7 @@ class ContractParticipants(ContractBase):
     id = Column('id', Integer, primary_key=True)
     participantAddress = Column('participantAddress', String)
     tokenAmount = Column('tokenAmount', Float)
-    userPreference = Column('userPreference', String)
+    userChoice = Column('userChoice', String)
 
 class ActiveContracts(SystemBase):
     __tablename__ = "activecontracts"

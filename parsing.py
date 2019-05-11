@@ -133,17 +133,22 @@ def extractContractType(text):
     return returnval
 
 
-def extractContractCondition(text):
-    result = text.split("contractcondition:")
-    if len(result) != 1:
-        return result[1].strip()[1:-1]
+def extractUserchoice(text):
+    result = re.split('userchoice:\s*', text)
+    if len(result) != 1 and result[1]!='':
+        return result[1].strip().strip('"').strip("'")
     else:
         return None
 
 
 def extractContractConditions(text, contracttype, marker):
-    rulestext = re.split('contractconditions:\s*', text)[-1]
-    rulelist = re.split('\d\.\s*', rulestext)
+    rulestext = re.split('contract-conditions:\s*', text)[-1]
+    #rulelist = re.split('\d\.\s*', rulestext)
+    rulelist = []
+    for i in range(3):
+        rule = rulestext.split('({})'.format(i+1))[1].split('({})'.format(i+2))[0]
+        rulelist.append(rule.strip())
+
     if contracttype == 'one-time-event*':
         extractedRules = {}
         for rule in rulelist:
@@ -156,15 +161,13 @@ def extractContractConditions(text, contracttype, marker):
                 try:
                     extractedRules['contractamount'] = float(contractamount)
                 except:
-                    print("something is wrong with userchoices conditions")
+                    print("something is wrong with contract amount entered")
             elif rule[:11]=='userchoices':
                 conditions = rule.split('userchoices=')[1]
                 conditionlist = conditions.split('|')
                 extractedRules['userchoices'] = {}
                 for idx, condition in enumerate(conditionlist):
                     extractedRules['userchoices'][idx] = condition.strip()
-                else:
-                    print("something is wrong with userchoices conditions")
             elif rule[:10]=='expirytime':
                 pattern = re.compile('[^expirytime=].*')
                 searchResult = pattern.search(rule).group(0)
@@ -274,12 +277,12 @@ def parse_flodata(string):
         elif not incorporation and transfer:
             # We are at the send/transfer of smart contract
             amount = extractAmount(cleanstring, hashList[0][:-1])
-            userPreference = extractContractCondition(cleanstring)
-            if None not in [amount, userPreference]:
+            userChoice = extractUserchoice(cleanstring)
+            if None not in [amount, userChoice]:
                 parsed_data = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': string,
                            'tokenIdentification': hashList[0][:-1],
                            'operation': 'transfer', 'tokenAmount': amount, 'contractName': atList[0][:-1],
-                           'userPreference': userPreference}
+                           'userChoice': userChoice}
             else:
                 parsed_data = {'type': 'noise'}
 
@@ -297,9 +300,3 @@ def parse_flodata(string):
         parsed_data = {'type': 'noise'}
 
     return parsed_data
-
-
-flodata = 'Create Smart Contract with the name elections@ of the type one-time-event* using the asset rmt# at the address FLO Address$ with contractconditions: 1. contractAmount=5rmt 2. userchoices=NAMO=WIN | NAMO=LOSE 3. expirytime= Tue May 21 2019 18:55:00 GMT+0530'
-
-parsed_flodata = parse_flodata(flodata)
-print(parsed_flodata)
