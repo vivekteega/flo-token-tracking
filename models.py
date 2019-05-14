@@ -79,3 +79,12 @@ class SystemData(SystemBase):
     attribute = Column('attribute', String)
     value = Column('value', String)
 
+class ContractParticipantMapping(SystemBase):
+    __tablename__ = "contractParticipantMapping"
+
+    id = Column('id', Integer, primary_key=True)
+    participantAddress = Column('participantAddress', String)
+    contractName = Column('contractName', String)
+    tokenAmount = Column('tokenAmount', Float)
+
+

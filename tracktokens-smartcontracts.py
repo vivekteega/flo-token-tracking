@@ -11,7 +11,7 @@ import os
 import shutil
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import create_engine, func, desc
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractParticipantMapping
 
 
 months = { 'jan' : 1,
@@ -262,12 +262,19 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
+
+            #Check if the db exists
+            apppath = os.path.dirname(os.path.realpath(__file__))
+            dirpath = os.path.join(apppath, 'smartContracts','{}.db'.format(parsed_data['contractName']))
+            if not os.path.exists(dirpath):
+                print('Smart contract with the given name doesn\'t exist')
+                return
+
             # Check if the contract has expired
             engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
-            Base.metadata.create_all(bind=engine)
+            ContractBase.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
             result = session.query(ContractStructure).filter_by(attribute='expirytime').all()
-
             if result:
                 #now parse the expiry time in python
                 expirytime = result[0].value.strip()
@@ -281,16 +288,52 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     return
             session.close()
 
+
+            # Check if maximum subscription amount has reached
+            engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+            ContractBase.metadata.create_all(bind=engine)
+            session = sessionmaker(bind=engine)()
+            result = session.query(ContractStructure).filter_by(attribute='maximumsubscriptionamount').all()
+            session.close()
+            if result:
+                # now parse the expiry time in python
+                maximumsubscriptionamount = float(result[0].value.strip())
+                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+                ContractBase.metadata.create_all(bind=engine)
+                session = sessionmaker(bind=engine)()
+                result = session.query(ContractStructure).filter_by(attribute='maximumsubscriptionamount').all()
+                amountDeposited = session.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
+                session.close()
+
+                if amountDeposited is None:
+                    amountDeposited = 0
+
+                if amountDeposited >= maximumsubscriptionamount:
+                    print('Maximum subscription amount reached')
+                    return
+
+
             # Check if the tokenAmount being transferred exists in the address & do the token transfer
             returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
             if returnval is not None:
                 # Store participant details in the smart contract's db
                 engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
-                Base.metadata.create_all(bind=engine)
+                ContractBase.metadata.create_all(bind=engine)
                 session = sessionmaker(bind=engine)()
                 session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'], userChoice=parsed_data['userChoice']))
                 session.commit()
                 session.close()
+
+                # Store a mapping of participant address -> Contract participated in
+                engine = create_engine('sqlite:///system.db', echo=True)
+                SystemBase.metadata.create_all(bind=engine)
+                session = sessionmaker(bind=engine)()
+                session.add(ContractParticipantMapping(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
+                                                 contractName = parsed_data['contractName']))
+                session.commit()
+                session.close()
+
+
             else:
                 print("Something went wrong in the smartcontract token transfer method")
 
@@ -344,9 +387,18 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     session.add(
                         ContractStructure(attribute='contractamount', index=0,
                                           value=parsed_data['contractConditions']['contractamount']))
-                    session.add(
+                    if 'expirytime' in parsed_data['contractConditions']:
+                        session.add(
                         ContractStructure(attribute='expirytime', index=0,
                                           value=parsed_data['contractConditions']['expirytime']))
+                    if 'minimumsubscriptionamount' in parsed_data['contractConditions']:
+                        session.add(
+                        ContractStructure(attribute='minimumsubscriptionamount', index=0,
+                                          value=parsed_data['contractConditions']['minimumsubscriptionamount']))
+                    if 'maximumsubscriptionamount' in parsed_data['contractConditions']:
+                        session.add(
+                        ContractStructure(attribute='maximumsubscriptionamount', index=0,
+                                          value=parsed_data['contractConditions']['maximumsubscriptionamount']))
                     for key, value in parsed_data['contractConditions']['userchoices'].items():
                         session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
                     session.commit()
@@ -366,6 +418,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
     elif parsed_data['type'] == 'smartContractPays':
         print('Found a transaction of the type smartContractPays')
 
+
         # Check if input address is a committee address
         if inputlist[0] in committeeAddressList:
 
@@ -378,6 +431,30 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             # Change columns into rows - https://stackoverflow.com/questions/44360162/how-to-access-a-column-in-a-list-of-lists-in-python
             activeContracts = list(zip(*activeContracts))
             if outputlist[0] in activeContracts[2] and parsed_data['contractName'] in activeContracts[1]:
+
+                # Check if the minimum subscription amount has been reached if it exists as part of the structure
+                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+                ContractBase.metadata.create_all(bind=engine)
+                session = sessionmaker(bind=engine)()
+                result = session.query(ContractStructure).filter_by(attribute='minimumsubscriptionamount').all()
+                session.close()
+                if result:
+                    # now parse the expiry time in python
+                    minimumsubscriptionamount = float(result[0].value.strip())
+                    engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']),
+                                           echo=True)
+                    ContractBase.metadata.create_all(bind=engine)
+                    session = sessionmaker(bind=engine)()
+                    result = session.query(ContractStructure).filter_by(attribute='minimumsubscriptionamount').all()
+                    amountDeposited = session.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
+                    session.close()
+
+                    if amountDeposited is None:
+                        amountDeposited = 0
+
+                    if amountDeposited < minimumsubscriptionamount:
+                        print('Minimum subscription amount reached')
+                        return
 
                 engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
                 connection = engine.connect()
@@ -479,7 +556,7 @@ print("current_block_height : " + str(current_index))
 for blockindex in range( startblock, current_index ):
     print(blockindex)
 
-    if blockindex == 590327:
+    if blockindex == 590795:
         print('hello')
 
     # Scan every block

@@ -54,7 +54,7 @@ def isSmartContractPay(text):
 def extractAmount(text, marker):
     count = 0
     returnval = None
-    splitText = re.split("\W+", text)
+    splitText = text.split('userchoice')[0].split(' ')
 
     for word in splitText:
         word = word.replace(marker, '')
@@ -141,11 +141,28 @@ def extractUserchoice(text):
         return None
 
 
+def brackets_toNumber(item):
+    return float(item[1:-1])
+
+
 def extractContractConditions(text, contracttype, marker):
     rulestext = re.split('contract-conditions:\s*', text)[-1]
     #rulelist = re.split('\d\.\s*', rulestext)
     rulelist = []
-    for i in range(3):
+    numberList = re.findall(r'\(\d\d*\)', rulestext)
+
+    for idx,item in enumerate(numberList):
+        numberList[idx] = int(item[1:-1])
+
+    numberList = sorted(numberList)
+    for idx, item in enumerate(numberList):
+        if numberList[idx] + 1 != numberList[idx + 1]:
+            print('Contract condition numbers are not in order')
+            return None
+        if idx == len(numberList) - 2:
+            break
+
+    for i in range(len(numberList)):
         rule = rulestext.split('({})'.format(i+1))[1].split('({})'.format(i+2))[0]
         rulelist.append(rule.strip())
 
@@ -155,7 +172,7 @@ def extractContractConditions(text, contracttype, marker):
             if rule=='':
                 continue
             elif rule[:14]=='contractamount':
-                pattern = re.compile('[^contractamount=].*')
+                pattern = re.compile('[^contractamount\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
                 contractamount = searchResult.split(marker)[0]
                 try:
@@ -163,17 +180,38 @@ def extractContractConditions(text, contracttype, marker):
                 except:
                     print("something is wrong with contract amount entered")
             elif rule[:11]=='userchoices':
-                conditions = rule.split('userchoices=')[1]
+                pattern = re.compile('[^userchoices\s*=\s*].*')
+                conditions = pattern.search(rule).group(0)
                 conditionlist = conditions.split('|')
                 extractedRules['userchoices'] = {}
                 for idx, condition in enumerate(conditionlist):
                     extractedRules['userchoices'][idx] = condition.strip()
             elif rule[:10]=='expirytime':
-                pattern = re.compile('[^expirytime=].*')
+                pattern = re.compile('[^expirytime\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0).strip()
+                if searchResult == 'date-time':
+                    continue
+                else:
+                    extractedRules['expirytime'] = searchResult
+            elif rule[:25] == 'minimumsubscriptionamount':
+                pattern = re.compile('[^minimumsubscriptionamount\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
-                extractedRules['expirytime'] = searchResult
+                minimumsubscriptionamount = searchResult.split(marker)[0]
+                try:
+                    extractedRules['minimumsubscriptionamount'] = float(minimumsubscriptionamount)
+                except:
+                    print("something is wrong with minimum subscription amount entered")
+            elif rule[:25] == 'maximumsubscriptionamount':
+                pattern = re.compile('[^maximumsubscriptionamount\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                maximumsubscriptionamount = searchResult.split(marker)[0]
+                try:
+                    extractedRules['maximumsubscriptionamount'] = float(maximumsubscriptionamount)
+                except:
+                    print("something is wrong with maximum subscription amount entered")
 
-        if 'contractamount' in extractedRules and 'userchoices' in extractedRules and 'expirytime' in extractedRules:
+
+        if 'contractamount' in extractedRules and 'userchoices' in extractedRules:
             return extractedRules
         else:
             return None
