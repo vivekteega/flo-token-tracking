@@ -368,7 +368,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             blockno_txhash = connection.execute('select blockNumber, transactionHash from transactionHistory').fetchall()
             blockno_txhash_T = list(zip(*blockno_txhash))
 
-            if transaction_data['txid'] in blockno_txhash_T:
+            if transaction_data['txid'] in list(blockno_txhash_T[1]):
                 print('Transaction already exists in the db. This is unusual, please check your code')
                 return
 
