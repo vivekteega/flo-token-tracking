@@ -186,18 +186,17 @@ def extractContractConditions(text, contracttype, marker, blocktime):
             if rule == '':
                 continue
             elif rule[:10] == 'expirytime':
-                pattern = re.compile('[^expirytime\s*=\s*].*')
-                expirytime = pattern.search(rule).group(0).strip()
+                expirytime = re.split('expirytime[\s]*=[\s]*', rule)[1].strip()
 
                 try:
                     expirytime_split = expirytime.split(' ')
-                    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
                     expirytime_object = arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
                     blocktime_object = arrow.get(blocktime)
                     if expirytime_object < blocktime_object:
                         print('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
                         return None
-                    extractedRules['expirytime'] = expirytime
+                    extractedRules['expiryTime'] = expirytime
                 except:
                     print('Expiry time not in right format')
                     return None
@@ -210,7 +209,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                 searchResult = pattern.search(rule).group(0)
                 contractamount = searchResult.split(marker)[0]
                 try:
-                    extractedRules['contractamount'] = float(contractamount)
+                    extractedRules['contractAmount'] = float(contractamount)
                 except:
                     print("something is wrong with contract amount entered")
             elif rule[:11] == 'userchoices':
@@ -243,7 +242,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                 extractedRules['payeeAddress'] = payeeAddress
 
 
-        if len(extractedRules)>1 and 'expirytime' in extractedRules:
+        if len(extractedRules)>1 and 'expiryTime' in extractedRules:
             return extractedRules
         else:
             return None
@@ -348,11 +347,14 @@ def parse_flodata(string, blockinfo):
             # We are at the send/transfer of smart contract
             amount = extractAmount(cleanstring, hashList[0][:-1])
             userChoice = extractUserchoice(cleanstring)
+            contractaddress = extractAddress(nospacestring)
             if None not in [amount, userChoice]:
                 parsed_data = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': string,
                            'tokenIdentification': hashList[0][:-1],
                            'operation': 'transfer', 'tokenAmount': amount, 'contractName': atList[0][:-1],
                            'userChoice': userChoice}
+                if contractaddress:
+                    parsed_data['contractAddress'] = contractaddress[:-1]
             else:
                 parsed_data = {'type': 'noise'}
 
