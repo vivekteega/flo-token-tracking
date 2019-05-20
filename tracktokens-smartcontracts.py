@@ -513,25 +513,32 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             print("Something went wrong in the smartcontract token transfer method")
                             return
 
-            # Store participant details in the smart contract's db
-            session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
-                                             userChoice=parsed_data['userChoice']))
-            session.commit()
-            session.close()
+            ###############################3
+            # Check if the tokenAmount being transferred exists in the address & do the token transfer
+            returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'],
+                                      inputlist[0], outputlist[0])
+            if returnval is not None:
+                # Store participant details in the smart contract's db
+                session.add(ContractParticipants(participantAddress=inputadd,
+                                                 tokenAmount=parsed_data['tokenAmount'],
+                                                 userChoice=parsed_data['userChoice']))
+                session.commit()
+                session.close()
 
-            # Store a mapping of participant address -> Contract participated in
-            engine = create_engine('sqlite:///system.db', echo=True)
-            SystemBase.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
-            session.add(ContractParticipantMapping(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
-                                                   contractName=parsed_data['contractName'],
-                                                   contractAddress=outputlist[0]))
-            session.commit()
-            return
+                # Store a mapping of participant address -> Contract participated in
+                engine = create_engine('sqlite:///system.db', echo=True)
+                SystemBase.metadata.create_all(bind=engine)
+                session = sessionmaker(bind=engine)()
+                session.add(ContractParticipantMapping(participantAddress=inputadd,
+                                                       tokenAmount=parsed_data['tokenAmount'],
+                                                       contractName=parsed_data['contractName'],
+                                                       contractAddress=outputlist[0]))
+                session.commit()
+                return
 
 
-            # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
-    #      if it has been taken then reject the incorporation. Else incorporate it
+    # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
+    #  if it has been taken then reject the incorporation. Else incorporate it
     elif parsed_data['type'] == 'tokenIncorporation':
         if not os.path.isfile('./tokens/{}.db'.format(parsed_data['tokenIdentification'])):
             engine = create_engine('sqlite:///tokens/{}.db'.format(parsed_data['tokenIdentification']), echo=True)
