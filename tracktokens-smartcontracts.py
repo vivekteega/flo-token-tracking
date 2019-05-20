@@ -14,21 +14,8 @@ from sqlalchemy import create_engine, func, desc
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractParticipantMapping
 
 
-months = { 'jan' : 1,
-'feb' : 2,
-'mar' : 3,
-'apr' : 4,
-'may' : 5,
-'jun' : 6,
-'jul' : 7,
-'aug' : 8,
-'sep' : 9,
-'oct' : 10,
-'nov' : 11,
-'dec' : 12 }
-
-
 committeeAddressList = ['oUc4dVvxwK7w5MHUHtev8UawN3eDjiZnNx']
+
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress):
     engine = create_engine('sqlite:///tokens/{}.db'.format(tokenIdentification), echo=True)
@@ -167,6 +154,125 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress)
         return 1
 
 
+def checkLocaltriggerContracts(blockinfo):
+    engine = create_engine('sqlite:///system.db', echo=True)
+    connection = engine.connect()
+    # todo : filter activeContracts which only have local triggers
+    activeContracts = connection.execute('select contractName, contractAddress from activecontracts where status=="active" ').fetchall()
+    connection.close()
+
+    for contract in activeContracts:
+        # Check if the contract has blockchain trigger or committee trigger
+        engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0],contract[1]), echo=True)
+        connection = engine.connect()
+        # todo : filter activeContracts which only have local triggers
+        contractStructure = connection.execute('select * from contractstructure').fetchall()
+        contractStructure_T = list(zip(*contractstructure))
+
+        if 'exitconditions' in list(contractStructure_T[1]):
+            # This is a committee trigger contract
+            expiryTime = connection.execute('select value from contractstructure where attribute=="expiryTime"').fetchall()[0][0]
+            expirytime_split = expiryTime.split(' ')
+            parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
+                                                expirytime_split[2], expirytime_split[4])
+            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
+                tzinfo=expirytime_split[5])
+            blocktime_object = parsing.arrow.get(blockinfo['time'])
+
+            if blocktime_object > expirytime_object:
+                if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
+                    minimumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="minimumsubscriptionamount"').fetchall()[0][0]
+                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                    if tokenAmount_sum < minimumsubscriptionamount:
+                        # Initialize payback to contract participants
+                        contractParticipants = connection.execute('select participantAddress, tokenAmount from contractparticipants').fetchall()[0][0]
+
+                        for participant in contractParticipants:
+                            tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                            contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                            returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0])
+                            if returnval is None:
+                                print("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                        engine = create_engine('sqlite:///system.db', echo=True)
+                        connection = engine.connect()
+                        connection.execute(
+                            'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
+                        connection.close()
+
+
+        else:
+            # This is a blockchain trigger contract
+            if 'maximumsubscriptionamount' in list(contractStructure_T[1]):
+                maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
+                tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                if tokenAmount_sum >= maximumsubscriptionamount:
+                    # Trigger the contract
+                    payeeAddress = connection.execute('select * from contractstructure where attribute="payeeAddress"').fetchall()[0][0]
+                    tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                    contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                    returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress)
+                    if returnval is None:
+                        print("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                        return
+                    engine = create_engine('sqlite:///system.db', echo=True)
+                    connection = engine.connect()
+                    connection.execute(
+                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                            contract[0], contract[1]))
+                    connection.close()
+
+            expiryTime = connection.execute('select value from contractstructure where attribute=="expiryTime"').fetchall()[0][0]
+            expirytime_split = expiryTime.split(' ')
+            parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
+                tzinfo=expirytime_split[5])
+            blocktime_object = parsing.arrow.get(blockinfo['time'])
+
+            if blocktime_object > expirytime_object:
+                if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
+                    minimumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="minimumsubscriptionamount"').fetchall()[0][0]
+                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                    if tokenAmount_sum < minimumsubscriptionamount:
+                        # Initialize payback to contract participants
+                        contractParticipants = connection.execute(
+                            'select participantAddress, tokenAmount from contractparticipants').fetchall()[0][0]
+
+                        for participant in contractParticipants:
+                            tokenIdentification = connection.execute(
+                                'select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][
+                                0]
+                            contractAddress = connection.execute(
+                                'select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                            returnval = transferToken(tokenIdentification, participant[1], contractAddress,
+                                                      participant[0])
+                            if returnval is None:
+                                print(
+                                    "Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                                return
+                        engine = create_engine('sqlite:///system.db', echo=True)
+                        connection = engine.connect()
+                        connection.execute(
+                            'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                                contract[0], contract[1]))
+                        connection.close()
+
+                # Trigger the contract
+                payeeAddress = connection.execute('select * from contractstructure where attribute="payeeAddress"').fetchall()[0][0]
+                tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress)
+                if returnval is None:
+                    print("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                    return
+                engine = create_engine('sqlite:///system.db', echo=True)
+                connection = engine.connect()
+                connection.execute(
+                    'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                        contract[0], contract[1]))
+                connection.close()
+
+
+
 def startWorking(transaction_data, parsed_data, blockinfo):
 
     # Do the necessary checks for the inputs and outputs
@@ -262,24 +368,33 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
+            # check if the contract is active
+            engine = create_engine('sqlite:///system.db', echo=True)
+            connection = engine.connect()
+            contractDetails = connection.execute(
+                'select contractName, contractAddress from activecontracts where status=="active"').fetchall()
+            connection.close()
+            contractList = []
 
-            #Check if the db exists
-            apppath = os.path.dirname(os.path.realpath(__file__))
-            dirpath = os.path.join(apppath, 'smartContracts','{}.db'.format(parsed_data['contractName']))
-            if not os.path.exists(dirpath):
-                print('Smart contract with the given name doesn\'t exist')
+            counter = 0
+            for contract in contractDetails:
+                if contract[0] == parsed_data['contractName'] and contract[1] == outputlist[0]:
+                    counter = counter + 1
+
+            if counter != 1:
+                print('Active Smart contract with the given name doesn\'t exist')
                 return
 
             # Check if the contract has expired
-            engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
             ContractBase.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
-            result = session.query(ContractStructure).filter_by(attribute='expirytime').all()
+            result = session.query(ContractStructure).filter_by(attribute='expiryTime').all()
             if result:
                 #now parse the expiry time in python
                 expirytime = result[0].value.strip()
                 expirytime_split = expirytime.split(' ')
-                parse_string = '{}/{}/{} {}'.format( expirytime_split[3], months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                parse_string = '{}/{}/{} {}'.format( expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
                 expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
                 blocktime_object = parsing.arrow.get(blockinfo['time'])
 
@@ -289,53 +404,92 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             session.close()
 
 
+            # Check if usercondition given is in right format if it exists as part of contractstructure
+            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
+            connection = engine.connect()
+            activeContracts = connection.execute('select value from contractstructure where attribute=="exitconditions"').fetchall()
+            connection.close()
+
+            if parsed_data['userChoice'] is not in list(activeContracts[0]):
+                print("Wrong userchoice entered\nThis smartContract pariticipation will be rejected")
+                return
+
+            # Check if contractAmount is part of the contract structure, and enforce it if it is
+            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
+            connection = engine.connect()
+            contractAmount = connection.execute('select value from contractstructure where attribute=="contractAmount"').fetchall()
+            connection.close()
+
+            if contractAmount is not None:
+                if contractAmount[0][0] != parsed_data['tokenAmount']:
+                    print('Token amount being transferred is not part of the contract structure\nThis transaction will be discarded')
+                    return
+
+
             # Check if maximum subscription amount has reached
-            engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
             ContractBase.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
             result = session.query(ContractStructure).filter_by(attribute='maximumsubscriptionamount').all()
-            session.close()
             if result:
                 # now parse the expiry time in python
                 maximumsubscriptionamount = float(result[0].value.strip())
-                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
-                ContractBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
                 result = session.query(ContractStructure).filter_by(attribute='maximumsubscriptionamount').all()
                 amountDeposited = session.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
-                session.close()
 
                 if amountDeposited is None:
                     amountDeposited = 0
 
                 if amountDeposited >= maximumsubscriptionamount:
-                    print('Maximum subscription amount reached')
+                    print('Maximum subscription amount reached\n Money will be refunded')
                     return
+                else:
+                    if parsed_data['tokenAmount']+amountDeposited <= maximumsubscriptionamount:
+                        # Check if the tokenAmount being transferred exists in the address & do the token transfer
+                        returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
+                        if returnval is not None:
+                            # Store participant details in the smart contract's db
+                            session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'], userChoice=parsed_data['userChoice']))
+                            session.commit()
+                            session.close()
 
+                            # Store a mapping of participant address -> Contract participated in
+                            engine = create_engine('sqlite:///system.db', echo=True)
+                            SystemBase.metadata.create_all(bind=engine)
+                            session = sessionmaker(bind=engine)()
+                            session.add(ContractParticipantMapping(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
+                                                             contractName = parsed_data['contractName'], contractAddress = outputlist[0]))
+                            session.commit()
 
-            # Check if the tokenAmount being transferred exists in the address & do the token transfer
-            returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
-            if returnval is not None:
-                # Store participant details in the smart contract's db
-                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
-                ContractBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
-                session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'], userChoice=parsed_data['userChoice']))
-                session.commit()
-                session.close()
+                        else:
+                            print("Something went wrong in the smartcontract token transfer method")
+                    else:
+                        # Transfer only part of the tokens users specified, till the time it reaches maximumamount
+                        returnval = transferToken(parsed_data['tokenIdentification'], maximumsubscriptionamount-amountDeposited,
+                                                  inputlist[0], outputlist[0])
+                        if returnval is not None:
+                            # Store participant details in the smart contract's db
+                            session.add(ContractParticipants(participantAddress=inputadd,
+                                                             tokenAmount=maximumsubscriptionamount-amountDeposited,
+                                                             userChoice=parsed_data['userChoice']))
+                            session.commit()
+                            session.close()
 
-                # Store a mapping of participant address -> Contract participated in
-                engine = create_engine('sqlite:///system.db', echo=True)
-                SystemBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
-                session.add(ContractParticipantMapping(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
-                                                 contractName = parsed_data['contractName']))
-                session.commit()
-                session.close()
+                            # Store a mapping of participant address -> Contract participated in
+                            engine = create_engine('sqlite:///system.db', echo=True)
+                            SystemBase.metadata.create_all(bind=engine)
+                            session = sessionmaker(bind=engine)()
+                            session.add(ContractParticipantMapping(participantAddress=inputadd,
+                                                                   tokenAmount=maximumsubscriptionamount-amountDeposited,
+                                                                   contractName=parsed_data['contractName'], contractAddress = outputlist[0]))
+                            session.commit()
+                            session.close()
 
+                        else:
+                            print("Something went wrong in the smartcontract token transfer method")
 
-            else:
-                print("Something went wrong in the smartcontract token transfer method")
+            session.close()
+
 
     # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
     #      if it has been taken then reject the incorporation. Else incorporate it
@@ -363,16 +517,34 @@ def startWorking(transaction_data, parsed_data, blockinfo):
     # todo Rule 48 - If the parsed data type if smart contract incorporation, then check if the name hasn't been taken already
     #         if it has been taken then reject the incorporation.
     elif parsed_data['type'] == 'smartContractIncorporation':
-        if not os.path.isfile('./smartContracts/{}.db'.format(parsed_data['contractName'])):
+        engine = create_engine('sqlite:///system.db', echo=True)
+        connection = engine.connect()
+        contractDetails = connection.execute('select contractName, contractAddress from activecontracts').fetchall()
+        connection.close()
+
+        counter = 0
+        # Check if the combination of contract name and address exists
+        for contract in contractDetails:
+            if contract[0] == parsed_data['contractName'] and contract[1] == parsed_data['contractAddress']:
+                counter = counter + 1
+
+
+        if counter == 0:
             # todo Rule 49 - If the contract name hasn't been taken before, check if the contract type is an authorized type by the system
             if parsed_data['contractType'] == 'one-time-event':
                 print("Smart contract is of the type one-time-event")
+
+                # userchoice and payeeAddress conditions cannot come together. Check for it
+                if 'userchoice' in parsed_data['contractConditions'] and 'payeeAddress' in parsed_data['contractConditions']:
+                    print('Both userchoice and payeeAddress provided as part of the Contract conditions\nIncorporation of Smart Contract with the name {} will be rejected'.format(parsed_data['contractName']))
+                    return
+
                 # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
                 #    henceforth we will not consider any flo private key initiated comment as valid from this address
                 #    Unlocking can only be done through smart contract system address
                 if parsed_data['contractAddress'] == inputadd:
-                    print("Hey I have passed the first test for smart contract")
-                    engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+                    dbName = '{}-{}'.format(parsed_data['contractName'], parsed_data['contractAddress'])
+                    engine = create_engine('sqlite:///smartContracts/{}.db'.format(dbName), echo=True)
                     ContractBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
@@ -385,12 +557,13 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         ContractStructure(attribute='flodata', index=0,
                                           value=parsed_data['flodata']))
                     session.add(
-                        ContractStructure(attribute='contractamount', index=0,
-                                          value=parsed_data['contractConditions']['contractamount']))
-                    if 'expirytime' in parsed_data['contractConditions']:
-                        session.add(
                         ContractStructure(attribute='expirytime', index=0,
                                           value=parsed_data['contractConditions']['expirytime']))
+                    if 'contractamount' in parsed_data['contractConditions']:
+                        session.add(
+                            ContractStructure(attribute='contractamount', index=0,
+                                              value=parsed_data['contractConditions']['contractamount']))
+
                     if 'minimumsubscriptionamount' in parsed_data['contractConditions']:
                         session.add(
                         ContractStructure(attribute='minimumsubscriptionamount', index=0,
@@ -399,25 +572,33 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         session.add(
                         ContractStructure(attribute='maximumsubscriptionamount', index=0,
                                           value=parsed_data['contractConditions']['maximumsubscriptionamount']))
-                    for key, value in parsed_data['contractConditions']['userchoices'].items():
-                        session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
-                    session.commit()
-                    session.close()
+                    if 'userchoices' in parsed_data['contractConditions']:
+                        for key, value in parsed_data['contractConditions']['userchoices'].items():
+                            session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
+                        # Store smart contract address in system's db, to be ignored during future transfers
+                        engine = create_engine('sqlite:///system.db', echo=True)
+                        SystemBase.metadata.create_all(bind=engine)
+                        session = sessionmaker(bind=engine)()
+                        session.add(ActiveContracts(contractName=parsed_data['contractName'],contractAddress=parsed_data['contractAddress'], status='active'))
+                    elif 'payeeAddress' in parsed_data['contractConditions']:
+                        # in this case, expirydate( or maximumamount) is the trigger internally. Keep a track of expiry dates
+                        engine = create_engine('sqlite:///system.db', echo=True)
+                        SystemBase.metadata.create_all(bind=engine)
+                        session = sessionmaker(bind=engine)()
+                        session.add(ActiveContracts(contractName=parsed_data['contractName'], contractAddress=parsed_data['contractAddress'], expiryTime=parsed_data['contractConditions']['expirytime'], maximumSubscription=parsed_data['contractConditions']['maximumsubscriptionamount'], status='active'))
+                    else:
+                        print('Neither userchoice nor payeeAddress provided as part of Smart Contract incorporation of the name {}\n This contract incorporation will be rejected'.format(parsed_data['contractName']))
 
-                    # Store smart contract address in system's db, to be ignored during future transfers
-                    engine = create_engine('sqlite:///system.db',
-                                           echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
-                    session.add(
-                        ActiveContracts(contractName=parsed_data['contractName'], contractAddress=parsed_data['contractAddress']))
                     session.commit()
                     session.close()
+                else:
+                    print('Contract Incorporation rejected as address in Flodata and input address are different')
+
         else:
-            print('Transaction rejected as a smartcontract with same name has already been incorporated')
+            print('Transaction rejected as a smartcontract with same name is active currently')
+
     elif parsed_data['type'] == 'smartContractPays':
         print('Found a transaction of the type smartContractPays')
-
 
         # Check if input address is a committee address
         if inputlist[0] in committeeAddressList:
@@ -425,23 +606,78 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             # Check if the output address is an active Smart contract address
             engine = create_engine('sqlite:///system.db', echo=True)
             connection = engine.connect()
-            activeContracts = connection.execute('select * from activecontracts').fetchall()
+            # todo : Get only activeContracts which have non-local trigger ie. committee triggers them
+
+            contractDetails = connection.execute('select contractName, contractAddress from activecontracts where status=="active"').fetchall()
+            connection.close()
+            contractList = []
+
+            counter = 0
+            for contract in contractDetails:
+                if contract[0] == parsed_data['contractName'] and contract[1] == outputlist[0]:
+                    counter = counter + 1
+
+            if counter != 1:
+                print('Active Smart contract with the given name doesn\'t exist\n This committee trigger will be rejected')
+                return
+
+            # Check if the contract has maximumsubscriptionamount and if it has reached it
+            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
+            connection = engine.connect()
+            # todo : filter activeContracts which only have local triggers
+            contractStructure = connection.execute('select * from contractstructure').fetchall()
+            contractStructure_T = list(zip(*contractstructure))
+
+            if 'maximumsubscriptionamount' in list(contractStructure_T[1]):
+                maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
+                tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                if tokenAmount_sum >= maximumsubscriptionamount:
+                    # Trigger the contract
+                    contractWinners = connection.execute(
+                        'select * from contractparticipants where userChoice="{}"'.format(
+                            parsed_data['triggerCondition'])).fetchall()
+                    tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                    winnerSum = connection.execute(
+                        'select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(
+                            parsed_data['triggerCondition'])).fetchall()
+                    tokenIdentification = connection.execute(
+                        'select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                    connection.close()
+
+                    for winner in contractWinners:
+                        returnval = transferToken(tokenIdentification, (winner[2] / winnerSum) * tokenSum,
+                                                  outputlist[0], winner[1])
+                        if returnval is None:
+                            print("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                            return
+                    engine = create_engine('sqlite:///system.db', echo=True)
+                    connection = engine.connect()
+                    connection.execute(
+                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(parsed_data['contractName'], outputlist[0]))
+                    connection.close()
+                    return
+
+
+            # Check if contract has passed expiry time
+            expiryTime = connection.execute('select value from contractstructure where attibute=="expiryTime"').fetchall()[0][0]
+            expirytime_split = expiryTime.split(' ')
+            parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
+                                                expirytime_split[2], expirytime_split[4])
+            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
+                tzinfo=expirytime_split[5])
+            blocktime_object = parsing.arrow.get(blockinfo['time'])
             connection.close()
 
-            # Change columns into rows - https://stackoverflow.com/questions/44360162/how-to-access-a-column-in-a-list-of-lists-in-python
-            activeContracts = list(zip(*activeContracts))
-            if outputlist[0] in activeContracts[2] and parsed_data['contractName'] in activeContracts[1]:
-
+            if blocktime_object > expirytime_object:
                 # Check if the minimum subscription amount has been reached if it exists as part of the structure
-                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
                 ContractBase.metadata.create_all(bind=engine)
                 session = sessionmaker(bind=engine)()
                 result = session.query(ContractStructure).filter_by(attribute='minimumsubscriptionamount').all()
                 session.close()
                 if result:
-                    # now parse the expiry time in python
                     minimumsubscriptionamount = float(result[0].value.strip())
-                    engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']),
+                    engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
                                            echo=True)
                     ContractBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
@@ -453,33 +689,64 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         amountDeposited = 0
 
                     if amountDeposited < minimumsubscriptionamount:
-                        print('Minimum subscription amount reached')
+                        print('Minimum subscription amount hasn\'t been reached\n The token will be returned back')
+                        # Initialize payback to contract participants
+                        engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
+                                               echo=True)
+                        connection = engine.connect()
+                        contractParticipants = connection.execute(
+                            'select participantAddress, tokenAmount from contractparticipants').fetchall()[0][0]
+
+                        for participant in contractParticipants:
+                            tokenIdentification = connection.execute(
+                                'select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][
+                                0]
+                            contractAddress = connection.execute(
+                                'select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                            returnval = transferToken(tokenIdentification, participant[1], contractAddress,
+                                                      participant[0])
+                            if returnval is None:
+                                print(
+                                    "CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                                return
+                            engine = create_engine('sqlite:///system.db', echo=True)
+                            connection = engine.connect()
+                            connection.execute(
+                                'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                                    parsed_data['contractName'], outputlist[0]))
+                            connection.close()
                         return
 
-                engine = create_engine('sqlite:///smartContracts/{}.db'.format(parsed_data['contractName']), echo=True)
+                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
                 connection = engine.connect()
                 contractWinners = connection.execute('select * from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
                 tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
                 tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
                 connection.close()
 
-                contractWinners = list(zip(*contractWinners))
-                for address in contractWinners[1]:
-                    transferToken(tokenIdentification, tokenSum/len(contractWinners[1]), outputlist[0], address)
-
-            else:
-                print('This trigger doesn\'t apply to an active contract. It will be discarded')
-
+                for winner in contractWinners:
+                    returnval = transferToken(tokenIdentification, (winner[2]/winnerSum)*tokenSum, outputlist[0], winner[1])
+                    if returnval is None:
+                        print(
+                            "CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                        return
+                engine = create_engine('sqlite:///system.db', echo=True)
+                connection = engine.connect()
+                connection.execute(
+                    'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                        parsed_data['contractName'], outputlist[0]))
+                connection.close()
         else:
             print('Input address is not part of the committee address list. This trigger is rejected')
 
 
-# todo Rule 1 - Read command line arguments to reset the databases as blank
-#  Rule 2  - Read config to set testnet/mainnet
-#  Rule 3  - Set flo blockexplorer location depending on testnet or mainnet
-#  Rule 4 -  Set the local flo-cli path depending on testnet or mainnet
-#  Rule 5 - Set the block number to scan from
 
+# todo Rule 1 - Read command line arguments to reset the databases as blank
+#  Rule 2     - Read config to set testnet/mainnet
+#  Rule 3     - Set flo blockexplorer location depending on testnet or mainnet
+#  Rule 4     - Set the local flo-cli path depending on testnet or mainnet
+#  Rule 5     - Set the block number to scan from
 
 
 # Read command line arguments
@@ -556,7 +823,7 @@ print("current_block_height : " + str(current_index))
 for blockindex in range( startblock, current_index ):
     print(blockindex)
 
-    if blockindex == 590795:
+    if blockindex == 593777:
         print('hello')
 
     # Scan every block
@@ -580,7 +847,7 @@ for blockindex in range( startblock, current_index ):
 
     # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
 
-        parsed_data = parsing.parse_flodata(text)
+        parsed_data = parsing.parse_flodata(text, blockinfo)
         if parsed_data['type'] != 'noise':
             print(blockindex)
             print(parsed_data['type'])
@@ -593,4 +860,7 @@ for blockindex in range( startblock, current_index ):
     entry.value = str(blockindex)
     session.commit()
     session.close()
+
+    # Check smartContracts which will be triggered locally, and not by the contract committee
+    checkLocaltriggerContracts(blockinfo)
 

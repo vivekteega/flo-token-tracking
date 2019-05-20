@@ -6,6 +6,19 @@ operation = None
 address = None
 amount = None
 
+months = { 'jan' : 1,
+'feb' : 2,
+'mar' : 3,
+'apr' : 4,
+'may' : 5,
+'jun' : 6,
+'jul' : 7,
+'aug' : 8,
+'sep' : 9,
+'oct' : 10,
+'nov' : 11,
+'dec' : 12 }
+
 
 def isTransfer(text):
     wordlist = ['transfer','send','give'] # keep everything lowercase
@@ -145,7 +158,7 @@ def brackets_toNumber(item):
     return float(item[1:-1])
 
 
-def extractContractConditions(text, contracttype, marker):
+def extractContractConditions(text, contracttype, marker, blocktime):
     rulestext = re.split('contract-conditions:\s*', text)[-1]
     #rulelist = re.split('\d\.\s*', rulestext)
     rulelist = []
@@ -168,10 +181,31 @@ def extractContractConditions(text, contracttype, marker):
 
     if contracttype == 'one-time-event*':
         extractedRules = {}
+
+        for rule in rulelist:
+            if rule == '':
+                continue
+            elif rule[:10] == 'expirytime':
+                pattern = re.compile('[^expirytime\s*=\s*].*')
+                expirytime = pattern.search(rule).group(0).strip()
+
+                try:
+                    expirytime_split = expirytime.split(' ')
+                    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                    expirytime_object = arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
+                    blocktime_object = arrow.get(blocktime)
+                    if expirytime_object < blocktime_object:
+                        print('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
+                        return None
+                    extractedRules['expirytime'] = expirytime
+                except:
+                    print('Expiry time not in right format')
+                    return None
+
         for rule in rulelist:
             if rule=='':
                 continue
-            elif rule[:14]=='contractamount':
+            elif rule[:14] == 'contractamount':
                 pattern = re.compile('[^contractamount\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
                 contractamount = searchResult.split(marker)[0]
@@ -179,20 +213,13 @@ def extractContractConditions(text, contracttype, marker):
                     extractedRules['contractamount'] = float(contractamount)
                 except:
                     print("something is wrong with contract amount entered")
-            elif rule[:11]=='userchoices':
+            elif rule[:11] == 'userchoices':
                 pattern = re.compile('[^userchoices\s*=\s*].*')
                 conditions = pattern.search(rule).group(0)
                 conditionlist = conditions.split('|')
                 extractedRules['userchoices'] = {}
                 for idx, condition in enumerate(conditionlist):
                     extractedRules['userchoices'][idx] = condition.strip()
-            elif rule[:10]=='expirytime':
-                pattern = re.compile('[^expirytime\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0).strip()
-                if searchResult == 'date-time':
-                    continue
-                else:
-                    extractedRules['expirytime'] = searchResult
             elif rule[:25] == 'minimumsubscriptionamount':
                 pattern = re.compile('[^minimumsubscriptionamount\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
@@ -209,9 +236,14 @@ def extractContractConditions(text, contracttype, marker):
                     extractedRules['maximumsubscriptionamount'] = float(maximumsubscriptionamount)
                 except:
                     print("something is wrong with maximum subscription amount entered")
+            elif rule[:12] == 'payeeAddress':
+                pattern = re.compile('[^payeeAddress\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                payeeAddress = searchResult.split(marker)[0]
+                extractedRules['payeeAddress'] = payeeAddress
 
 
-        if 'contractamount' in extractedRules and 'userchoices' in extractedRules:
+        if len(extractedRules)>1 and 'expirytime' in extractedRules:
             return extractedRules
         else:
             return None
@@ -227,7 +259,7 @@ def extractTriggerCondition(text):
 
 
 # Combine test
-def parse_flodata(string):
+def parse_flodata(string, blockinfo):
 
     # todo Rule 20 - remove 'text:' from the start of flodata if it exists
     if string[0:5] == 'text:':
@@ -301,7 +333,7 @@ def parse_flodata(string):
         elif incorporation and not transfer:
             contracttype = extractContractType(cleanstring)
             contractaddress = extractAddress(nospacestring)
-            contractconditions = extractContractConditions(cleanstring, 'one-time-event*', marker=hashList[0][:-1])
+            contractconditions = extractContractConditions(cleanstring, contracttype, marker=hashList[0][:-1], blocktime=blockinfo['time'])
 
             if None not in [contracttype, contractaddress, contractconditions]:
                 parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1],
@@ -326,7 +358,7 @@ def parse_flodata(string):
 
 
     # todo Rule 36 - Check for only a single @ and the substring "smart contract system says" in flodata, else reject
-    elif (len(hashList)==0 and len(atList)==1) and 'smart contract system says' in cleanstring:
+    elif (len(hashList)==0 and len(atList)==1):
         # Passing the above check means Smart Contract pays | exitcondition triggered from the committee
         # todo Rule 37 - Extract the trigger condition given by the committee. If its missing, reject
         triggerCondition = extractTriggerCondition(cleanstring)

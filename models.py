@@ -71,6 +71,7 @@ class ActiveContracts(SystemBase):
     id = Column('id', Integer, primary_key=True)
     contractName = Column('contractName', String)
     contractAddress = Column('contractAddress', String)
+    status = Column('status', String)
 
 class SystemData(SystemBase):
     __tablename__ = "systemData"
@@ -85,6 +86,7 @@ class ContractParticipantMapping(SystemBase):
     id = Column('id', Integer, primary_key=True)
     participantAddress = Column('participantAddress', String)
     contractName = Column('contractName', String)
+    contractAddress = Column('contractAddress', String)
     tokenAmount = Column('tokenAmount', Float)
 
 
