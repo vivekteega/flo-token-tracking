@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, func, desc
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractParticipantMapping
 
 
-committeeAddressList = ['oUc4dVvxwK7w5MHUHtev8UawN3eDjiZnNx']
+committeeAddressList = ['of6zWQ2aySxEtd4c51cuXVzsTBHnQuWF6z']
 
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress):
@@ -176,8 +176,8 @@ def checkLocaltriggerContracts(blockinfo):
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
                                                 expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                tzinfo=expirytime_split[5])
-            blocktime_object = parsing.arrow.get(blockinfo['time'])
+                tzinfo=expirytime_split[5][3:])
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
 
             if blocktime_object > expirytime_object:
                 if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
@@ -225,8 +225,8 @@ def checkLocaltriggerContracts(blockinfo):
             expirytime_split = expiryTime.split(' ')
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                tzinfo=expirytime_split[5])
-            blocktime_object = parsing.arrow.get(blockinfo['time'])
+                tzinfo=expirytime_split[5][3:])
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
 
             if blocktime_object > expirytime_object:
                 if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
@@ -414,8 +414,8 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 expirytime = result[0].value.strip()
                 expirytime_split = expirytime.split(' ')
                 parse_string = '{}/{}/{} {}'.format( expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
-                expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
-                blocktime_object = parsing.arrow.get(blockinfo['time'])
+                expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
+                blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
 
                 if blocktime_object > expirytime_object:
                     print('Contract has expired and will not accept any user participation')
@@ -677,7 +677,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             connection = engine.connect()
             # todo : filter activeContracts which only have local triggers
             contractStructure = connection.execute('select * from contractstructure').fetchall()
-            contractStructure_T = list(zip(*contractstructure))
+            contractStructure_T = list(zip(*contractStructure))
 
             if 'maximumsubscriptionamount' in list(contractStructure_T[1]):
                 maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
@@ -690,7 +690,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                     winnerSum = connection.execute(
                         'select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(
-                            parsed_data['triggerCondition'])).fetchall()
+                            parsed_data['triggerCondition'])).fetchall()[0][0]
                     tokenIdentification = connection.execute(
                         'select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
                     connection.close()
@@ -710,13 +710,13 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
 
             # Check if contract has passed expiry time
-            expiryTime = connection.execute('select value from contractstructure where attibute=="expiryTime"').fetchall()[0][0]
+            expiryTime = connection.execute('select value from contractstructure where attribute=="expiryTime"').fetchall()[0][0]
             expirytime_split = expiryTime.split(' ')
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
                                                 expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                tzinfo=expirytime_split[5])
-            blocktime_object = parsing.arrow.get(blockinfo['time'])
+                tzinfo=expirytime_split[5][3:])
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
             connection.close()
 
             if blocktime_object > expirytime_object:
@@ -772,11 +772,12 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 connection = engine.connect()
                 contractWinners = connection.execute('select * from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
                 tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
-                winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
+                winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()[0][0]
                 tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
                 connection.close()
 
                 for winner in contractWinners:
+                    winner = list(winner)
                     returnval = transferToken(tokenIdentification, (winner[2]/winnerSum)*tokenSum, outputlist[0], winner[1])
                     if returnval is None:
                         print(
