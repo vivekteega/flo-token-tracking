@@ -489,8 +489,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             session.add(ContractParticipantMapping(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
-                                                             contractName = parsed_data['contractName'], contractAddress = outputlist[0], contractName = parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
-))
+                                                             contractName = parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
                             session.commit()
                             return
 
@@ -886,7 +885,7 @@ print("current_block_height : " + str(current_index))
 for blockindex in range( startblock, current_index ):
     print(blockindex)
 
-    if blockindex == 606098:
+    if blockindex == 3454503:
         print('hello')
 
     # Scan every block
