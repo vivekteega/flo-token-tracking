@@ -447,6 +447,16 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     print('Token amount being transferred is not part of the contract structure\nThis transaction will be discarded')
                     return
 
+            # Check if the transaction hash already exists in the contract db (Safety check)
+            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),echo=True)
+            connection = engine.connect()
+            participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
+            participantAdd_txhash_T = list(zip(*participantAdd_txhash))
+
+            if len(participantAdd_txhash) != 0 and transaction_data['txid'] in list(participantAdd_txhash_T[1]):
+                print('Transaction already exists in the db. This is unusual, please check your code')
+                return
+
 
             # Check if maximum subscription amount has reached
             engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
@@ -470,7 +480,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
                         if returnval is not None:
                             # Store participant details in the smart contract's db
-                            session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'], userChoice=parsed_data['userChoice']))
+                            session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'], userChoice=parsed_data['userChoice'], transactionHash=transaction_data['txid'] ))
                             session.commit()
                             session.close()
 
@@ -479,7 +489,8 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             session.add(ContractParticipantMapping(participantAddress=inputadd, tokenAmount=parsed_data['tokenAmount'],
-                                                             contractName = parsed_data['contractName'], contractAddress = outputlist[0]))
+                                                             contractName = parsed_data['contractName'], contractAddress = outputlist[0], contractName = parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
+))
                             session.commit()
                             return
 
@@ -494,7 +505,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             # Store participant details in the smart contract's db
                             session.add(ContractParticipants(participantAddress=inputadd,
                                                              tokenAmount=maximumsubscriptionamount-amountDeposited,
-                                                             userChoice=parsed_data['userChoice']))
+                                                             userChoice=parsed_data['userChoice'], transactionHash=transaction_data['txid']))
                             session.commit()
                             session.close()
 
@@ -504,7 +515,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             session = sessionmaker(bind=engine)()
                             session.add(ContractParticipantMapping(participantAddress=inputadd,
                                                                    tokenAmount=maximumsubscriptionamount-amountDeposited,
-                                                                   contractName=parsed_data['contractName'], contractAddress = outputlist[0]))
+                                                                   contractName=parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
                             session.commit()
                             session.close()
                             return
@@ -521,7 +532,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 # Store participant details in the smart contract's db
                 session.add(ContractParticipants(participantAddress=inputadd,
                                                  tokenAmount=parsed_data['tokenAmount'],
-                                                 userChoice=parsed_data['userChoice']))
+                                                 userChoice=parsed_data['userChoice'], transactionHash=transaction_data['txid']))
                 session.commit()
                 session.close()
 
@@ -532,7 +543,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 session.add(ContractParticipantMapping(participantAddress=inputadd,
                                                        tokenAmount=parsed_data['tokenAmount'],
                                                        contractName=parsed_data['contractName'],
-                                                       contractAddress=outputlist[0]))
+                                                       contractAddress=outputlist[0], transactionHash=transaction_data['txid']))
                 session.commit()
                 return
 

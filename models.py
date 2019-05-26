@@ -64,6 +64,7 @@ class ContractParticipants(ContractBase):
     participantAddress = Column('participantAddress', String)
     tokenAmount = Column('tokenAmount', Float)
     userChoice = Column('userChoice', String)
+    transactionHash = Column('transactionHash', String)
 
 class ActiveContracts(SystemBase):
     __tablename__ = "activecontracts"
@@ -72,6 +73,7 @@ class ActiveContracts(SystemBase):
     contractName = Column('contractName', String)
     contractAddress = Column('contractAddress', String)
     status = Column('status', String)
+    transactionHash = Column('transactionHash', String)
 
 class SystemData(SystemBase):
     __tablename__ = "systemData"
