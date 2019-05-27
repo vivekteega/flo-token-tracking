@@ -14,7 +14,7 @@ from sqlalchemy import create_engine, func, desc
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractParticipantMapping
 
 
-committeeAddressList = ['of6zWQ2aySxEtd4c51cuXVzsTBHnQuWF6z']
+committeeAddressList = ['FRwwCqbP7DN4z5guffzzhCSgpD8Q33hUG8']
 
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress):
