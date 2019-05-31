@@ -175,8 +175,7 @@ def checkLocaltriggerContracts(blockinfo):
             expirytime_split = expiryTime.split(' ')
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
                                                 expirytime_split[2], expirytime_split[4])
-            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                tzinfo=expirytime_split[5][3:])
+            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
             blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
 
             if blocktime_object > expirytime_object:
@@ -185,19 +184,36 @@ def checkLocaltriggerContracts(blockinfo):
                     tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                     if tokenAmount_sum < minimumsubscriptionamount:
                         # Initialize payback to contract participants
-                        contractParticipants = connection.execute('select participantAddress, tokenAmount from contractparticipants').fetchall()[0][0]
+                        contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
 
                         for participant in contractParticipants:
                             tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
                             contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
                             returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0])
                             if returnval is None:
-                                print("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                                print("Something went wrong in the token transfer method while doing local Smart Contract Trigger. THIS IS CRITICAL ERROR")
+                                return
+                            connection.execute(
+                                'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
+                                    (participant[1], participant[0], participant[2])))
                         engine = create_engine('sqlite:///system.db', echo=True)
                         connection = engine.connect()
                         connection.execute(
                             'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
+                        connection.execute(
+                            'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(block_data['time'],
+                                contract[0], contract[1]))
                         connection.close()
+
+                engine = create_engine('sqlite:///system.db', echo=True)
+                connection = engine.connect()
+                connection.execute(
+                    'update activecontracts set status="expired" where contractName="{}" and contractAddress="{}"'.format(
+                        contract[0], contract[1]))
+                connection.execute(
+                    'update activecontracts set expirydate="{}" where contractName="{}" and contractAddress="{}"'.format(block_data['time'],
+                        contract[0], contract[1]))
+                connection.close()
 
 
         else:
@@ -214,11 +230,16 @@ def checkLocaltriggerContracts(blockinfo):
                     if returnval is None:
                         print("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                         return
+                    connection.execute(
+                        'update contractparticipants set winningAmount="{}"'.format(
+                            (0)))
                     engine = create_engine('sqlite:///system.db', echo=False)
                     connection = engine.connect()
                     connection.execute(
-                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                            contract[0], contract[1]))
+                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
+                    connection.execute(
+                        'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                            block_data['time'], contract[0], contract[1]))
                     connection.close()
 
             expiryTime = connection.execute('select value from contractstructure where attribute=="expiryTime"').fetchall()[0][0]
@@ -235,7 +256,7 @@ def checkLocaltriggerContracts(blockinfo):
                     if tokenAmount_sum < minimumsubscriptionamount:
                         # Initialize payback to contract participants
                         contractParticipants = connection.execute(
-                            'select participantAddress, tokenAmount from contractparticipants').fetchall()[0][0]
+                            'select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
 
                         for participant in contractParticipants:
                             tokenIdentification = connection.execute(
@@ -249,11 +270,15 @@ def checkLocaltriggerContracts(blockinfo):
                                 print(
                                     "Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                                 return
+                            connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[2])))
                         engine = create_engine('sqlite:///system.db', echo=False)
                         connection = engine.connect()
                         connection.execute(
                             'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                                 contract[0], contract[1]))
+                        connection.execute(
+                            'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                                block_data['time'],contract[0], contract[1]))
                         connection.close()
 
                 # Trigger the contract
@@ -264,11 +289,15 @@ def checkLocaltriggerContracts(blockinfo):
                 if returnval is None:
                     print("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                     return
+                connection.execute('update contractparticipants set winningAmount="{}"'.format(0))
                 engine = create_engine('sqlite:///system.db', echo=False)
                 connection = engine.connect()
                 connection.execute(
                     'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                         contract[0], contract[1]))
+                connection.execute(
+                    'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                        block_data['time'], contract[0], contract[1]))
                 connection.close()
 
 
@@ -649,7 +678,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     session.add(ActiveContracts(contractName=parsed_data['contractName'],
-                                                contractAddress=parsed_data['contractAddress'], status='active'))
+                                                contractAddress=parsed_data['contractAddress'], status='active', transactionHash=transaction_data['txid'], incorporationDate=blockinfo['time']))
                     session.commit()
                     session.close()
                 else:
@@ -669,7 +698,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             connection = engine.connect()
             # todo : Get only activeContracts which have non-local trigger ie. committee triggers them
 
-            contractDetails = connection.execute('select contractName, contractAddress from activecontracts where status=="active"').fetchall()
+            contractDetails = connection.execute('select contractName, contractAddress from activecontracts where status=="expired"').fetchall()
             connection.close()
             contractList = []
 
@@ -703,7 +732,6 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             parsed_data['triggerCondition'])).fetchall()[0][0]
                     tokenIdentification = connection.execute(
                         'select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                    connection.close()
 
                     for winner in contractWinners:
                         returnval = transferToken(tokenIdentification, (winner[2] / winnerSum) * tokenSum,
@@ -711,10 +739,16 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         if returnval is None:
                             print("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                             return
+                        connection.execute(
+                            'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
+                                ((winner[2] / winnerSum) * tokenSum, winner[1], winner[4])))
                     engine = create_engine('sqlite:///system.db', echo=True)
                     connection = engine.connect()
                     connection.execute(
                         'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(parsed_data['contractName'], outputlist[0]))
+                    connection.execute(
+                        'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(block_data['time'],
+                            parsed_data['contractName'], outputlist[0]))
                     connection.close()
                     return
 
@@ -756,7 +790,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                echo=True)
                         connection = engine.connect()
                         contractParticipants = connection.execute(
-                            'select participantAddress, tokenAmount from contractparticipants').fetchall()[0][0]
+                            'select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
 
                         for participant in contractParticipants:
                             tokenIdentification = connection.execute(
@@ -770,12 +804,20 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                 print(
                                     "CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                                 return
-                            engine = create_engine('sqlite:///system.db', echo=True)
-                            connection = engine.connect()
+
                             connection.execute(
-                                'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                                    parsed_data['contractName'], outputlist[0]))
-                            connection.close()
+                                'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
+                                    (participant[1], participant[0], participant[4])))
+
+                        engine = create_engine('sqlite:///system.db', echo=True)
+                        connection = engine.connect()
+                        connection.execute(
+                            'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                                parsed_data['contractName'], outputlist[0]))
+                        connection.execute(
+                            'update activecontracts set status="{}" where contractName="{}" and contractAddress="{}"'.format(block_data['time'],
+                                parsed_data['contractName'], outputlist[0]))
+                        connection.close()
                         return
 
                 engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
@@ -784,7 +826,6 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                 winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()[0][0]
                 tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                connection.close()
 
                 for winner in contractWinners:
                     winner = list(winner)
@@ -793,10 +834,16 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         print(
                             "CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                         return
+                    connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((winner[2]/winnerSum)*tokenSum, winner[1], winner[4]))
+                connection.close()
+
                 engine = create_engine('sqlite:///system.db', echo=True)
                 connection = engine.connect()
                 connection.execute(
                     'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                        parsed_data['contractName'], outputlist[0]))
+                connection.execute(
+                    'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(block_data['time'],
                         parsed_data['contractName'], outputlist[0]))
                 connection.close()
         else:

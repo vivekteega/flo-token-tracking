@@ -14,6 +14,7 @@ class ActiveTable(Base):
     consumedpid = Column('consumedpid', String)
     transferBalance = Column('transferBalance', Float)
 
+
 class ConsumedTable(Base):
     __tablename__ = "consumedTable"
 
@@ -23,6 +24,7 @@ class ConsumedTable(Base):
     parentid = Column('parentid', Integer)
     consumedpid = Column('consumedpid', String)
     transferBalance = Column('transferBalance', Float)
+
 
 class TransferLogs(Base):
     __tablename__ = "transferlogs"
@@ -37,6 +39,7 @@ class TransferLogs(Base):
     time = Column('time', Integer)
     transactionHash = Column('transactionHash', String)
 
+
 class TransactionHistory(Base):
     __tablename__ = "transactionHistory"
 
@@ -49,6 +52,7 @@ class TransactionHistory(Base):
     transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
 
+
 class ContractStructure(ContractBase):
     __tablename__ = "contractstructure"
 
@@ -56,6 +60,7 @@ class ContractStructure(ContractBase):
     attribute = Column('attribute', String)
     index = Column('index', Integer)
     value = Column('value', String)
+
 
 class ContractParticipants(ContractBase):
     __tablename__ = "contractparticipants"
@@ -65,6 +70,8 @@ class ContractParticipants(ContractBase):
     tokenAmount = Column('tokenAmount', Float)
     userChoice = Column('userChoice', String)
     transactionHash = Column('transactionHash', String)
+    winningAmount = Column('winningAmount', Float)
+
 
 class ActiveContracts(SystemBase):
     __tablename__ = "activecontracts"
@@ -74,6 +81,10 @@ class ActiveContracts(SystemBase):
     contractAddress = Column('contractAddress', String)
     status = Column('status', String)
     transactionHash = Column('transactionHash', String)
+    incorporationDate = Column('incorporationDate', String)
+    expiryDate = Column('expiryDate', String)
+    closeDate = Column('closeDate', String)
+
 
 class SystemData(SystemBase):
     __tablename__ = "systemData"
@@ -90,5 +101,6 @@ class ContractParticipantMapping(SystemBase):
     contractName = Column('contractName', String)
     contractAddress = Column('contractAddress', String)
     tokenAmount = Column('tokenAmount', Float)
+    transactionHash = Column('transactionHash', String)
 
 
