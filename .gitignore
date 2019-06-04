@@ -7,3 +7,4 @@ smartContracts/
 *.sh
 system.db
 config.ini
+config.py
