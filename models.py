@@ -103,4 +103,12 @@ class ContractParticipantMapping(SystemBase):
     tokenAmount = Column('tokenAmount', Float)
     transactionHash = Column('transactionHash', String)
 
+class TokenAddressMapping(SystemBase):
+    __tablename__ = "tokenAddressMapping"
+
+    id = Column('id', Integer, primary_key=True)
+    tokenAddress = Column('tokenAddress', String)
+    token = Column('token', String)
+    transactionHash = Column('transactionHash', String)
+
 

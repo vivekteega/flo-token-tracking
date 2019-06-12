@@ -17,10 +17,9 @@ import pybtc
 
 
 def pushData_SSEapi(message):
-    url = 'https://ranchimallflo.duckdns.org/'
     signature = pybtc.sign_message(message, privKey)
     headers = {'Accept': 'application/json', 'Content-Type': 'application/json', 'Signature': signature}
-    r = requests.post(url, json={'message': '{}'.format(message)}, headers=headers)
+    r = requests.post(sseAPI_url, json={'message': '{}'.format(message)}, headers=headers)
 
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress):
@@ -401,11 +400,12 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             connection = engine.connect()
 
             blockno_txhash = connection.execute('select blockNumber, transactionHash from transactionHistory').fetchall()
+            connection.close()
             blockno_txhash_T = list(zip(*blockno_txhash))
 
             if transaction_data['txid'] in list(blockno_txhash_T[1]):
                 print('Transaction {} already exists in the token db. This is unusual, please check your code'.format(transaction_data['txid']))
-                pushData_SSEapi('Error | Transaction {} already exists in the token db. This is unusual, please check your code'.format(transaction_data['txid'])
+                pushData_SSEapi('Error | Transaction {} already exists in the token db. This is unusual, please check your code'.format(transaction_data['txid']))
                 return
 
             returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0])
@@ -413,6 +413,17 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 print("Something went wrong in the token transfer method")
                 pushData_SSEapi('Error | Something went wrong while doing the internal db transactions for {}'.format(transaction_data['txid']))
                 return
+
+            # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+            engine = create_engine('sqlite:///system.db'.format(parsed_data['tokenIdentification']), echo=True)
+            connection = engine.connect()
+            firstInteractionCheck = connection.execute('select * from tokenAddressMapping where tokenAddress="{}" and token="{}"'.format(outputlist[0], parsed_data['tokenIdentification'])).fetchall()
+
+            if len(firstInteractionCheck) == 0:
+                connection.execute('INSERT INTO tokenAddressMapping [(tokenAddress, token, transactionHash)] VALUES ({}, {}, {});'.format(outputlist[0], parsed_data['tokenIdentification']))
+
+            connection.close()
+
 
             # Pass information to SSE channel
             url = 'https://ranchimallflo.duckdns.org/'
@@ -628,6 +639,15 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                            blockchainReference=blockchainReference))
             session.commit()
             session.close()
+
+            # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+            engine = create_engine('sqlite:///system.db'.format(parsed_data['tokenIdentification']), echo=True)
+            connection = engine.connect()
+            connection.execute(
+                    'INSERT INTO tokenAddressMapping [(tokenAddress, token, transactionHash)] VALUES ({}, {}, {});'.format(
+                        inputadd, parsed_data['tokenIdentification'], transaction_data['txid']))
+
+            connection.close()
 
             pushData_SSEapi('Token | Succesfully incorporated token {} at transaction {}'.format(
                     parsed_data['tokenIdentification'], transaction_data['txid']))
