@@ -4,6 +4,7 @@ from sqlalchemy import Column, Integer, Float, String, ForeignKey
 Base = declarative_base()
 ContractBase = declarative_base()
 SystemBase = declarative_base()
+LatestCacheBase = declarative_base()
 
 class ActiveTable(Base):
     __tablename__ = "activeTable"
@@ -110,5 +111,11 @@ class TokenAddressMapping(SystemBase):
     tokenAddress = Column('tokenAddress', String)
     token = Column('token', String)
     transactionHash = Column('transactionHash', String)
+
+class LatestTransactions(LatestCacheBase):
+    __tablename__ = "latestTransactions"
+    id = Column('id', Integer, primary_key=True)
+    transactionHash = Column('transactionHash', String)
+    jsonData = Column('jsonData', String)
 
 
