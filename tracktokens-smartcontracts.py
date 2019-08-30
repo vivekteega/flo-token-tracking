@@ -11,7 +11,7 @@ import os
 import shutil
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import create_engine, func, desc
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractParticipantMapping, LatestTransactions, LatestCacheBase
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractParticipantMapping, LatestTransactions, LatestCacheBase, LatestBlocks
 from config import *
 import pybtc
 import socketio
@@ -101,17 +101,17 @@ def processApiBlock(blockhash):
     checkLocaltriggerContracts(blockinfo)
 
 
-def updateLatestTransaction(transactionData):
+def updateLatestTransaction(transactionData, parsed_data):
     # connect to latest transaction db
     conn = sqlite3.connect('latestCache.db')
-    conn.execute("INSERT INTO latestTransactions(transactionHash, jsonData) VALUES (?,?)", (transactionData['hash'], str(transactionData)))
+    conn.execute("INSERT INTO latestTransactions(transactionHash, jsonData, transactionType, parsedFloData) VALUES (?,?,?,?)", (transactionData['hash'], json.dumps(transactionData), parsed_data['type'], json.dumps(parsed_data)))
     conn.commit()
     conn.close()
 
 def updateLatestBlock(blockData):
     # connect to latest block db
     conn = sqlite3.connect('latestCache.db')
-    #conn.execute('INSERT INTO latestBlocks(blockNumber, blockHash, jsonData) VALUES (?,?, ?)',(blockData['height'],),(blockData['hash'],),(str(transactionData),))
+    conn.execute('INSERT INTO latestBlocks(blockNumber, blockHash, jsonData) VALUES (?,?,?)',(blockData['height'], blockData['hash'], json.dumps(blockData)))
     conn.commit()
     conn.close()
 
@@ -508,7 +508,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 pushData_SSEapi('Error | Something went wrong while doing the internal db transactions for {}'.format(transaction_data['txid']))
                 return
             else:
-                updateLatestTransaction(transaction_data)
+                updateLatestTransaction(transaction_data, parsed_data)
 
             # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
             engine = create_engine('sqlite:///system.db', echo=True)
@@ -655,7 +655,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                              contractName = parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
                             session.commit()
 
-                            updateLatestTransaction(transaction_data)
+                            updateLatestTransaction(transaction_data, parsed_data)
                             return
 
                         else:
@@ -682,7 +682,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                                    contractName=parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
                             session.commit()
                             session.close()
-                            updateLatestTransaction(transaction_data)
+                            updateLatestTransaction(transaction_data, parsed_data)
                             return
 
                         else:
@@ -711,7 +711,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                        contractAddress=outputlist[0], transactionHash=transaction_data['txid']))
                 session.commit()
 
-                updateLatestTransaction(transaction_data)
+                updateLatestTransaction(transaction_data, parsed_data)
 
                 pushData_SSEapi('Participation | Succesfully participated in the contract {}-{} at transaction {}'.format(
                         parsed_data['contractName'], outputlist[0],
@@ -750,7 +750,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
             connection.close()
 
-            updateLatestTransaction(transaction_data)
+            updateLatestTransaction(transaction_data, parsed_data)
 
             pushData_SSEapi('Token | Succesfully incorporated token {} at transaction {}'.format(
                     parsed_data['tokenIdentification'], transaction_data['txid']))
@@ -842,7 +842,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     session.commit()
                     session.close()
 
-                    updateLatestTransaction(transaction_data)
+                    updateLatestTransaction(transaction_data, parsed_data)
 
                     pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(
                             transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
@@ -925,7 +925,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             parsed_data['contractName'], outputlist[0]))
                     connection.close()
 
-                    updateLatestTransaction(transaction_data)
+                    updateLatestTransaction(transaction_data, parsed_data)
 
                     pushData_SSEapi('Trigger | Contract triggered of the name {}-{} is active currentlyt at transaction {}'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
                     return
@@ -1029,7 +1029,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         parsed_data['contractName'], outputlist[0]))
                 connection.close()
 
-                updateLatestTransaction(transaction_data)
+                updateLatestTransaction(transaction_data, parsed_data)
 
                 pushData_SSEapi('Trigger | Contract triggered of the name {}-{} is active currentlyt at transaction {}'.format(
                         parsed_data['contractName'], outputlist[0], transaction_data['txid']))
