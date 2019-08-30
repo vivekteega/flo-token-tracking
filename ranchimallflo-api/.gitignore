@@ -1,0 +1,6 @@
+__pycache__/
+wsgi.py
+*.swp
+config.py
+.idea/
+py3.7/
