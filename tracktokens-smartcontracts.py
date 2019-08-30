@@ -275,7 +275,7 @@ def checkLocaltriggerContracts(blockinfo):
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
                                                 expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
             if blocktime_object > expirytime_object:
                 if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
@@ -346,7 +346,7 @@ def checkLocaltriggerContracts(blockinfo):
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
                 tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
             if blocktime_object > expirytime_object:
                 if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
@@ -569,7 +569,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 expirytime_split = expirytime.split(' ')
                 parse_string = '{}/{}/{} {}'.format( expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
                 expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
-                blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+                blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
                 if blocktime_object > expirytime_object:
                     print('Contract has expired and will not accept any user participation')
@@ -938,7 +938,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                 expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
                 tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
             connection.close()
 
             if blocktime_object > expirytime_object:
