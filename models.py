@@ -123,7 +123,7 @@ class LatestTransactions(LatestCacheBase):
 class LatestBlocks(LatestCacheBase):
     __tablename__ = "latestBlocks"
     id = Column('id', Integer, primary_key=True)
-    blockNo = Column('blockNo', String)
+    blockNumber = Column('blockNumber', String)
     blockHash = Column('blockHash', String)
     jsonData = Column('jsonData', String)
 
