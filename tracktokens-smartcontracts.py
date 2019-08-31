@@ -25,7 +25,6 @@ def pushData_SSEapi(message):
 
 def processBlock(blockindex):
     print(blockindex)
-
     # Scan every block
     string = "{} getblockhash {}".format(localapi, str(blockindex))
     response = subprocess.check_output(string, shell=True)
@@ -51,7 +50,10 @@ def processBlock(blockindex):
         if parsed_data['type'] != 'noise':
             print(blockindex)
             print(parsed_data['type'])
-            startWorking(transaction_data, parsed_data, blockinfo)
+            returnval = startWorking(transaction_data, parsed_data, blockinfo)
+
+            if returnval != 0:
+                updateLatestBlock(blockinfo)
 
     engine = create_engine('sqlite:///system.db')
     SystemBase.metadata.create_all(bind=engine)
@@ -125,12 +127,12 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
     if availableTokens is None:
         print("The input address dosen't exist in our database ")
         session.close()
-        return None
+        return 0
 
     elif availableTokens < commentTransferAmount:
         print("\nThe transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
         session.close()
-        return None
+        return 0
 
     elif availableTokens >= commentTransferAmount:
         table = session.query(ActiveTable).filter(ActiveTable.address==inputAddress).all()
@@ -275,7 +277,7 @@ def checkLocaltriggerContracts(blockinfo):
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
                                                 expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
             if blocktime_object > expirytime_object:
                 if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
@@ -346,7 +348,7 @@ def checkLocaltriggerContracts(blockinfo):
             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
                 tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
             if blocktime_object > expirytime_object:
                 if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
@@ -447,7 +449,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
         if item[0] != temp:
             print('System has found more than one address as part of vin')
             print('This transaction will be rejected')
-            return
+            return 0
 
     inputlist = [vinlist[0][0], totalinputval]
 
@@ -456,7 +458,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
     if len(transaction_data["vout"]) > 2:
         print("Program has detected more than 2 vouts ")
         print("This transaction will be discarded")
-        return
+        return 0
 
     # todo Rule 43 - A transaction accepted by the system has two vouts, 1. The FLO address of the receiver
     #      2. Flo address of the sender as change address.  If the vout address is change address, then the other adddress
@@ -471,7 +473,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
     if len(outputlist) != 1:
         print("The transaction change is not coming back to the input address")
-        return
+        return 0
 
     outputlist = outputlist[0]
 
@@ -500,13 +502,13 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             if transaction_data['txid'] in list(blockno_txhash_T[1]):
                 print('Transaction {} already exists in the token db. This is unusual, please check your code'.format(transaction_data['txid']))
                 pushData_SSEapi('Error | Transaction {} already exists in the token db. This is unusual, please check your code'.format(transaction_data['txid']))
-                return
+                return 0
 
             returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0], transaction_data)
             if returnval is None:
                 print("Something went wrong in the token transfer method")
                 pushData_SSEapi('Error | Something went wrong while doing the internal db transactions for {}'.format(transaction_data['txid']))
-                return
+                return 0
             else:
                 updateLatestTransaction(transaction_data, parsed_data)
 
@@ -538,7 +540,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
                     # Pass information to SSE channel
                     pushData_SSEapi('Error| Mismatch in contract address specified in flodata and the output address of the transaction {}'.format(transaction_data['txid']))
-                    return
+                    return 0
 
             # check if the contract is active
             engine = create_engine('sqlite:///system.db', echo=True)
@@ -555,7 +557,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
             if counter != 1:
                 print('Active Smart contract with the given name doesn\'t exist')
-                return
+                return 0
 
             # Check if the contract has expired
             engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
@@ -569,12 +571,12 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 expirytime_split = expirytime.split(' ')
                 parse_string = '{}/{}/{} {}'.format( expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
                 expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
-                blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+                blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
                 if blocktime_object > expirytime_object:
                     print('Contract has expired and will not accept any user participation')
                     pushData_SSEapi('Error| Active smart contract of the name {}-{} doesn\t exist at transaction {}'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
-                    return
+                    return 0
 
 
             # Check if exitcondition exists as part of contractstructure and is given in right format
@@ -590,7 +592,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 if parsed_data['userChoice'] not in list(exitconditions_T[1]):
                     print("Wrong userchoice entered\nThis smartContract pariticipation will be rejected")
                     pushData_SSEapi('Error| Wrong user choice entered during participation of smart contract of the name {}-{} at transaction {}'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
-                    return
+                    return 0
 
             # Check if contractAmount is part of the contract structure, and enforce it if it is
             engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
@@ -604,7 +606,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     pushData_SSEapi('Error| Token amount being transferred is not part of the contract structure of the name {}-{} at transaction {}'.format(
                             parsed_data['contractName'], outputlist[0],
                             transaction_data['txid']))
-                    return
+                    return 0
 
             # Check if the transaction hash already exists in the contract db (Safety check)
             engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),echo=True)
@@ -616,7 +618,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 print('Transaction already exists in the db. This is unusual, please check your code')
                 pushData_SSEapi('Error | Transaction {} already exists in the participant db. This is unusual, please check your code'.format(
                         transaction_data['txid']))
-                return
+                return 0
 
 
             # Check if maximum subscription amount has reached
@@ -636,7 +638,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     print('Maximum subscription amount reached\n Money will be refunded')
                     pushData_SSEapi('Error | Maximum subscription amount reached for contract {}-{} at transaction {}. Token will not be transferred'.format(parsed_data['contractName'], outputlist[0],
                             transaction_data['txid']))
-                    return
+                    return 0
                 else:
                     if parsed_data['tokenAmount'] + amountDeposited <= maximumsubscriptionamount:
                         # Check if the tokenAmount being transferred exists in the address & do the token transfer
@@ -660,7 +662,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
                         else:
                             print("Something went wrong in the smartcontract token transfer method")
-                            return
+                            return 0
                     else:
                         # Transfer only part of the tokens users specified, till the time it reaches maximumamount
                         returnval = transferToken(parsed_data['tokenIdentification'], maximumsubscriptionamount-amountDeposited,
@@ -687,7 +689,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
                         else:
                             print("Something went wrong in the smartcontract token transfer method")
-                            return
+                            return 0
 
             ###############################
             # Check if the tokenAmount being transferred exists in the address & do the token transfer
@@ -757,7 +759,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
         else:
             print('Transaction rejected as the token with same name has already been incorporated')
             pushData_SSEapi('Error | Token incorporation rejected at transaction {} as token {} already exists'.format(transaction_data['txid'], parsed_data['tokenIdentification']))
-
+            return 0
 
     # todo Rule 48 - If the parsed data type if smart contract incorporation, then check if the name hasn't been taken already
     #         if it has been taken then reject the incorporation.
@@ -782,7 +784,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 # userchoice and payeeAddress conditions cannot come together. Check for it
                 if 'userchoices' in parsed_data['contractConditions'] and 'payeeAddress' in parsed_data['contractConditions']:
                     print('Both userchoice and payeeAddress provided as part of the Contract conditions\nIncorporation of Smart Contract with the name {} will be rejected'.format(parsed_data['contractName']))
-                    return
+                    return 0
 
                 # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
                 #    henceforth we will not consider any flo private key initiated comment as valid from this address
@@ -828,7 +830,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                               value=parsed_data['contractConditions']['payeeAddress']))
                     else:
                         print('Neither userchoice nor payeeAddress provided as part of Smart Contract incorporation of the name {}\n This contract incorporation will be rejected'.format(parsed_data['contractName']))
-                        return
+                        return 0
 
                     session.commit()
                     session.close()
@@ -850,6 +852,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     print('Contract Incorporation rejected as address in Flodata and input address are different')
                     pushData_SSEapi('Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {}'.format(
                             transaction_data['txid']))
+                    return 0
 
 
         else:
@@ -858,7 +861,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
             headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
             r = requests.post(url, json={
                 'message': 'Error | Contract Incorporation rejected as a smartcontract with same name {}-{} is active currentlyt at transaction {}'.format(parsed_data['contractName'], parsed_data['contractAddress'], transaction_data['txid'])}, headers=headers)
-
+            return 0
 
     elif parsed_data['type'] == 'smartContractPays':
         print('Found a transaction of the type smartContractPays')
@@ -882,7 +885,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
             if counter != 1:
                 print('Active Smart contract with the given name doesn\'t exist\n This committee trigger will be rejected')
-                return
+                return 0
 
             # Check if the contract has maximumsubscriptionamount and if it has reached it
             engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
@@ -912,7 +915,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                   outputlist[0], winner[1], transaction_data)
                         if returnval is None:
                             print("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
-                            return
+                            return 0
                         connection.execute(
                             'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
                                 (winnerAmount, winner[1], winner[4])))
@@ -938,7 +941,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                 expirytime_split[2], expirytime_split[4])
             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
                 tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('IST')
+            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
             connection.close()
 
             if blocktime_object > expirytime_object:
@@ -981,7 +984,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             if returnval is None:
                                 print(
                                     "CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
-                                return
+                                return 0
 
                             connection.execute(
                                 'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
@@ -1015,7 +1018,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     if returnval is None:
                         print(
                             "CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
-                        return
+                        return 0
                     connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(winnerAmount, winner[1], winner[4]))
                 connection.close()
 
@@ -1149,7 +1152,3 @@ def on_block(data):
     print('New block received')
     print(str(data))
     processApiBlock(data)
-
-
-
-
