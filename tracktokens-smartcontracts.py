@@ -103,10 +103,10 @@ def processApiBlock(blockhash):
     checkLocaltriggerContracts(blockinfo)
 
 
-def updateLatestTransaction(transactionData, parsed_data):
+def updateLatestTransaction(transactionData, parsed_data, blockinfo):
     # connect to latest transaction db
     conn = sqlite3.connect('latestCache.db')
-    conn.execute("INSERT INTO latestTransactions(transactionHash, jsonData, transactionType, parsedFloData) VALUES (?,?,?,?)", (transactionData['hash'], json.dumps(transactionData), parsed_data['type'], json.dumps(parsed_data)))
+    conn.execute("INSERT INTO latestTransactions(transactionHash, blockNumber, jsonData, transactionType, parsedFloData) VALUES (?,?,?,?,?)", (transactionData['hash'], blockinfo['height'], json.dumps(transactionData), parsed_data['type'], json.dumps(parsed_data)))
     conn.commit()
     conn.close()
 
@@ -510,7 +510,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                 pushData_SSEapi('Error | Something went wrong while doing the internal db transactions for {}'.format(transaction_data['txid']))
                 return 0
             else:
-                updateLatestTransaction(transaction_data, parsed_data)
+                updateLatestTransaction(transaction_data, parsed_data, blockinfo)
 
             # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
             engine = create_engine('sqlite:///system.db', echo=True)
@@ -657,7 +657,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                              contractName = parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
                             session.commit()
 
-                            updateLatestTransaction(transaction_data, parsed_data)
+                            updateLatestTransaction(transaction_data, parsed_data, blockinfo)
                             return
 
                         else:
@@ -684,7 +684,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                                    contractName=parsed_data['contractName'], contractAddress = outputlist[0], transactionHash=transaction_data['txid']))
                             session.commit()
                             session.close()
-                            updateLatestTransaction(transaction_data, parsed_data)
+                            updateLatestTransaction(transaction_data, parsed_data, blockinfo)
                             return
 
                         else:
@@ -713,7 +713,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                                                        contractAddress=outputlist[0], transactionHash=transaction_data['txid']))
                 session.commit()
 
-                updateLatestTransaction(transaction_data, parsed_data)
+                updateLatestTransaction(transaction_data, parsed_data, blockinfo)
 
                 pushData_SSEapi('Participation | Succesfully participated in the contract {}-{} at transaction {}'.format(
                         parsed_data['contractName'], outputlist[0],
@@ -752,7 +752,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
 
             connection.close()
 
-            updateLatestTransaction(transaction_data, parsed_data)
+            updateLatestTransaction(transaction_data, parsed_data, blockinfo)
 
             pushData_SSEapi('Token | Succesfully incorporated token {} at transaction {}'.format(
                     parsed_data['tokenIdentification'], transaction_data['txid']))
@@ -844,7 +844,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                     session.commit()
                     session.close()
 
-                    updateLatestTransaction(transaction_data, parsed_data)
+                    updateLatestTransaction(transaction_data, parsed_data, blockinfo)
 
                     pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(
                             transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
@@ -928,7 +928,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                             parsed_data['contractName'], outputlist[0]))
                     connection.close()
 
-                    updateLatestTransaction(transaction_data, parsed_data)
+                    updateLatestTransaction(transaction_data, parsed_data, blockinfo)
 
                     pushData_SSEapi('Trigger | Contract triggered of the name {}-{} is active currentlyt at transaction {}'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
                     return
@@ -1032,7 +1032,7 @@ def startWorking(transaction_data, parsed_data, blockinfo):
                         parsed_data['contractName'], outputlist[0]))
                 connection.close()
 
-                updateLatestTransaction(transaction_data, parsed_data)
+                updateLatestTransaction(transaction_data, parsed_data, blockinfo)
 
                 pushData_SSEapi('Trigger | Contract triggered of the name {}-{} is active currentlyt at transaction {}'.format(
                         parsed_data['contractName'], outputlist[0], transaction_data['txid']))
