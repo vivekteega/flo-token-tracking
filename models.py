@@ -116,6 +116,7 @@ class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
     id = Column('id', Integer, primary_key=True)
     transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', String)
     jsonData = Column('jsonData', String)
     transactionType = Column('transactionType', String)
     parsedFloData = Column('parsedFloData', String)
