@@ -29,7 +29,7 @@ end
 # unset irrelevant variables
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV "/home/vivek/Desktop/flo-token-tracking/py3"
+set -gx VIRTUAL_ENV "/home/vivek/Desktop/ftt/py3"
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/bin" $PATH

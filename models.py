@@ -49,9 +49,27 @@ class TransactionHistory(Base):
     destFloAddress = Column('destFloAddress', String)
     transferAmount = Column('transferAmount', Float)
     blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
     time = Column('time', Integer)
     transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
+    jsonData = Column('jsonData', String)
+
+
+class RejectedTransactionHistory(Base):
+    __tablename__ = "rejectedTransactionHistory"
+
+    primary_key = Column('id', Integer, primary_key=True)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+    time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
+    blockchainReference = Column('blockchainReference', String)
+    jsonData = Column('jsonData', String)
+    rejectComment = Column('rejectComment', String)
 
 
 class ContractStructure(ContractBase):
@@ -71,7 +89,44 @@ class ContractParticipants(ContractBase):
     tokenAmount = Column('tokenAmount', Float)
     userChoice = Column('userChoice', String)
     transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
     winningAmount = Column('winningAmount', Float)
+
+
+class ContractTransactionHistory(ContractBase):
+    __tablename__ = "contractTransactionHistory"
+
+    primary_key = Column('id', Integer, primary_key=True)
+    transactionType = Column('transactionType', String)
+    transactionSubType = Column('transactionSubType', String)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+    time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
+    blockchainReference = Column('blockchainReference', String)
+    jsonData = Column('jsonData', String)
+
+
+class RejectedContractTransactionHistory(ContractBase):
+    __tablename__ = "rejectedContractTransactionHistory"
+
+    primary_key = Column('id', Integer, primary_key=True)
+    transactionType = Column('transactionType', String)
+    transactionSubType = Column('transactionSubType', String)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+    time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
+    blockchainReference = Column('blockchainReference', String)
+    jsonData = Column('jsonData', String)
+    rejectComment = Column('rejectComment', String)
 
 
 class ActiveContracts(SystemBase):
@@ -81,7 +136,11 @@ class ActiveContracts(SystemBase):
     contractName = Column('contractName', String)
     contractAddress = Column('contractAddress', String)
     status = Column('status', String)
+    tokenIdentification = Column('tokenIdentification', String)
+    contractType = Column('contractType', String)
     transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
     incorporationDate = Column('incorporationDate', String)
     expiryDate = Column('expiryDate', String)
     closeDate = Column('closeDate', String)
@@ -94,15 +153,18 @@ class SystemData(SystemBase):
     attribute = Column('attribute', String)
     value = Column('value', String)
 
-class ContractParticipantMapping(SystemBase):
-    __tablename__ = "contractParticipantMapping"
+class ContractAddressMapping(SystemBase):
+    __tablename__ = "contractAddressMapping"
 
     id = Column('id', Integer, primary_key=True)
-    participantAddress = Column('participantAddress', String)
+    address = Column('address', String)
+    addressType = Column('addressType', String)
     contractName = Column('contractName', String)
     contractAddress = Column('contractAddress', String)
     tokenAmount = Column('tokenAmount', Float)
     transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
 
 class TokenAddressMapping(SystemBase):
     __tablename__ = "tokenAddressMapping"
@@ -111,6 +173,8 @@ class TokenAddressMapping(SystemBase):
     tokenAddress = Column('tokenAddress', String)
     token = Column('token', String)
     transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
 
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
