@@ -56,20 +56,20 @@ class TransactionHistory(Base):
     jsonData = Column('jsonData', String)
 
 
-class RejectedTransactionHistory(Base):
-    __tablename__ = "rejectedTransactionHistory"
+class TokenContractAssociation(Base):
+    __tablename__ = "tokenContractAssociation"
 
     primary_key = Column('id', Integer, primary_key=True)
-    sourceFloAddress = Column('sourceFloAddress', String)
-    destFloAddress = Column('destFloAddress', String)
-    transferAmount = Column('transferAmount', Float)
+    tokenIdentification = Column('tokenIdentification', String)
+    contractName = Column('contractName', String)
+    contractAddress = Column('contractAddress', String)
     blockNumber = Column('blockNumber', Integer)
     blockHash = Column('blockHash', String)
     time = Column('time', Integer)
     transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
     jsonData = Column('jsonData', String)
-    rejectComment = Column('rejectComment', String)
+
 
 
 class ContractStructure(ContractBase):
@@ -111,12 +111,30 @@ class ContractTransactionHistory(ContractBase):
     jsonData = Column('jsonData', String)
 
 
-class RejectedContractTransactionHistory(ContractBase):
+class RejectedContractTransactionHistory(SystemBase):
     __tablename__ = "rejectedContractTransactionHistory"
 
     primary_key = Column('id', Integer, primary_key=True)
     transactionType = Column('transactionType', String)
     transactionSubType = Column('transactionSubType', String)
+    contractName = Column('contractName', String)
+    contractAddress = Column('contractAddress', String)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+    time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
+    blockchainReference = Column('blockchainReference', String)
+    jsonData = Column('jsonData', String)
+    rejectComment = Column('rejectComment', String)
+
+class RejectedTransactionHistory(SystemBase):
+    __tablename__ = "rejectedTransactionHistory"
+
+    primary_key = Column('id', Integer, primary_key=True)
+    tokenIdentification = Column('tokenIdentification', String)
     sourceFloAddress = Column('sourceFloAddress', String)
     destFloAddress = Column('destFloAddress', String)
     transferAmount = Column('transferAmount', Float)

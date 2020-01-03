@@ -11,7 +11,7 @@ import os
 import shutil
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy import create_engine, func, desc
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestTransactions, LatestCacheBase, LatestBlocks, ContractTransactionHistory, RejectedContractTransactionHistory
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestTransactions, LatestCacheBase, LatestBlocks, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation
 from config import *
 import pybtc
 import socketio
@@ -78,7 +78,8 @@ def processBlock(blockindex):
     blockinfo = multiRequest(f"block/{blockhash}", config['DEFAULT']['NET'])
 
     # todo Rule 8 - read every transaction from every block to find and parse flodata
-
+    counter = 0
+    acceptedTxList = []
     # Scan every transaction
     for transaction in blockinfo["tx"]:
         transaction_data = multiRequest(f"tx/{transaction}", config['DEFAULT']['NET'])
@@ -86,16 +87,25 @@ def processBlock(blockindex):
         text = text.replace("\n", " \n ")
 
         # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
-
+        returnval = None
         parsed_data = parsing.parse_flodata(text, blockinfo, config['DEFAULT']['NET'])
         if parsed_data['type'] != 'noise':
             logger.info(f"Processing transaction {transaction}")
             logger.debug(f"flodata {text} is parsed to {parsed_data}")
             returnval = processTransaction(transaction_data, parsed_data)
-            if returnval != 0:
-                updateLatestBlock(blockinfo)
-            else:
-                logger.debug("Transfer for the transaction %s is illegitimate. Moving on" % transaction)
+
+        if returnval == 1:
+            acceptedTxList.append(transaction)
+        elif returnval == 0:
+            logger.debug("Transfer for the transaction %s is illegitimate. Moving on" % transaction)
+
+    if len(acceptedTxList) > 0:
+        tempinfo = blockinfo['tx'].copy()
+        for tx in blockinfo['tx']:
+            if tx not in acceptedTxList:
+                tempinfo.remove(tx)
+        blockinfo['tx'] = tempinfo
+        updateLatestBlock(blockinfo)
 
     engine = create_engine('sqlite:///system.db')
     SystemBase.metadata.create_all(bind=engine)
@@ -229,7 +239,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                 session.commit()
             session.commit()
 
-        if checksum > commentTransferAmount:
+        elif checksum > commentTransferAmount:
             consumedpid_string = ''
             # Update all pids in pidlist's transferBalance
             lastid = session.query(ActiveTable)[-1].id
@@ -301,149 +311,249 @@ def checkLocaltriggerContracts(blockinfo):
     connection.close()
 
     for contract in activeContracts:
-        # Check if the contract has blockchain trigger or committee trigger
-        engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0],contract[1]), echo=False)
+
+        # pull out the contract structure into a dictionary
+        engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0],contract[1]), echo=True)
         connection = engine.connect()
         # todo : filter activeContracts which only have local triggers
-        contractStructure = connection.execute('select * from contractstructure').fetchall()
-        contractStructure_T = list(zip(*contractStructure))
+        attributevaluepair = connection.execute(
+            "select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
+        contractStructure = {}
+        conditionDict = {}
+        counter = 0
+        for item in attributevaluepair:
+            if list(item)[0] == 'exitconditions':
+                conditionDict[counter] = list(item)[1]
+                counter = counter + 1
+            else:
+                contractStructure[list(item)[0]] = list(item)[1]
+        if len(conditionDict) > 0:
+            contractStructure['exitconditions'] = conditionDict
+        del counter, conditionDict
 
-        if 'exitconditions' in list(contractStructure_T[1]):
-            # This is a committee trigger contract
-            expiryTime = connection.execute('select value from contractstructure where attribute=="expiryTime"').fetchall()[0][0]
-            expirytime_split = expiryTime.split(' ')
-            parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
-                                                expirytime_split[2], expirytime_split[4])
-            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
+        if contractStructure['contractType'] == 'one-time-event':
+            # Check if the contract has blockchain trigger or committee trigger
+            if 'exitconditions' in contractStructure:
+                # This is a committee trigger contract
+                expiryTime = contractStructure['expiryTime']
+                expirytime_split = expiryTime.split(' ')
+                parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
+                blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
-            if blocktime_object > expirytime_object:
-                if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
-                    minimumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="minimumsubscriptionamount"').fetchall()[0][0]
-                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
-                    if tokenAmount_sum < minimumsubscriptionamount:
-                        # Initialize payback to contract participants
-                        contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
+                if blocktime_object > expirytime_object:
+                    if 'minimumsubscriptionamount' in contractStructure:
+                        minimumsubscriptionamount = contractStructure['minimumsubscriptionamount']
+                        tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                        if tokenAmount_sum < minimumsubscriptionamount:
+                            # Initialize payback to contract participants
+                            contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
 
-                        for participant in contractParticipants:
-                            tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                            contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
-                            returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0])
-                            if returnval is None:
-                                logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger. THIS IS CRITICAL ERROR")
-                                return
+                            for participant in contractParticipants:
+                                tokenIdentification = contractStructure['tokenIdentification']
+                                contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                                returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0])
+                                if returnval is None:
+                                    logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger. THIS IS CRITICAL ERROR")
+                                    return
+                                connection.execute(
+                                    'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
+                                        (participant[1], participant[0], participant[2])))
+
+                            # add transaction to ContractTransactionHistory
+                            engine = create_engine(
+                                'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
+                                                                           contract[1]),
+                                echo=True)
+                            ContractBase.metadata.create_all(bind=engine)
+                            session = sessionmaker(bind=engine)()
+                            session.add(ContractTransactionHistory(transactionType='trigger',
+                                                                   transactionSubType='minimumsubscriptionamount-payback',
+                                                                   transferAmount=None,
+                                                                   blockNumber=blockinfo['height'],
+                                                                   blockHash=blockinfo['hash'],
+                                                                   time=blockinfo['time']))
+                            session.commit()
+                            session.close()
+
+                            engine = create_engine('sqlite:///system.db', echo=True)
+                            connection = engine.connect()
                             connection.execute(
-                                'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
-                                    (participant[1], participant[0], participant[2])))
-                        engine = create_engine('sqlite:///system.db', echo=True)
+                                'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
+                            connection.execute(
+                                'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'],
+                                    contract[0], contract[1]))
+                            connection.close()
+
+                    engine = create_engine('sqlite:///system.db', echo=True)
+                    connection = engine.connect()
+                    connection.execute(
+                        'update activecontracts set status="expired" where contractName="{}" and contractAddress="{}"'.format(
+                            contract[0], contract[1]))
+                    connection.execute(
+                        'update activecontracts set expirydate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'],
+                            contract[0], contract[1]))
+                    connection.close()
+
+            elif 'payeeAddress' in contractStructure:
+                # This is a local trigger contract
+                if 'maximumsubscriptionamount' in contractStructure:
+                    maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
+                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                    if tokenAmount_sum >= maximumsubscriptionamount:
+                        # Trigger the contract
+                        payeeAddress = contractStructure['payeeAddress']
+                        tokenIdentification = contractStructure['tokenIdentification']
+                        contractAddress = contractStructure['contractAddress']
+                        returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress)
+                        if returnval is None:
+                            logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                            return
+                        connection.execute(
+                            'update contractparticipants set winningAmount="{}"'.format(
+                                (0)))
+
+                        # add transaction to ContractTransactionHistory
+                        engine = create_engine(
+                            'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
+                                                                       contract[1]),
+                            echo=True)
+                        ContractBase.metadata.create_all(bind=engine)
+                        session = sessionmaker(bind=engine)()
+                        session.add(ContractTransactionHistory(transactionType='trigger',
+                                                               transactionSubType='maximumsubscriptionamount',
+                                                               sourceFloAddress=contractAddress,
+                                                               destFloAddress=payeeAddress,
+                                                               transferAmount=tokenAmount_sum,
+                                                               blockNumber=blockinfo['height'],
+                                                               blockHash=blockinfo['hash'],
+                                                               time=blockinfo['time']))
+                        session.commit()
+                        session.close()
+
+                        engine = create_engine('sqlite:///system.db', echo=False)
                         connection = engine.connect()
                         connection.execute(
                             'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
                         connection.execute(
-                            'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'],
-                                contract[0], contract[1]))
+                            'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                                blockinfo['time'], contract[0], contract[1]))
+                        connection.execute(
+                            'update activecontracts set expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                                blockinfo['time'], contract[0], contract[1]))
                         connection.close()
+                        return
 
-                engine = create_engine('sqlite:///system.db', echo=True)
-                connection = engine.connect()
-                connection.execute(
-                    'update activecontracts set status="expired" where contractName="{}" and contractAddress="{}"'.format(
-                        contract[0], contract[1]))
-                connection.execute(
-                    'update activecontracts set expirydate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'],
-                        contract[0], contract[1]))
-                connection.close()
+                expiryTime = contractStructure['expiryTime']
+                expirytime_split = expiryTime.split(' ')
+                parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
+                    tzinfo=expirytime_split[5][3:])
+                blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
+                if blocktime_object > expirytime_object:
+                    if 'minimumsubscriptionamount' in contractStructure:
+                        minimumsubscriptionamount = contractStructure['minimumsubscriptionamount']
+                        tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                        if tokenAmount_sum < minimumsubscriptionamount:
+                            # Initialize payback to contract participants
+                            contractParticipants = connection.execute(
+                                'select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
 
-        else:
-            # This is a blockchain trigger contract
-            if 'maximumsubscriptionamount' in list(contractStructure_T[1]):
-                maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
-                tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
-                if tokenAmount_sum >= maximumsubscriptionamount:
+                            for participant in contractParticipants:
+                                tokenIdentification = connection.execute(
+                                    'select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][
+                                    0]
+                                contractAddress = connection.execute(
+                                    'select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                                returnval = transferToken(tokenIdentification, participant[1], contractAddress,
+                                                          participant[0])
+                                if returnval is None:
+                                    logger.critical(
+                                        "Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                                    return
+                                connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[2])))
+
+                            # add transaction to ContractTransactionHistory
+                            engine = create_engine(
+                                'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
+                                                                           contract[1]),
+                                echo=True)
+                            ContractBase.metadata.create_all(bind=engine)
+                            session = sessionmaker(bind=engine)()
+                            session.add(ContractTransactionHistory(transactionType='trigger',
+                                                                   transactionSubType='minimumsubscriptionamount-payback',
+                                                                   transferAmount=None,
+                                                                   blockNumber=blockinfo['height'],
+                                                                   blockHash=blockinfo['hash'],
+                                                                   time=blockinfo['time']))
+                            session.commit()
+                            session.close()
+
+                            engine = create_engine('sqlite:///system.db', echo=False)
+                            connection = engine.connect()
+                            connection.execute(
+                                'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                                    contract[0], contract[1]))
+                            connection.execute(
+                                'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                                    blockinfo['time'],contract[0], contract[1]))
+                            connection.execute(
+                                'update activecontracts set expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                                    blockinfo['time'], contract[0], contract[1]))
+                            connection.close()
+                            return
+
                     # Trigger the contract
-                    payeeAddress = connection.execute('select * from contractstructure where attribute="payeeAddress"').fetchall()[0][0]
-                    tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                    contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                    payeeAddress = contractStructure['payeeAddress']
+                    tokenIdentification = contractStructure['tokenIdentification']
+                    contractAddress = contractStructure['contractAddress']
+                    engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0], contract[1]),
+                                           echo=True)
+                    connection = engine.connect()
+                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                     returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress)
                     if returnval is None:
                         logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                         return
-                    connection.execute(
-                        'update contractparticipants set winningAmount="{}"'.format(
-                            (0)))
+                    connection.execute('update contractparticipants set winningAmount="{}"'.format(0))
+
+                    # add transaction to ContractTransactionHistory
+                    engine = create_engine(
+                        'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
+                                                                   contract[1]),
+                        echo=True)
+                    ContractBase.metadata.create_all(bind=engine)
+                    session = sessionmaker(bind=engine)()
+                    session.add(ContractTransactionHistory(transactionType='trigger',
+                                                           transactionSubType='expiryTime',
+                                                           sourceFloAddress=contractAddress,
+                                                           destFloAddress=payeeAddress,
+                                                           transferAmount=tokenAmount_sum,
+                                                           blockNumber=blockinfo['height'],
+                                                           blockHash=blockinfo['hash'],
+                                                           time=blockinfo['time']))
+                    session.commit()
+                    session.close()
+
                     engine = create_engine('sqlite:///system.db', echo=False)
                     connection = engine.connect()
                     connection.execute(
-                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
+                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
+                            contract[0], contract[1]))
                     connection.execute(
                         'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
                             blockinfo['time'], contract[0], contract[1]))
+                    connection.execute(
+                        'update activecontracts set expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(
+                            blockinfo['time'], contract[0], contract[1]))
                     connection.close()
-
-            expiryTime = connection.execute('select value from contractstructure where attribute=="expiryTime"').fetchall()[0][0]
-            expirytime_split = expiryTime.split(' ')
-            parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
-            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                tzinfo=expirytime_split[5][3:])
-            blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
-
-            if blocktime_object > expirytime_object:
-                if 'minimumsubscriptionamount' in list(contractStructure_T[1]):
-                    minimumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="minimumsubscriptionamount"').fetchall()[0][0]
-                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
-                    if tokenAmount_sum < minimumsubscriptionamount:
-                        # Initialize payback to contract participants
-                        contractParticipants = connection.execute(
-                            'select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
-
-                        for participant in contractParticipants:
-                            tokenIdentification = connection.execute(
-                                'select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][
-                                0]
-                            contractAddress = connection.execute(
-                                'select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
-                            returnval = transferToken(tokenIdentification, participant[1], contractAddress,
-                                                      participant[0])
-                            if returnval is None:
-                                logger.critical(
-                                    "Something went wrong in the token transfer method while doing local Smart Contract Trigger")
-                                return
-                            connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[2])))
-                        engine = create_engine('sqlite:///system.db', echo=False)
-                        connection = engine.connect()
-                        connection.execute(
-                            'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                                contract[0], contract[1]))
-                        connection.execute(
-                            'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
-                                blockinfo['time'],contract[0], contract[1]))
-                        connection.close()
-
-                # Trigger the contract
-                payeeAddress = connection.execute('select * from contractstructure where attribute="payeeAddress"').fetchall()[0][0]
-                tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
-                returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress)
-                if returnval is None:
-                    logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                     return
-                connection.execute('update contractparticipants set winningAmount="{}"'.format(0))
-                engine = create_engine('sqlite:///system.db', echo=False)
-                connection = engine.connect()
-                connection.execute(
-                    'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                        contract[0], contract[1]))
-                connection.execute(
-                    'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
-                        blockinfo['time'], contract[0], contract[1]))
-                connection.close()
 
 
 def processTransaction(transaction_data, parsed_data):
 
     # Do the necessary checks for the inputs and outputs
-
     # todo Rule 38 - Here we are doing FLO processing. We attach asset amounts to a FLO address, so every FLO address
     #        will have multiple feed ins of the asset. Each of those feedins will be an input to the address.
     #        an address can also spend the asset. Each of those spends is an output of that address feeding the asset into some
@@ -560,14 +670,15 @@ def processTransaction(transaction_data, parsed_data):
                 url = 'https://ranchimallflo.duckdns.org/'
                 headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
                 #r = requests.post(url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
+                return 1
             else:
                 logger.info(
                     f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
-                engine = create_engine(f"sqlite:///tokens/{parsed_data['tokenIdentification']}.db", echo=True)
-                Base.metadata.create_all(bind=engine)
+                engine = create_engine(f"sqlite:///system.db", echo=True)
+                SystemBase.metadata.create_all(bind=engine)
                 session = sessionmaker(bind=engine)()
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(RejectedTransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                                        transferAmount=parsed_data['tokenAmount'],
                                                        blockNumber=transaction_data['blockheight'],
                                                        blockHash=transaction_data['blockhash'],
@@ -584,7 +695,7 @@ def processTransaction(transaction_data, parsed_data):
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
-            if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db"):
+            if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db"):
 
                 # Check if the transaction hash already exists in the contract db (Safety check)
                 engine = create_engine(
@@ -608,13 +719,15 @@ def processTransaction(transaction_data, parsed_data):
                             f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}")
                         # Store transfer as part of RejectedContractTransactionHistory
                         engine = create_engine(
-                            f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db",
+                            f"sqlite:///system.db",
                             echo=True)
-                        ContractBase.metadata.create_all(bind=engine)
+                        SystemBase.metadata.create_all(bind=engine)
                         session = sessionmaker(bind=engine)()
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
                         session.add(
                             RejectedContractTransactionHistory(transactionType='participation',
+                                                               contractName=parsed_data['contractName'],
+                                                               contractAddress=outputlist[0],
                                                                sourceFloAddress=inputadd,
                                                                destFloAddress=outputlist[0],
                                                                transferAmount=None,
@@ -633,7 +746,6 @@ def processTransaction(transaction_data, parsed_data):
                         '''r = requests.post(url, json={
                             'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"},
                                           headers=headers)'''
-                        return 0
 
                         # Pass information to SSE channel
                         pushData_SSEapi('Error| Mismatch in contract address specified in flodata and the output address of the transaction {}'.format(transaction_data['txid']))
@@ -648,16 +760,18 @@ def processTransaction(transaction_data, parsed_data):
                 contractList = []
 
                 if contractStatus == 'closed':
-                    logger.info(f"Transaction {parsed_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
+                    logger.info(f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='participation',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
@@ -667,14 +781,14 @@ def processTransaction(transaction_data, parsed_data):
                                                            transactionHash=transaction_data['txid'],
                                                            blockchainReference=blockchainReference,
                                                            jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {parsed_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"))
+                                                           rejectComment=f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"))
                     session.commit()
                     session.close()
 
                     url = 'https://ranchimallflo.duckdns.org/'
                     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
                     '''r = requests.post(url, json={
-                        'message': f"Error | Transaction {parsed_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
+                        'message': f"Error | Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
                                       headers=headers)'''
                     return 0
                 else:
@@ -697,16 +811,18 @@ def processTransaction(transaction_data, parsed_data):
 
                         if blocktime_object > expirytime_object:
                             logger.info(
-                                f"Transaction {parsed_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
+                                f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
                             # Store transfer as part of RejectedContractTransactionHistory
                             engine = create_engine(
-                                f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                                f"sqlite:///system.db",
                                 echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
+                            SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
                                                                    sourceFloAddress=inputadd,
                                                                    destFloAddress=outputlist[0],
                                                                    transferAmount=None,
@@ -716,11 +832,11 @@ def processTransaction(transaction_data, parsed_data):
                                                                    transactionHash=transaction_data['txid'],
                                                                    blockchainReference=blockchainReference,
                                                                    jsonData=json.dumps(transaction_data),
-                                                                   rejectComment=f"Transaction {parsed_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation"))
+                                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation"))
                             session.commit()
                             session.close()
                             pushData_SSEapi(
-                                f"Error| Transaction {parsed_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
+                                f"Error| Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
                             return 0
 
                 # pull out the contract structure into a dictionary
@@ -743,16 +859,18 @@ def processTransaction(transaction_data, parsed_data):
                 # check if user choice has been passed, to the wrong contract type
                 if 'userChoice' in parsed_data and 'exitconditions' not in contractStructure:
                     logger.info(
-                        f"Transaction {parsed_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
+                        f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='participation',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
@@ -762,26 +880,28 @@ def processTransaction(transaction_data, parsed_data):
                                                            transactionHash=transaction_data['txid'],
                                                            blockchainReference=blockchainReference,
                                                            jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {parsed_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice"))
+                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice"))
                     session.commit()
                     session.close()
                     pushData_SSEapi(
-                        f"Error | Transaction {parsed_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
+                        f"Error | Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
                     return 0
 
                 # check if the right token is being sent for participation
                 if parsed_data['tokenIdentification'] != contractStructure['tokenIdentification']:
                     logger.info(
-                        f"Transaction {parsed_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                        f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='participation',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
@@ -791,11 +911,11 @@ def processTransaction(transaction_data, parsed_data):
                                                            transactionHash=transaction_data['txid'],
                                                            blockchainReference=blockchainReference,
                                                            jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {parsed_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
+                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
                     session.commit()
                     session.close()
                     pushData_SSEapi(
-                        f"Error| Transaction {parsed_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                        f"Error| Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                     return 0
 
                 # Check if the contract is of the type one-time-event
@@ -805,16 +925,18 @@ def processTransaction(transaction_data, parsed_data):
                     if 'contractAmount' in contractStructure:
                         if float(contractStructure['contractAmount']) != float(parsed_data['tokenAmount']):
                             logger.info(
-                                f"Transaction {parsed_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
                             engine = create_engine(
-                                f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                                f"sqlite:///system.db",
                                 echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
+                            SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
                                                                    sourceFloAddress=inputadd,
                                                                    destFloAddress=outputlist[0],
                                                                    transferAmount=None,
@@ -824,11 +946,11 @@ def processTransaction(transaction_data, parsed_data):
                                                                    transactionHash=transaction_data['txid'],
                                                                    blockchainReference=blockchainReference,
                                                                    jsonData=json.dumps(transaction_data),
-                                                                   rejectComment=f"Transaction {parsed_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
+                                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
                             session.commit()
                             session.close()
                             pushData_SSEapi(
-                                f"Error| Transaction {parsed_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                f"Error| Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             return 0
 
                     partialTransferCounter = 0
@@ -848,16 +970,18 @@ def processTransaction(transaction_data, parsed_data):
                             amountDeposited = 0
 
                         if amountDeposited >= maximumsubscriptionamount:
-                            logger.info(f"Transaction {parsed_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            logger.info(f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
                             engine = create_engine(
-                                f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                                f"sqlite:///system.db",
                                 echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
+                            SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
                                                                    sourceFloAddress=inputadd,
                                                                    destFloAddress=outputlist[0],
                                                                    transferAmount=None,
@@ -867,24 +991,26 @@ def processTransaction(transaction_data, parsed_data):
                                                                    transactionHash=transaction_data['txid'],
                                                                    blockchainReference=blockchainReference,
                                                                    jsonData=json.dumps(transaction_data),
-                                                                   rejectComment=f"Transaction {parsed_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
+                                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
                             session.commit()
                             session.close()
                             pushData_SSEapi(
-                                f"Error | Transaction {parsed_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                f"Error | Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             return 0
                         elif ((float(amountDeposited) + float(parsed_data['tokenAmount'])) > maximumsubscriptionamount) and 'contractAmount' in contractStructure:
                             logger.info(
-                                f"Transaction {parsed_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
                             engine = create_engine(
-                                f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                                f"sqlite:///system.db",
                                 echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
+                            SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
                                                                    sourceFloAddress=inputadd,
                                                                    destFloAddress=outputlist[0],
                                                                    transferAmount=None,
@@ -894,11 +1020,11 @@ def processTransaction(transaction_data, parsed_data):
                                                                    transactionHash=transaction_data['txid'],
                                                                    blockchainReference=blockchainReference,
                                                                    jsonData=json.dumps(transaction_data),
-                                                                   rejectComment=f"Transaction {parsed_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
+                                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
                             session.commit()
                             session.close()
                             pushData_SSEapi(
-                                f"Error | Transaction {parsed_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                f"Error | Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             return 0
                         else:
                             partialTransferCounter = 1
@@ -957,8 +1083,20 @@ def processTransaction(transaction_data, parsed_data):
                                                                        blockHash=transaction_data['blockhash']))
                                     session.commit()
 
+                                    # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+                                    engine = create_engine('sqlite:///system.db', echo=True)
+                                    connection = engine.connect()
+                                    firstInteractionCheck = connection.execute(
+                                        f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
+
+                                    if len(firstInteractionCheck) == 0:
+                                        connection.execute(
+                                            f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+
+                                    connection.close()
+
                                     updateLatestTransaction(transaction_data, parsed_data)
-                                    return
+                                    return 1
 
                                 else:
                                     logger.info("Something went wrong in the smartcontract token transfer method")
@@ -993,23 +1131,25 @@ def processTransaction(transaction_data, parsed_data):
                                     session.commit()
                                     session.close()
                                     updateLatestTransaction(transaction_data, parsed_data)
-                                    return
+                                    return 1
 
                                 else:
                                     logger.info("Something went wrong in the smartcontract token transfer method")
                                     return 0
 
                         else:
-                            logger.info(f"Transaction {parsed_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            logger.info(f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
                             engine = create_engine(
-                                f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                                f"sqlite:///system.db",
                                 echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
+                            SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
                                                                    sourceFloAddress=inputadd,
                                                                    destFloAddress=outputlist[0],
                                                                    transferAmount=None,
@@ -1019,113 +1159,115 @@ def processTransaction(transaction_data, parsed_data):
                                                                    transactionHash=transaction_data['txid'],
                                                                    blockchainReference=blockchainReference,
                                                                    jsonData=json.dumps(transaction_data),
-                                                                   rejectComment=f"Transaction {parsed_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
+                                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"))
                             session.commit()
                             session.close()
-                            pushData_SSEapi(f"Error| Transaction {parsed_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            pushData_SSEapi(f"Error| Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             return 0
 
                     elif 'payeeAddress' in contractStructure:
                         # this means the contract if of the type internal trigger
-                        if parsed_data['userChoice'] in exitconditionsList:
-                            if partialTransferCounter == 0:
-                                # Check if the tokenAmount being transferred exists in the address & do the token transfer
-                                returnval = transferToken(parsed_data['tokenIdentification'],
-                                                          parsed_data['tokenAmount'], inputlist[0], outputlist[0],
-                                                          transaction_data)
-                                if returnval is not None:
-                                    # Store participant details in the smart contract's db
-                                    session.add(ContractParticipants(participantAddress=inputadd,
-                                                                     tokenAmount=parsed_data['tokenAmount'],
-                                                                     userChoice='-',
-                                                                     transactionHash=transaction_data['txid'],
-                                                                     blockNumber=transaction_data['blockheight'],
-                                                                     blockHash=transaction_data['blockhash']))
-                                    session.commit()
+                        if partialTransferCounter == 0:
+                            # Check if the tokenAmount being transferred exists in the address & do the token transfer
+                            returnval = transferToken(parsed_data['tokenIdentification'],
+                                                      parsed_data['tokenAmount'], inputlist[0], outputlist[0],
+                                                      transaction_data)
+                            if returnval is not None:
+                                # Store participant details in the smart contract's db
+                                session.add(ContractParticipants(participantAddress=inputadd,
+                                                                 tokenAmount=parsed_data['tokenAmount'],
+                                                                 userChoice='-',
+                                                                 transactionHash=transaction_data['txid'],
+                                                                 blockNumber=transaction_data['blockheight'],
+                                                                 blockHash=transaction_data['blockhash']))
+                                session.commit()
 
-                                    # Store transfer as part of ContractTransactionHistory
-                                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                    session.add(ContractTransactionHistory(transactionType='participation',
-                                                                           sourceFloAddress=inputadd,
-                                                                           destFloAddress=outputlist[0],
-                                                                           transferAmount=parsed_data['tokenAmount'],
-                                                                           blockNumber=transaction_data['blockheight'],
-                                                                           blockHash=transaction_data['blockhash'],
-                                                                           time=transaction_data['blocktime'],
-                                                                           transactionHash=transaction_data['txid'],
-                                                                           blockchainReference=blockchainReference,
-                                                                           jsonData=json.dumps(transaction_data)))
-
-                                    session.commit()
-                                    session.close()
-
-                                    # Store a mapping of participant address -> Contract participated in
-                                    engine = create_engine('sqlite:///system.db', echo=True)
-                                    SystemBase.metadata.create_all(bind=engine)
-                                    session = sessionmaker(bind=engine)()
-                                    session.add(ContractAddressMapping(address=inputadd, addressType='participant',
-                                                                       tokenAmount=parsed_data['tokenAmount'],
-                                                                       contractName=parsed_data['contractName'],
-                                                                       contractAddress=outputlist[0],
-                                                                       transactionHash=transaction_data['txid'],
+                                # Store transfer as part of ContractTransactionHistory
+                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
+                                session.add(ContractTransactionHistory(transactionType='participation',
+                                                                       sourceFloAddress=inputadd,
+                                                                       destFloAddress=outputlist[0],
+                                                                       transferAmount=parsed_data['tokenAmount'],
                                                                        blockNumber=transaction_data['blockheight'],
-                                                                       blockHash=transaction_data['blockhash']))
-                                    session.commit()
-
-                                    updateLatestTransaction(transaction_data, parsed_data)
-                                    return
-
-                                else:
-                                    logger.info("Something went wrong in the smartcontract token transfer method")
-                                    return 0
-                            elif partialTransferCounter == 1:
-                                # Transfer only part of the tokens users specified, till the time it reaches maximumamount
-                                returnval = transferToken(parsed_data['tokenIdentification'],
-                                                          maximumsubscriptionamount - amountDeposited,
-                                                          inputlist[0], outputlist[0], transaction_data)
-                                if returnval is not None:
-                                    # Store participant details in the smart contract's db
-                                    session.add(ContractParticipants(participantAddress=inputadd,
-                                                                     tokenAmount=maximumsubscriptionamount - amountDeposited,
-                                                                     userChoice='-',
-                                                                     transactionHash=transaction_data['txid'],
-                                                                     blockNumber=transaction_data['blockheight'],
-                                                                     blockHash=transaction_data['blockhash']))
-                                    session.commit()
-                                    session.close()
-
-                                    # Store a mapping of participant address -> Contract participated in
-                                    engine = create_engine('sqlite:///system.db', echo=True)
-                                    SystemBase.metadata.create_all(bind=engine)
-                                    session = sessionmaker(bind=engine)()
-                                    session.add(ContractAddressMapping(address=inputadd, addressType='participant',
-                                                                       tokenAmount=maximumsubscriptionamount - amountDeposited,
-                                                                       contractName=parsed_data['contractName'],
-                                                                       contractAddress=outputlist[0],
+                                                                       blockHash=transaction_data['blockhash'],
+                                                                       time=transaction_data['blocktime'],
                                                                        transactionHash=transaction_data['txid'],
-                                                                       blockNumber=transaction_data['blockheight'],
-                                                                       blockHash=transaction_data['blockhash']))
-                                    session.commit()
-                                    session.close()
-                                    updateLatestTransaction(transaction_data, parsed_data)
-                                    return
+                                                                       blockchainReference=blockchainReference,
+                                                                       jsonData=json.dumps(transaction_data)))
 
-                                else:
-                                    logger.info("Something went wrong in the smartcontract token transfer method")
-                                    return 0
+                                session.commit()
+                                session.close()
+
+                                # Store a mapping of participant address -> Contract participated in
+                                engine = create_engine('sqlite:///system.db', echo=True)
+                                SystemBase.metadata.create_all(bind=engine)
+                                session = sessionmaker(bind=engine)()
+                                session.add(ContractAddressMapping(address=inputadd, addressType='participant',
+                                                                   tokenAmount=parsed_data['tokenAmount'],
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
+                                                                   transactionHash=transaction_data['txid'],
+                                                                   blockNumber=transaction_data['blockheight'],
+                                                                   blockHash=transaction_data['blockhash']))
+                                session.commit()
+
+                                updateLatestTransaction(transaction_data, parsed_data)
+                                return 1
+
+                            else:
+                                logger.info("Something went wrong in the smartcontract token transfer method")
+                                return 0
+                        elif partialTransferCounter == 1:
+                            # Transfer only part of the tokens users specified, till the time it reaches maximumamount
+                            returnval = transferToken(parsed_data['tokenIdentification'],
+                                                      maximumsubscriptionamount - amountDeposited,
+                                                      inputlist[0], outputlist[0], transaction_data)
+                            if returnval is not None:
+                                # Store participant details in the smart contract's db
+                                session.add(ContractParticipants(participantAddress=inputadd,
+                                                                 tokenAmount=maximumsubscriptionamount - amountDeposited,
+                                                                 userChoice='-',
+                                                                 transactionHash=transaction_data['txid'],
+                                                                 blockNumber=transaction_data['blockheight'],
+                                                                 blockHash=transaction_data['blockhash']))
+                                session.commit()
+                                session.close()
+
+                                # Store a mapping of participant address -> Contract participated in
+                                engine = create_engine('sqlite:///system.db', echo=True)
+                                SystemBase.metadata.create_all(bind=engine)
+                                session = sessionmaker(bind=engine)()
+                                session.add(ContractAddressMapping(address=inputadd, addressType='participant',
+                                                                   tokenAmount=maximumsubscriptionamount - amountDeposited,
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
+                                                                   transactionHash=transaction_data['txid'],
+                                                                   blockNumber=transaction_data['blockheight'],
+                                                                   blockHash=transaction_data['blockhash']))
+                                session.commit()
+                                session.close()
+                                updateLatestTransaction(transaction_data, parsed_data)
+                                return 1
+
+                            else:
+                                logger.info("Something went wrong in the smartcontract token transfer method")
+                                return 0
 
                 else:
                     logger.info(
                         f"Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
-                        RejectedContractTransactionHistory(transactionType='participation', sourceFloAddress=inputadd,
+                        RejectedContractTransactionHistory(transactionType='participation',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
+                                                           sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
                                                            blockNumber=transaction_data['blockheight'],
@@ -1147,16 +1289,19 @@ def processTransaction(transaction_data, parsed_data):
 
             else:
                 logger.info(
-                    f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} doesnt exist")
+                    f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist")
                 # Store transfer as part of RejectedContractTransactionHistory
                 engine = create_engine(
-                    f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db",
+                    f"sqlite:///system.db",
                     echo=True)
-                ContractBase.metadata.create_all(bind=engine)
+                SystemBase.metadata.create_all(bind=engine)
                 session = sessionmaker(bind=engine)()
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(
-                    RejectedContractTransactionHistory(transactionType='participation', sourceFloAddress=inputadd,
+                    RejectedContractTransactionHistory(transactionType='participation',
+                                                       contractName=parsed_data['contractName'],
+                                                       contractAddress=outputlist[0],
+                                                       sourceFloAddress=inputadd,
                                                        destFloAddress=outputlist[0],
                                                        transferAmount=None,
                                                        blockNumber=transaction_data['blockheight'],
@@ -1165,7 +1310,7 @@ def processTransaction(transaction_data, parsed_data):
                                                        transactionHash=transaction_data['txid'],
                                                        blockchainReference=blockchainReference,
                                                        jsonData=json.dumps(transaction_data),
-                                                       rejectComment=f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} doesnt exist"))
+                                                       rejectComment=f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist"))
                 session.commit()
                 session.close()
 
@@ -1204,13 +1349,14 @@ def processTransaction(transaction_data, parsed_data):
             updateLatestTransaction(transaction_data, parsed_data)
 
             pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
+            return 1
         else:
             logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
-            engine = create_engine(f"sqlite:///tokens/{parsed_data['tokenIdentification']}.db", echo=True)
-            Base.metadata.create_all(bind=engine)
+            engine = create_engine(f"sqlite:///system.db", echo=True)
+            SystemBase.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedTransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+            session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                            transferAmount=parsed_data['tokenAmount'],
                                            blockNumber=transaction_data['blockheight'],
                                            blockHash=transaction_data['blockhash'],
@@ -1238,13 +1384,16 @@ def processTransaction(transaction_data, parsed_data):
                         f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
-                        RejectedContractTransactionHistory(transactionType='incorporation', sourceFloAddress=inputadd,
+                        RejectedContractTransactionHistory(transactionType='incorporation',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
+                                                           sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
                                                            blockNumber=transaction_data['blockheight'],
@@ -1263,13 +1412,16 @@ def processTransaction(transaction_data, parsed_data):
                     logger.info(f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
-                        RejectedContractTransactionHistory(transactionType='incorporation', sourceFloAddress=inputadd,
+                        RejectedContractTransactionHistory(transactionType='incorporation',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
+                                                           sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
                                                            blockNumber=transaction_data['blockheight'],
@@ -1343,6 +1495,24 @@ def processTransaction(transaction_data, parsed_data):
                     session.commit()
                     session.close()
 
+
+                    # add Smart Contract name in token contract association
+                    engine = create_engine(f"sqlite:///tokens/{parsed_data['tokenIdentification']}.db", echo=True)
+                    Base.metadata.create_all(bind=engine)
+                    session = sessionmaker(bind=engine)()
+                    session.add(TokenContractAssociation(tokenIdentification=parsed_data['tokenIdentification'],
+                                                         contractName=parsed_data['contractName'],
+                                                         contractAddress=parsed_data['contractAddress'],
+                                                         blockNumber=transaction_data['blockheight'],
+                                                         blockHash=transaction_data['blockhash'],
+                                                         time=transaction_data['blocktime'],
+                                                         transactionHash=transaction_data['txid'],
+                                                         blockchainReference=blockchainReference,
+                                                         jsonData=json.dumps(transaction_data)))
+                    session.commit()
+                    session.close()
+
+
                     # Store smart contract address in system's db, to be ignored during future transfers
                     engine = create_engine('sqlite:///system.db', echo=True)
                     SystemBase.metadata.create_all(bind=engine)
@@ -1365,17 +1535,21 @@ def processTransaction(transaction_data, parsed_data):
 
                     pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(
                             transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
+                    return 1
                 else:
                     logger.info(f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
-                        RejectedContractTransactionHistory(transactionType='incorporation', sourceFloAddress=inputadd,
+                        RejectedContractTransactionHistory(transactionType='incorporation',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
+                                                           sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
                                                            blockNumber=transaction_data['blockheight'],
@@ -1393,11 +1567,12 @@ def processTransaction(transaction_data, parsed_data):
         else:
             logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists")
             # Store transfer as part of RejectedContractTransactionHistory
-            engine = create_engine(f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db", echo=True)
-            ContractBase.metadata.create_all(bind=engine)
+            engine = create_engine(f"sqlite:///system.db", echo=True)
+            SystemBase.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedContractTransactionHistory(transactionType='incorporation', sourceFloAddress=inputadd,
+            session.add(RejectedContractTransactionHistory(transactionType='incorporation', contractName=parsed_data['contractName'],
+                                                    contractAddress=outputlist[0], sourceFloAddress=inputadd,
                                                    destFloAddress=outputlist[0],
                                                    transferAmount=None,
                                                    blockNumber=transaction_data['blockheight'],
@@ -1422,16 +1597,14 @@ def processTransaction(transaction_data, parsed_data):
 
         # Check if input address is a committee address
         if inputlist[0] in committeeAddressList:
-
             # check if the contract exists
-            if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db"):
-
+            if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db"):
                 # Check if the transaction hash already exists in the contract db (Safety check)
                 engine = create_engine(
                     'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
                 connection = engine.connect()
                 participantAdd_txhash = connection.execute(
-                    'select participantAddress, transactionHash from contractparticipants').fetchall()
+                    f"select sourceFloAddress, transactionHash from contractTransactionHistory where transactionType != 'incorporation'").fetchall()
                 participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
                 if len(participantAdd_txhash) != 0 and transaction_data['txid'] in list(participantAdd_txhash_T[1]):
@@ -1462,47 +1635,54 @@ def processTransaction(transaction_data, parsed_data):
                 del counter, conditionDict
 
 
-                # check if output address is contract Incorporation address
-                if outputlist[0] != conditionDict['contractAddress']:
-                    logger.warning(
-                        f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
-                        echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='trigger',
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet"))
-                    pushData_SSEapi(
-                        f"Error | Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet")
-                    return 0
+                # if contractAddress has been passed, check if output address is contract Incorporation address
+                if 'contractAddress' in contractStructure:
+                    if outputlist[0] != contractStructure['contractAddress']:
+                        logger.warning(
+                            f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet")
+                        # Store transfer as part of RejectedContractTransactionHistory
+                        engine = create_engine(
+                            f"sqlite:///system.db",
+                            echo=True)
+                        SystemBase.metadata.create_all(bind=engine)
+                        session = sessionmaker(bind=engine)()
+                        blockchainReference = neturl + 'tx/' + transaction_data['txid']
+                        session.add(
+                            RejectedContractTransactionHistory(transactionType='trigger',
+                                                               contractName=parsed_data['contractName'],
+                                                               contractAddress=outputlist[0],
+                                                               sourceFloAddress=inputadd,
+                                                               destFloAddress=outputlist[0],
+                                                               transferAmount=None,
+                                                               blockNumber=transaction_data['blockheight'],
+                                                               blockHash=transaction_data['blockhash'],
+                                                               time=transaction_data['blocktime'],
+                                                               transactionHash=transaction_data['txid'],
+                                                               blockchainReference=blockchainReference,
+                                                               jsonData=json.dumps(transaction_data),
+                                                               rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet"))
+                        session.commit()
+                        session.close()
+                        pushData_SSEapi(
+                            f"Error | Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet")
+                        return 0
 
 
                 # check the type of smart contract ie. external trigger or internal trigger
-                if 'payeeAdress' in contractStructure:
+                if 'payeeAddress' in contractStructure:
                     logger.warning(
                         f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='trigger',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
@@ -1513,7 +1693,8 @@ def processTransaction(transaction_data, parsed_data):
                                                            blockchainReference=blockchainReference,
                                                            jsonData=json.dumps(transaction_data),
                                                            rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger"))
-                    pushData_SSEapi(
+                    session.commit()
+                    session.close()
                     pushData_SSEapi(
                         f"Error | Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger")
                     return 0
@@ -1529,16 +1710,18 @@ def processTransaction(transaction_data, parsed_data):
 
                 if contractStatus == 'closed':
                     logger.info(
-                        f"Transaction {parsed_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
+                        f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='trigger',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
@@ -1548,14 +1731,14 @@ def processTransaction(transaction_data, parsed_data):
                                                            transactionHash=transaction_data['txid'],
                                                            blockchainReference=blockchainReference,
                                                            jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {parsed_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"))
+                                                           rejectComment=f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"))
                     session.commit()
                     session.close()
 
                     url = 'https://ranchimallflo.duckdns.org/'
                     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
                     '''r = requests.post(url, json={
-                        'message': f"Error | Transaction {parsed_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
+                        'message': f"Error | Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
                                       headers=headers)'''
                     return 0
                 else:
@@ -1579,16 +1762,18 @@ def processTransaction(transaction_data, parsed_data):
 
                         if blocktime_object <= expirytime_object:
                             logger.info(
-                                f"Transaction {parsed_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger")
+                                f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger")
                             # Store transfer as part of RejectedContractTransactionHistory
                             engine = create_engine(
-                                f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                                f"sqlite:///system.db",
                                 echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
+                            SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='trigger',
+                                                                   contractName=parsed_data['contractName'],
+                                                                   contractAddress=outputlist[0],
                                                                    sourceFloAddress=inputadd,
                                                                    destFloAddress=outputlist[0],
                                                                    transferAmount=None,
@@ -1598,11 +1783,11 @@ def processTransaction(transaction_data, parsed_data):
                                                                    transactionHash=transaction_data['txid'],
                                                                    blockchainReference=blockchainReference,
                                                                    jsonData=json.dumps(transaction_data),
-                                                                   rejectComment=f"Transaction {parsed_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger"))
+                                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger"))
                             session.commit()
                             session.close()
                             pushData_SSEapi(
-                                f"Error| Transaction {parsed_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger")
+                                f"Error| Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger")
                             return 0
 
 
@@ -1611,18 +1796,20 @@ def processTransaction(transaction_data, parsed_data):
                 for item in contractStructure['exitconditions']:
                     tempchoiceList.append(contractStructure['exitconditions'][item])
 
-                if parsed_data['userChoice'] not in tempchoiceList:
+                if parsed_data['triggerCondition'] not in tempchoiceList:
                     logger.info(
-                        f"Transaction {parsed_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name")
+                        f"Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name")
                     # Store transfer as part of RejectedContractTransactionHistory
                     engine = create_engine(
-                        f"sqlite:///smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db",
+                        f"sqlite:///system.db",
                         echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
+                    SystemBase.metadata.create_all(bind=engine)
                     session = sessionmaker(bind=engine)()
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
-                        RejectedContractTransactionHistory(transactionType='participation',
+                        RejectedContractTransactionHistory(transactionType='trigger',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
@@ -1632,11 +1819,11 @@ def processTransaction(transaction_data, parsed_data):
                                                            transactionHash=transaction_data['txid'],
                                                            blockchainReference=blockchainReference,
                                                            jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {parsed_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name"))
+                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name"))
                     session.commit()
                     session.close()
                     pushData_SSEapi(
-                        f"Error | Transaction {parsed_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name)
+                        f"Error | Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name")
                     return 0
 
 
@@ -1687,7 +1874,14 @@ def processTransaction(transaction_data, parsed_data):
 
                         # add transaction to ContractTransactionHistory
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(ContractTransactionHistory(transactionType='trigger', sourceFloAddress=inputadd,
+                        engine = create_engine(
+                            'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
+                            echo=True)
+                        ContractBase.metadata.create_all(bind=engine)
+                        session = sessionmaker(bind=engine)()
+                        session.add(ContractTransactionHistory(transactionType='trigger',
+                                                               transactionSubType='minimumsubscriptionamount-payback',
+                                                               sourceFloAddress=inputadd,
                                                                destFloAddress=outputlist[0],
                                                                transferAmount=None,
                                                                blockNumber=transaction_data['blockheight'],
@@ -1696,6 +1890,8 @@ def processTransaction(transaction_data, parsed_data):
                                                                transactionHash=transaction_data['txid'],
                                                                blockchainReference=blockchainReference,
                                                                jsonData=json.dumps(transaction_data)))
+                        session.commit()
+                        session.close()
 
                         engine = create_engine('sqlite:///system.db', echo=True)
                         connection = engine.connect()
@@ -1708,24 +1904,27 @@ def processTransaction(transaction_data, parsed_data):
                                 parsed_data['contractName'], outputlist[0]))
                         connection.close()
 
+                        updateLatestTransaction(transaction_data, parsed_data)
+
                         pushData_SSEapi(
                             'Trigger | Minimum subscription amount not reached at contract {}-{} at transaction {}. Tokens will be refunded'.format(
                                 parsed_data['contractName'], outputlist[0], transaction_data['txid']))
-                        return
+                        return 1
 
 
                 # Trigger the contract
+                engine = create_engine(
+                    'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
+                    echo=True)
+                connection = engine.connect()
                 contractWinners = connection.execute(
                     'select * from contractparticipants where userChoice="{}"'.format(
                         parsed_data['triggerCondition'])).fetchall()
-                tokenSum = \
-                connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                 winnerSum = connection.execute(
                     'select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(
                         parsed_data['triggerCondition'])).fetchall()[0][0]
-                tokenIdentification = connection.execute(
-                    'select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][
-                    0]
+                tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
 
                 for winner in contractWinners:
                     winnerAmount = "%.8f" % ((winner[2] / winnerSum) * tokenSum)
@@ -1736,12 +1935,13 @@ def processTransaction(transaction_data, parsed_data):
                             "Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                         return 0
                     connection.execute(
-                        'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
-                            (winnerAmount, winner[1], winner[4])))
+                        f"update contractparticipants set winningAmount='{winnerAmount}' where participantAddress='{winner[1]}' and transactionHash='{winner[4]}'")
 
                 # add transaction to ContractTransactionHistory
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(ContractTransactionHistory(transactionType='trigger', sourceFloAddress=inputadd,
+                session.add(ContractTransactionHistory(transactionType='trigger',
+                                                       transactionSubType='committee',
+                                                       sourceFloAddress=inputadd,
                                                        destFloAddress=outputlist[0],
                                                        transferAmount=None,
                                                        blockNumber=transaction_data['blockheight'],
@@ -1750,6 +1950,9 @@ def processTransaction(transaction_data, parsed_data):
                                                        transactionHash=transaction_data['txid'],
                                                        blockchainReference=blockchainReference,
                                                        jsonData=json.dumps(transaction_data)))
+                session.commit()
+                session.close()
+
 
                 engine = create_engine('sqlite:///system.db', echo=True)
                 connection = engine.connect()
@@ -1767,20 +1970,51 @@ def processTransaction(transaction_data, parsed_data):
                 pushData_SSEapi(
                     'Trigger | Contract triggered of the name {}-{} is active currently at transaction {}'.format(
                         parsed_data['contractName'], outputlist[0], transaction_data['txid']))
-                return
-                        
+                return 1
+            else:
+                logger.info(
+                    f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist")
+                # Store transfer as part of RejectedContractTransactionHistory
+                engine = create_engine(
+                    f"sqlite:///system.db",
+                    echo=True)
+                SystemBase.metadata.create_all(bind=engine)
+                session = sessionmaker(bind=engine)()
+                blockchainReference = neturl + 'tx/' + transaction_data['txid']
+                session.add(
+                    RejectedContractTransactionHistory(transactionType='trigger',
+                                                       contractName=parsed_data['contractName'],
+                                                       contractAddress=outputlist[0],
+                                                       sourceFloAddress=inputadd,
+                                                       destFloAddress=outputlist[0],
+                                                       transferAmount=None,
+                                                       blockNumber=transaction_data['blockheight'],
+                                                       blockHash=transaction_data['blockhash'],
+                                                       time=transaction_data['blocktime'],
+                                                       transactionHash=transaction_data['txid'],
+                                                       blockchainReference=blockchainReference,
+                                                       jsonData=json.dumps(transaction_data),
+                                                       rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist"))
+                session.commit()
+                session.close()
+                pushData_SSEapi(
+                    f"Error | Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist")
+                return 0
 
         else:
             logger.info(
                 f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list")
             # Store transfer as part of RejectedContractTransactionHistory
             engine = create_engine(
-                f"sqlite:///smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db",
+                f"sqlite:///system.db",
                 echo=True)
-            ContractBase.metadata.create_all(bind=engine)
+            SystemBase.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedContractTransactionHistory(transactionType='incorporation', sourceFloAddress=inputadd,
+            session.add(RejectedContractTransactionHistory(transactionType='trigger',
+                                                           contractName=parsed_data['contractName'],
+                                                           contractAddress=outputlist[0],
+                                                           sourceFloAddress=inputadd,
                                                            destFloAddress=outputlist[0],
                                                            transferAmount=None,
                                                            blockNumber=transaction_data['blockheight'],
@@ -1793,6 +2027,7 @@ def processTransaction(transaction_data, parsed_data):
             session.commit()
             session.close()
             pushData_SSEapi(f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list")
+            return 0
 
 
 
@@ -1884,8 +2119,8 @@ current_index = response['blocks'][0]['height']
 logger.debug("Current block height is %s" % str(current_index))
 
 for blockindex in range( startblock, current_index ):
-    if blockindex==869163:
-        print('heyo')
+    if blockindex == 3443677:
+        print('''sys.exit(0)''')
     processBlock(blockindex)
 
 # At this point the script has updated to the latest block
