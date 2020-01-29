@@ -1,6 +1,7 @@
-import re
-import arrow
 import configparser
+import re
+
+import arrow
 
 config = configparser.ConfigParser()
 config.read('config.ini')
@@ -10,22 +11,22 @@ operation = None
 address = None
 amount = None
 
-months = { 'jan' : 1,
-'feb' : 2,
-'mar' : 3,
-'apr' : 4,
-'may' : 5,
-'jun' : 6,
-'jul' : 7,
-'aug' : 8,
-'sep' : 9,
-'oct' : 10,
-'nov' : 11,
-'dec' : 12 }
+months = {'jan': 1,
+          'feb': 2,
+          'mar': 3,
+          'apr': 4,
+          'may': 5,
+          'jun': 6,
+          'jul': 7,
+          'aug': 8,
+          'sep': 9,
+          'oct': 10,
+          'nov': 11,
+          'dec': 12}
 
 
 def isTransfer(text):
-    wordlist = ['transfer','send','give'] # keep everything lowercase
+    wordlist = ['transfer', 'send', 'give']  # keep everything lowercase
     textList = text.split(' ')
     for word in wordlist:
         if word in textList:
@@ -34,7 +35,7 @@ def isTransfer(text):
 
 
 def isIncorp(text):
-    wordlist = ['incorporate','create','start'] # keep everything lowercase
+    wordlist = ['incorporate', 'create', 'start']  # keep everything lowercase
     textList = text.split(' ')
     for word in wordlist:
         if word in textList:
@@ -62,7 +63,7 @@ def isSmartContractPay(text):
     smartContractName = smartContractName[:-1]
 
     if smartContractTrigger and smartContractName:
-        contractconditions = { 'smartContractTrigger':smartContractTrigger, 'smartContractName':smartContractName }
+        contractconditions = {'smartContractTrigger': smartContractTrigger, 'smartContractName': smartContractName}
         return contractconditions
     else:
         return False
@@ -98,11 +99,11 @@ def extractMarker(text):
 
 
 def extractInitTokens(text):
-    base_units = {'thousand':10**3 , 'million':10**6 ,'billion':10**9, 'trillion':10**12}
+    base_units = {'thousand': 10 ** 3, 'million': 10 ** 6, 'billion': 10 ** 9, 'trillion': 10 ** 12}
     textList = text.split(' ')
     counter = 0
     value = None
-    for idx,word in enumerate(textList):
+    for idx, word in enumerate(textList):
         try:
             result = float(word)
             if textList[idx + 1] in base_units:
@@ -114,9 +115,9 @@ def extractInitTokens(text):
         except:
             for unit in base_units:
                 result = word.split(unit)
-                if len(result) == 2 and result[1]=='' and result[0]!='':
+                if len(result) == 2 and result[1] == '' and result[0] != '':
                     try:
-                        value = float(result[0])*base_units[unit]
+                        value = float(result[0]) * base_units[unit]
                         counter = counter + 1
                     except:
                         continue
@@ -138,7 +139,7 @@ def extractAddress(text):
 
 
 def extractContractType(text):
-    operationList = ['one-time-event*'] # keep everything lowercase
+    operationList = ['one-time-event*']  # keep everything lowercase
     count = 0
     returnval = None
     for operation in operationList:
@@ -152,7 +153,7 @@ def extractContractType(text):
 
 def extractUserchoice(text):
     result = re.split('userchoice:\s*', text)
-    if len(result) != 1 and result[1]!='':
+    if len(result) != 1 and result[1] != '':
         return result[1].strip().strip('"').strip("'")
     else:
         return None
@@ -164,7 +165,7 @@ def brackets_toNumber(item):
 
 def extractContractConditions(text, contracttype, marker, blocktime):
     rulestext = re.split('contract-conditions:\s*', text)[-1]
-    #rulelist = re.split('\d\.\s*', rulestext)
+    # rulelist = re.split('\d\.\s*', rulestext)
     rulelist = []
     numberList = re.findall(r'\(\d\d*\)', rulestext)
 
@@ -180,7 +181,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
             break
 
     for i in range(len(numberList)):
-        rule = rulestext.split('({})'.format(i+1))[1].split('({})'.format(i+2))[0]
+        rule = rulestext.split('({})'.format(i + 1))[1].split('({})'.format(i + 2))[0]
         rulelist.append(rule.strip())
 
     if contracttype == 'one-time-event*':
@@ -194,11 +195,13 @@ def extractContractConditions(text, contracttype, marker, blocktime):
 
                 try:
                     expirytime_split = expirytime.split(' ')
-                    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], months[expirytime_split[1]],
+                                                        expirytime_split[2], expirytime_split[4])
                     expirytime_object = arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
                     blocktime_object = arrow.get(blocktime)
                     if expirytime_object < blocktime_object:
-                        print('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
+                        print(
+                            'Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
                         return None
                     extractedRules['expiryTime'] = expirytime
                 except:
@@ -206,7 +209,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                     return None
 
         for rule in rulelist:
-            if rule=='':
+            if rule == '':
                 continue
             elif rule[:14] == 'contractamount':
                 pattern = re.compile('[^contractamount\s*=\s*].*')
@@ -245,8 +248,7 @@ def extractContractConditions(text, contracttype, marker, blocktime):
                 payeeAddress = searchResult.split(marker)[0]
                 extractedRules['payeeAddress'] = payeeAddress
 
-
-        if len(extractedRules)>1 and 'expiryTime' in extractedRules:
+        if len(extractedRules) > 1 and 'expiryTime' in extractedRules:
             return extractedRules
         else:
             return None
@@ -263,7 +265,6 @@ def extractTriggerCondition(text):
 
 # Combine test
 def parse_flodata(string, blockinfo, netvariable):
-
     # todo Rule 20 - remove 'text:' from the start of flodata if it exists
     if string[0:5] == 'text:':
         string = string.split('text:')[1]
@@ -287,12 +288,12 @@ def parse_flodata(string, blockinfo, netvariable):
     # todo Rule 25 - If number of # or number of @ is greater than 1, reject
     # todo Rule 25.a - If a transaction is rejected, it means parsed_data type is noise
     # Filter noise first - check if the words end with either @ or #
-    if (len(atList)==0 and len(hashList)==0) or len(atList)>1 or len(hashList)>1:
+    if (len(atList) == 0 and len(hashList) == 0) or len(atList) > 1 or len(hashList) > 1:
         parsed_data = {'type': 'noise'}
 
     # todo Rule 26 - if number of # is 1 and number of @ is 0, then check if its token creation or token transfer transaction
 
-    elif len(hashList)==1 and len(atList)==0:
+    elif len(hashList) == 1 and len(atList) == 0:
         # Passing the above check means token creation or transfer
         incorporation = isIncorp(cleanstring)
         transfer = isTransfer(cleanstring)
@@ -307,7 +308,7 @@ def parse_flodata(string, blockinfo, netvariable):
             initTokens = extractInitTokens(cleanstring)
             if initTokens is not None:
                 parsed_data = {'type': 'tokenIncorporation', 'flodata': string, 'tokenIdentification': hashList[0][:-1],
-                           'tokenAmount': initTokens}
+                               'tokenAmount': initTokens}
             else:
                 parsed_data = {'type': 'noise'}
 
@@ -317,8 +318,8 @@ def parse_flodata(string, blockinfo, netvariable):
             amount = extractAmount(cleanstring, hashList[0][:-1])
             if None not in [amount]:
                 parsed_data = {'type': 'transfer', 'transferType': 'token', 'flodata': string,
-                           'tokenIdentification': hashList[0][:-1],
-                           'tokenAmount': amount}
+                               'tokenIdentification': hashList[0][:-1],
+                               'tokenAmount': amount}
             else:
                 parsed_data = {'type': 'noise'}
 
@@ -336,14 +337,15 @@ def parse_flodata(string, blockinfo, netvariable):
         elif incorporation and not transfer:
             contracttype = extractContractType(cleanstring)
             contractaddress = extractAddress(nospacestring)
-            contractconditions = extractContractConditions(cleanstring, contracttype, marker=hashList[0][:-1], blocktime=blockinfo['time'])
+            contractconditions = extractContractConditions(cleanstring, contracttype, marker=hashList[0][:-1],
+                                                           blocktime=blockinfo['time'])
 
             if config['DEFAULT']['NET'] == 'mainnet' and blockinfo['height'] < 3454510:
                 if None not in [contracttype, contractconditions]:
                     parsed_data = {'type': 'smartContractIncorporation', 'contractType': contracttype[:-1],
-                               'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1],
-                               'contractAddress': contractaddress[:-1], 'flodata': string,
-                               'contractConditions': contractconditions}
+                                   'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1],
+                                   'contractAddress': contractaddress[:-1], 'flodata': string,
+                                   'contractConditions': contractconditions}
                 else:
                     parsed_data = {'type': 'noise'}
             else:
@@ -363,9 +365,9 @@ def parse_flodata(string, blockinfo, netvariable):
             contractaddress = extractAddress(nospacestring)
             if None not in [amount, userChoice]:
                 parsed_data = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': string,
-                           'tokenIdentification': hashList[0][:-1],
-                           'operation': 'transfer', 'tokenAmount': amount, 'contractName': atList[0][:-1],
-                           'userChoice': userChoice}
+                               'tokenIdentification': hashList[0][:-1],
+                               'operation': 'transfer', 'tokenAmount': amount, 'contractName': atList[0][:-1],
+                               'userChoice': userChoice}
                 if contractaddress:
                     parsed_data['contractAddress'] = contractaddress[:-1]
             else:
@@ -373,12 +375,13 @@ def parse_flodata(string, blockinfo, netvariable):
 
 
     # todo Rule 36 - Check for only a single @ and the substring "smart contract system says" in flodata, else reject
-    elif (len(hashList)==0 and len(atList)==1):
+    elif (len(hashList) == 0 and len(atList) == 1):
         # Passing the above check means Smart Contract pays | exitcondition triggered from the committee
         # todo Rule 37 - Extract the trigger condition given by the committee. If its missing, reject
         triggerCondition = extractTriggerCondition(cleanstring)
         if triggerCondition is not None:
-            parsed_data = {'type': 'smartContractPays', 'contractName': atList[0][:-1], 'triggerCondition': triggerCondition.group().strip()[1:-1]}
+            parsed_data = {'type': 'smartContractPays', 'contractName': atList[0][:-1],
+                           'triggerCondition': triggerCondition.group().strip()[1:-1]}
         else:
             parsed_data = {'type': 'noise'}
     else:

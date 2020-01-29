@@ -1,10 +1,14 @@
-from flask import Flask, render_template, jsonify
 import os
+
+from flask import Flask, jsonify
+
 app = Flask(__name__)
+
 
 @app.route('/')
 def hello_world():
     return 'Hello, World!'
+
 
 @app.route('/getmarkerlist')
 def marker_list():
@@ -14,5 +18,6 @@ def marker_list():
         dbdict[idx] = item[:-3]
 
     return jsonify(dbdict)
+
 
 app.run(debug=True)
