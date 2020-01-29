@@ -12,3 +12,4 @@ config.py
 py3/
 __pycache__/
 *.pyc
+.vscode/
