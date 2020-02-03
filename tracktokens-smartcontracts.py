@@ -73,7 +73,7 @@ def pushData_SSEapi(message):
 
 def processBlock(blockindex):
     logger.info(f"Processing block {blockindex}")
-    # Scan every block
+    # Get block details
     response = multiRequest(f"block-index/{blockindex}", config['DEFAULT']['NET'])
     blockhash = response['blockHash']
     blockinfo = multiRequest(f"block/{blockhash}", config['DEFAULT']['NET'])
@@ -124,21 +124,34 @@ def processApiBlock(blockhash):
     blockinfo = multiRequest('block/{}'.format(str(blockhash)), config['DEFAULT']['NET'])
 
     # todo Rule 8 - read every transaction from every block to find and parse flodata
-
+    counter = 0
+    acceptedTxList = []
     # Scan every transaction
     for transaction in blockinfo["tx"]:
-
-        transaction_data = multiRequest('tx/{}'.format(str(transaction)), config['DEFAULT']['NET'])
+        transaction_data = multiRequest(f"tx/{transaction}", config['DEFAULT']['NET'])
         text = transaction_data["floData"]
         text = text.replace("\n", " \n ")
 
         # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
-
+        returnval = None
         parsed_data = parsing.parse_flodata(text, blockinfo, config['DEFAULT']['NET'])
         if parsed_data['type'] != 'noise':
-            print(blockindex)
-            print(parsed_data['type'])
-            processTransaction(transaction_data, parsed_data)
+            logger.info(f"Processing transaction {transaction}")
+            logger.debug(f"flodata {text} is parsed to {parsed_data}")
+            returnval = processTransaction(transaction_data, parsed_data)
+
+        if returnval == 1:
+            acceptedTxList.append(transaction)
+        elif returnval == 0:
+            logger.debug("Transfer for the transaction %s is illegitimate. Moving on" % transaction)
+
+    if len(acceptedTxList) > 0:
+        tempinfo = blockinfo['tx'].copy()
+        for tx in blockinfo['tx']:
+            if tx not in acceptedTxList:
+                tempinfo.remove(tx)
+        blockinfo['tx'] = tempinfo
+        updateLatestBlock(blockinfo)
 
     engine = create_engine('sqlite:///system.db')
     SystemBase.metadata.create_all(bind=engine)
@@ -150,7 +163,6 @@ def processApiBlock(blockhash):
 
     # Check smartContracts which will be triggered locally, and not by the contract committee
     checkLocaltriggerContracts(blockinfo)
-
 
 def updateLatestTransaction(transactionData, parsed_data):
     # connect to latest transaction db
