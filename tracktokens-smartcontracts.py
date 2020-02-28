@@ -121,6 +121,7 @@ def processBlock(blockindex):
 
 
 def processApiBlock(blockhash):
+    print(config['DEFAULT']['NET'])
     blockinfo = multiRequest('block/{}'.format(str(blockhash)), config['DEFAULT']['NET'])
 
     # todo Rule 8 - read every transaction from every block to find and parse flodata
@@ -157,7 +158,8 @@ def processApiBlock(blockhash):
     SystemBase.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     entry = session.query(SystemData).filter(SystemData.attribute == 'lastblockscanned').all()[0]
-    entry.value = str(blockindex)
+    entry.value = str(blockinfo['height'])
+    print('value should be '+ str(entry.value))
     session.commit()
     session.close()
 
@@ -2284,7 +2286,7 @@ current_index = response['blocks'][0]['height']
 logger.debug("Current block height is %s" % str(current_index))
 
 for blockindex in range(startblock, current_index):
-    if blockindex == 3454500:
+    if blockindex == 3935970:
         #sys.exit(0)
         print(' ')
     processBlock(blockindex)
