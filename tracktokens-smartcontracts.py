@@ -1,7 +1,6 @@
 import argparse
 import configparser
 import json
-# Setup logging
 import logging
 import os
 import shutil
@@ -18,22 +17,6 @@ from config import *
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, \
     Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, \
     LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
-
-file_handler = logging.FileHandler('tracking.log')
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(formatter)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-
-logger.addHandler(file_handler)
-logger.addHandler(stream_handler)
-
 
 def retryRequest(tempserverlist, apicall):
     if len(tempserverlist) != 0:
@@ -2201,6 +2184,45 @@ def processTransaction(transaction_data, parsed_data):
             return 0
 
 
+def scanBlockchain():
+    # Read start block no
+    engine = create_engine('sqlite:///system.db', echo=True)
+    SystemBase.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+    startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned').all()[0].value) + 1
+    session.commit()
+    session.close()
+
+    # todo Rule 6 - Find current block height
+    #     Rule 7 - Start analysing the block contents from starting block to current height
+
+    # Find current block height
+    response = multiRequest('blocks?limit=1', config['DEFAULT']['NET'])
+    current_index = response['blocks'][0]['height']
+    logger.debug("Current block height is %s" % str(current_index))
+
+    for blockindex in range(startblock, current_index):
+        processBlock(blockindex)
+
+    # At this point the script has updated to the latest block
+    # Now we connect to flosight's websocket API to get information about the latest blocks
+
+# Configuration of required variables 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
+
+file_handler = logging.FileHandler('tracking.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
 # todo Rule 1 - Read command line arguments to reset the databases as blank
 #  Rule 2     - Read config to set testnet/mainnet
 #  Rule 3     - Set flo blockexplorer location depending on testnet or mainnet
@@ -2269,40 +2291,27 @@ if args.reset == 1:
     session.commit()
     session.close()
 
-# Read start block no
-engine = create_engine('sqlite:///system.db', echo=True)
-SystemBase.metadata.create_all(bind=engine)
-session = sessionmaker(bind=engine)()
-startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned').all()[0].value) + 1
-session.commit()
-session.close()
 
-# todo Rule 6 - Find current block height
-#     Rule 7 - Start analysing the block contents from starting block to current height
 
-# Find current block height
-response = multiRequest('blocks?limit=1', config['DEFAULT']['NET'])
-current_index = response['blocks'][0]['height']
-logger.debug("Current block height is %s" % str(current_index))
+# MAIN LOGIC 
+# scan from the latest block saved locally to latest network block
+scanBlockchain()
 
-for blockindex in range(startblock, current_index):
-    if blockindex == 3935970:
-        #sys.exit(0)
-        print(' ')
-    processBlock(blockindex)
-
-# At this point the script has updated to the latest block
-# Now we connect to flosight's websocket API to get information about the latest blocks
-
+# Connect to flosight SSE to get data on new incoming blocks
 sio = socketio.Client()
 sio.connect(neturl + "socket.io/socket.io.js")
 
-
 @sio.on('connect')
 def on_connect():
-    print('I connected to the websocket')
+    logger.debug('Token Tracker has connected to websocket')
     sio.emit('subscribe', 'inv')
 
+@sio.on('disconnect')
+def disconnect():
+    logger.debug('Token Tracker disconnected from websocket')
+    logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
+    scanBlockchain()
+    logger.debug('Attempting reconnect to websocket ...')
 
 @sio.on('block')
 def on_block(data):
