@@ -1,10 +1,11 @@
+from sqlalchemy import Column, Integer, Float, String
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy import Column, Integer, Float, String, ForeignKey
 
 Base = declarative_base()
 ContractBase = declarative_base()
 SystemBase = declarative_base()
 LatestCacheBase = declarative_base()
+
 
 class ActiveTable(Base):
     __tablename__ = "activeTable"
@@ -54,6 +55,8 @@ class TransactionHistory(Base):
     transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
     jsonData = Column('jsonData', String)
+    transactionType = Column('transactionType', String)
+    parsedFloData = Column('parsedFloData', String)
 
 
 class TokenContractAssociation(Base):
@@ -69,7 +72,8 @@ class TokenContractAssociation(Base):
     transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
     jsonData = Column('jsonData', String)
-
+    transactionType = Column('transactionType', String)
+    parsedFloData = Column('parsedFloData', String)
 
 
 class ContractStructure(ContractBase):
@@ -109,6 +113,7 @@ class ContractTransactionHistory(ContractBase):
     transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
     jsonData = Column('jsonData', String)
+    parsedFloData = Column('parsedFloData', String)
 
 
 class RejectedContractTransactionHistory(SystemBase):
@@ -129,6 +134,8 @@ class RejectedContractTransactionHistory(SystemBase):
     blockchainReference = Column('blockchainReference', String)
     jsonData = Column('jsonData', String)
     rejectComment = Column('rejectComment', String)
+    parsedFloData = Column('parsedFloData', String)
+
 
 class RejectedTransactionHistory(SystemBase):
     __tablename__ = "rejectedTransactionHistory"
@@ -145,6 +152,8 @@ class RejectedTransactionHistory(SystemBase):
     blockchainReference = Column('blockchainReference', String)
     jsonData = Column('jsonData', String)
     rejectComment = Column('rejectComment', String)
+    transactionType = Column('transactionType', String)
+    parsedFloData = Column('parsedFloData', String)
 
 
 class ActiveContracts(SystemBase):
@@ -171,6 +180,7 @@ class SystemData(SystemBase):
     attribute = Column('attribute', String)
     value = Column('value', String)
 
+
 class ContractAddressMapping(SystemBase):
     __tablename__ = "contractAddressMapping"
 
@@ -184,6 +194,7 @@ class ContractAddressMapping(SystemBase):
     blockNumber = Column('blockNumber', Integer)
     blockHash = Column('blockHash', String)
 
+
 class TokenAddressMapping(SystemBase):
     __tablename__ = "tokenAddressMapping"
 
@@ -194,6 +205,7 @@ class TokenAddressMapping(SystemBase):
     blockNumber = Column('blockNumber', Integer)
     blockHash = Column('blockHash', String)
 
+
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
     id = Column('id', Integer, primary_key=True)
@@ -203,11 +215,10 @@ class LatestTransactions(LatestCacheBase):
     transactionType = Column('transactionType', String)
     parsedFloData = Column('parsedFloData', String)
 
+
 class LatestBlocks(LatestCacheBase):
     __tablename__ = "latestBlocks"
     id = Column('id', Integer, primary_key=True)
     blockNumber = Column('blockNumber', String)
     blockHash = Column('blockHash', String)
     jsonData = Column('jsonData', String)
-
-
