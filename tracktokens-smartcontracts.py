@@ -2297,7 +2297,7 @@ if args.reset == 1:
 # scan from the latest block saved locally to latest network block
 scanBlockchain()
 
-# Connect to flosight SSE to get data on new incoming blocks
+# Connect to Flosight websocket to get data on new incoming blocks
 sio = socketio.Client(reconnection=True)
 sio.connect(neturl + "socket.io/socket.io.js")
 
