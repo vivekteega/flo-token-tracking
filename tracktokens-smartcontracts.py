@@ -54,8 +54,8 @@ def retryRequest(tempserverlist, apicall):
 
 
 def multiRequest(apicall, net):
-    testserverlist = ['http://0.0.0.0:9000/', 'https://testnet.flocha.in/', 'https://testnet-flosight.duckdns.org/']
-    mainserverlist = ['http://0.0.0.0:9001/', 'https://livenet.flocha.in/', 'https://testnet-flosight.duckdns.org/']
+    testserverlist = ['http://0.0.0.0:9000/', 'https://testnet-flosight.duckdns.org/', 'https://testnet.flocha.in/']
+    mainserverlist = ['http://0.0.0.0:9001/', 'https://flosight.duckdns.org/', 'https://explorer.mediciland.com/', 'https://livenet.flocha.in/']
     if net == 'mainnet':
         return retryRequest(mainserverlist, apicall)
     elif net == 'testnet':
@@ -2228,10 +2228,10 @@ config.read('config.ini')
 
 # Assignment the flo-cli command
 if config['DEFAULT']['NET'] == 'mainnet':
-    neturl = 'https://livenet.flocha.in/'
+    neturl = 'https://flosight.duckdns.org/'
     localapi = config['DEFAULT']['FLO_CLI_PATH']
 elif config['DEFAULT']['NET'] == 'testnet':
-    neturl = 'https://testnet.flocha.in/'
+    neturl = 'https://testnet-flosight.duckdns.org/'
     localapi = '{} --testnet'.format(config['DEFAULT']['FLO_CLI_PATH'])
 else:
     logger.error(
@@ -2286,26 +2286,64 @@ current_index = response['blocks'][0]['height']
 logger.debug("Current block height is %s" % str(current_index))
 
 for blockindex in range(startblock, current_index):
-    if blockindex == 3935970:
-        #sys.exit(0)
-        print(' ')
+    if blockindex == 4228180:
+        print('temp')
     processBlock(blockindex)
+
+
+def switchNeturl(neturl):
+    testserverlist = ['http://0.0.0.0:9000/', 'https://testnet-flosight.duckdns.org/', 'https://testnet.flocha.in/']
+    mainserverlist = ['http://0.0.0.0:9001/', 'https://flosight.duckdns.org/', 'https://explorer.mediciland.com/', 'https://livenet.flocha.in/']
+    if net == 'mainnet':
+        neturlindex = mainserverlist.index(neturl)
+        if neturlindex+1 >= len(mainserverlist):
+            return mainserverlist[neturlindex+1  - len(mainserverlist)]
+        else:
+            return mainserverlist[neturlindex+1]
+    elif net == 'testnet':
+        neturlindex = testserverlist.index(neturl)
+        if neturlindex+1 >= len(testserverlist):
+            return testserverlist[neturlindex+1 - len(testserverlist)]
+        else:
+            return testserverlist[neturlindex+1]
+def reconnectSSE(neturl):
+
+    # Connect to Flosight websocket to get data on new incoming blocks
+    sio = socketio.Client(reconnection=False)
+    try:
+        sio.connect( neturl + "socket.io/socket.io.js")
+    except:
+        logger.debug(f"Could not connect to the websocket endpoint {neturl}. Switching & retrying to next")
+        neturl = switchNeturl(neturl)
+        reconnectSSE(neturl)
+
+    @sio.on('connect')
+    def on_connect():
+        logger.debug(f"Token Tracker has connected to websocket endpoint {neturl}")
+        sio.emit('subscribe', 'inv')
+
+    @sio.on('disconnect')
+    def disconnect():
+        logger.debug(f"Token Tracker disconnected from websocket endpoint {neturl}")
+        logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
+        scanBlockchain()
+        logger.debug("Rescan completed")
+        logger.debug('Attempting reconnect to websocket ...')
+        reconnectSSE(neturl)
+
+    @sio.on('connect_error')
+    def connect_error():
+        logger.debug(f"CONNECTION_ERROR to the websocket endpoint {neturl}. Switching & retrying to next")
+        neturl = switchNeturl(neturl)
+        reconnectSSE(neturl)
+
+    @sio.on('block')
+    def on_block(data):
+        logger.debug('New block received')
+        logger.debug(str(data))
+        processApiBlock(data)
 
 # At this point the script has updated to the latest block
 # Now we connect to flosight's websocket API to get information about the latest blocks
-
-sio = socketio.Client()
-sio.connect(neturl + "socket.io/socket.io.js")
-
-
-@sio.on('connect')
-def on_connect():
-    print('I connected to the websocket')
-    sio.emit('subscribe', 'inv')
-
-
-@sio.on('block')
-def on_block(data):
-    print('New block received')
-    print(str(data))
-    processApiBlock(data)
+neturl = 'https://flosight.duckdns.org/'
+reconnectSSE(neturl)
