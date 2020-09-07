@@ -1,7 +1,6 @@
 import argparse
 import configparser
 import json
-# Setup logging
 import logging
 import os
 import shutil
@@ -18,22 +17,6 @@ from config import *
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, \
     Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, \
     LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation
-
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-
-formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
-
-file_handler = logging.FileHandler('tracking.log')
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(formatter)
-
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-
-logger.addHandler(file_handler)
-logger.addHandler(stream_handler)
-
 
 def retryRequest(tempserverlist, apicall):
     if len(tempserverlist) != 0:
@@ -656,18 +639,24 @@ def processTransaction(transaction_data, parsed_data):
     #     is the recevier address
 
     outputlist = []
+    addresscounter = 0
+    inputcounter = 0
     for obj in transaction_data["vout"]:
         if obj["scriptPubKey"]["type"] == "pubkeyhash":
+            addresscounter = addresscounter + 1
             if inputlist[0] == obj["scriptPubKey"]["addresses"][0]:
+                inputcounter = inputcounter + 1
                 continue
             outputlist.append([obj["scriptPubKey"]["addresses"][0], obj["value"]])
 
-    if len(outputlist) != 1:
+    if addresscounter == inputcounter:
+        outputlist = [inputlist[0]]
+    elif len(outputlist) != 1:
         logger.info(
             f"Transaction's change is not coming back to the input address. Transaction {transaction_data['txid']} is rejected")
         return 0
-
-    outputlist = outputlist[0]
+    else:
+        outputlist = outputlist[0]
 
     logger.debug(
         f"Input address list : {inputlist}")
@@ -2201,6 +2190,45 @@ def processTransaction(transaction_data, parsed_data):
             return 0
 
 
+def scanBlockchain():
+    # Read start block no
+    engine = create_engine('sqlite:///system.db', echo=True)
+    SystemBase.metadata.create_all(bind=engine)
+    session = sessionmaker(bind=engine)()
+    startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned').all()[0].value) + 1
+    session.commit()
+    session.close()
+
+    # todo Rule 6 - Find current block height
+    #     Rule 7 - Start analysing the block contents from starting block to current height
+
+    # Find current block height
+    response = multiRequest('blocks?limit=1', config['DEFAULT']['NET'])
+    current_index = response['blocks'][0]['height']
+    logger.debug("Current block height is %s" % str(current_index))
+
+    for blockindex in range(startblock, current_index):
+        processBlock(blockindex)
+
+    # At this point the script has updated to the latest block
+    # Now we connect to flosight's websocket API to get information about the latest blocks
+
+# Configuration of required variables 
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
+
+file_handler = logging.FileHandler('tracking.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
 # todo Rule 1 - Read command line arguments to reset the databases as blank
 #  Rule 2     - Read config to set testnet/mainnet
 #  Rule 3     - Set flo blockexplorer location depending on testnet or mainnet
@@ -2269,79 +2297,27 @@ if args.reset == 1:
     session.commit()
     session.close()
 
-# Read start block no
-engine = create_engine('sqlite:///system.db', echo=True)
-SystemBase.metadata.create_all(bind=engine)
-session = sessionmaker(bind=engine)()
-startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned').all()[0].value) + 1
-session.commit()
-session.close()
-
-# todo Rule 6 - Find current block height
-#     Rule 7 - Start analysing the block contents from starting block to current height
-
-# Find current block height
-response = multiRequest('blocks?limit=1', config['DEFAULT']['NET'])
-current_index = response['blocks'][0]['height']
-logger.debug("Current block height is %s" % str(current_index))
-
-for blockindex in range(startblock, current_index):
-    if blockindex == 4228180:
-        print('temp')
-    processBlock(blockindex)
 
 
-def switchNeturl(neturl):
-    testserverlist = ['http://0.0.0.0:9000/', 'https://testnet-flosight.duckdns.org/', 'https://testnet.flocha.in/']
-    mainserverlist = ['http://0.0.0.0:9001/', 'https://flosight.duckdns.org/', 'https://explorer.mediciland.com/', 'https://livenet.flocha.in/']
-    if net == 'mainnet':
-        neturlindex = mainserverlist.index(neturl)
-        if neturlindex+1 >= len(mainserverlist):
-            return mainserverlist[neturlindex+1  - len(mainserverlist)]
-        else:
-            return mainserverlist[neturlindex+1]
-    elif net == 'testnet':
-        neturlindex = testserverlist.index(neturl)
-        if neturlindex+1 >= len(testserverlist):
-            return testserverlist[neturlindex+1 - len(testserverlist)]
-        else:
-            return testserverlist[neturlindex+1]
-def reconnectSSE(neturl):
+# MAIN LOGIC 
+# scan from the latest block saved locally to latest network block
+scanBlockchain()
 
-    # Connect to Flosight websocket to get data on new incoming blocks
-    sio = socketio.Client(reconnection=False)
-    try:
-        sio.connect( neturl + "socket.io/socket.io.js")
-    except:
-        logger.debug(f"Could not connect to the websocket endpoint {neturl}. Switching & retrying to next")
-        neturl = switchNeturl(neturl)
-        reconnectSSE(neturl)
+# Connect to Flosight websocket to get data on new incoming blocks
+sio = socketio.Client(reconnection=True)
+sio.connect(neturl + "socket.io/socket.io.js")
 
-    @sio.on('connect')
-    def on_connect():
-        logger.debug(f"Token Tracker has connected to websocket endpoint {neturl}")
-        sio.emit('subscribe', 'inv')
+@sio.on('connect')
+def on_connect():
+    logger.debug('Token Tracker has connected to websocket')
+    sio.emit('subscribe', 'inv')
 
-    @sio.on('disconnect')
-    def disconnect():
-        logger.debug(f"Token Tracker disconnected from websocket endpoint {neturl}")
-        logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
-        scanBlockchain()
-        logger.debug("Rescan completed")
-        logger.debug('Attempting reconnect to websocket ...')
-        reconnectSSE(neturl)
-
-    @sio.on('connect_error')
-    def connect_error():
-        logger.debug(f"CONNECTION_ERROR to the websocket endpoint {neturl}. Switching & retrying to next")
-        neturl = switchNeturl(neturl)
-        reconnectSSE(neturl)
-
-    @sio.on('block')
-    def on_block(data):
-        logger.debug('New block received')
-        logger.debug(str(data))
-        processApiBlock(data)
+@sio.on('disconnect')
+def disconnect():
+    logger.debug('Token Tracker disconnected from websocket')
+    logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
+    scanBlockchain()
+    logger.debug('Attempting reconnect to websocket ...')
 
 # At this point the script has updated to the latest block
 # Now we connect to flosight's websocket API to get information about the latest blocks
