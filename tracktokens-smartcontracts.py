@@ -142,7 +142,7 @@ def processApiBlock(blockhash):
     session = sessionmaker(bind=engine)()
     entry = session.query(SystemData).filter(SystemData.attribute == 'lastblockscanned').all()[0]
     entry.value = str(blockinfo['height'])
-    print('value should be '+ str(entry.value))
+    print('Last scanned block value should be '+ str(entry.value))
     session.commit()
     session.close()
 
@@ -2221,7 +2221,8 @@ logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
 
 file_handler = logging.FileHandler('tracking.log')
-file_handler.setLevel(logging.INFO)file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
 
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(formatter)
