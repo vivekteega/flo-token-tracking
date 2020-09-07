@@ -2213,6 +2213,7 @@ def scanBlockchain():
     # At this point the script has updated to the latest block
     # Now we connect to flosight's websocket API to get information about the latest blocks
 
+
 # Configuration of required variables 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -2220,8 +2221,7 @@ logger.setLevel(logging.DEBUG)
 formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
 
 file_handler = logging.FileHandler('tracking.log')
-file_handler.setLevel(logging.INFO)
-file_handler.setFormatter(formatter)
+file_handler.setLevel(logging.INFO)file_handler.setFormatter(formatter)
 
 stream_handler = logging.StreamHandler()
 stream_handler.setFormatter(formatter)
@@ -2302,22 +2302,60 @@ if args.reset == 1:
 # MAIN LOGIC 
 # scan from the latest block saved locally to latest network block
 scanBlockchain()
+scanBlockchain()
 
-# Connect to Flosight websocket to get data on new incoming blocks
-sio = socketio.Client(reconnection=True)
-sio.connect(neturl + "socket.io/socket.io.js")
+def switchNeturl(neturl):
+    testserverlist = ['http://0.0.0.0:9000/', 'https://testnet-flosight.duckdns.org/', 'https://testnet.flocha.in/']
+    mainserverlist = ['http://0.0.0.0:9001/', 'https://flosight.duckdns.org/', 'https://explorer.mediciland.com/', 'https://livenet.flocha.in/']
+    if config['DEFAULT']['NET'] == 'mainnet':
+        neturlindex = mainserverlist.index(neturl)
+        if neturlindex+1 >= len(mainserverlist):
+            return mainserverlist[neturlindex+1  - len(mainserverlist)]
+        else:
+            return mainserverlist[neturlindex+1]
+    elif config['DEFAULT']['NET'] == 'testnet':
+        neturlindex = testserverlist.index(neturl)
+        if neturlindex+1 >= len(testserverlist):
+            return testserverlist[neturlindex+1 - len(testserverlist)]
+        else:
+            return testserverlist[neturlindex+1]
 
-@sio.on('connect')
-def on_connect():
-    logger.debug('Token Tracker has connected to websocket')
-    sio.emit('subscribe', 'inv')
+def reconnectSSE(neturl):
 
-@sio.on('disconnect')
-def disconnect():
-    logger.debug('Token Tracker disconnected from websocket')
-    logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
-    scanBlockchain()
-    logger.debug('Attempting reconnect to websocket ...')
+    # Connect to Flosight websocket to get data on new incoming blocks
+    sio = socketio.Client(reconnection=False)
+    try:
+        sio.connect( neturl + "socket.io/socket.io.js")
+    except:
+        logger.debug(f"Could not connect to the websocket endpoint {neturl}. Switching & retrying to next")
+        neturl = switchNeturl(neturl)
+        reconnectSSE(neturl)
+
+    @sio.on('connect')
+    def on_connect():
+        logger.debug(f"Token Tracker has connected to websocket endpoint {neturl}")
+        sio.emit('subscribe', 'inv')
+
+    @sio.on('disconnect')
+    def disconnect():
+        logger.debug(f"Token Tracker disconnected from websocket endpoint {neturl}")
+        logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
+        scanBlockchain()
+        logger.debug("Rescan completed")
+        logger.debug('Attempting reconnect to websocket ...')
+        reconnectSSE(neturl)
+
+    @sio.on('connect_error')
+    def connect_error():
+        logger.debug(f"CONNECTION_ERROR to the websocket endpoint {neturl}. Switching & retrying to next")
+        neturl = switchNeturl(neturl)
+        reconnectSSE(neturl)
+
+    @sio.on('block')
+    def on_block(data):
+        logger.debug('New block received')
+        logger.debug(str(data))
+        processApiBlock(data)
 
 # At this point the script has updated to the latest block
 # Now we connect to flosight's websocket API to get information about the latest blocks
