@@ -11,6 +11,7 @@ import requests
 import socketio
 from sqlalchemy import create_engine, func
 from sqlalchemy.orm import sessionmaker
+import time
 
 import parsing
 from config import *
@@ -18,22 +19,22 @@ from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, Transac
     Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, \
     LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation
 
+
 def retryRequest(tempserverlist, apicall):
-    if len(tempserverlist) != 0:
+    while len(tempserverlist) != 0:
         try:
             response = requests.get('{}api/{}'.format(tempserverlist[0], apicall))
         except:
             tempserverlist.pop(0)
-            return retryRequest(tempserverlist, apicall)
         else:
             if response.status_code == 200:
                 return json.loads(response.content)
             else:
                 tempserverlist.pop(0)
-                return retryRequest(tempserverlist, apicall)
-    else:
-        logger.error("None of the APIs are responding for the call {}".format(apicall))
-        sys.exit(0)
+                
+        if len(tempserverlist) == 0:
+            logger.error("None of the APIs are responding for the call {}".format(apicall))
+            return 0
 
 
 def multiRequest(apicall, net):
@@ -148,6 +149,7 @@ def processApiBlock(blockhash):
 
     # Check smartContracts which will be triggered locally, and not by the contract committee
     checkLocaltriggerContracts(blockinfo)
+
 
 def updateLatestTransaction(transactionData, parsed_data):
     # connect to latest transaction db
@@ -2200,13 +2202,23 @@ def scanBlockchain():
     session.close()
 
     # todo Rule 6 - Find current block height
-    #     Rule 7 - Start analysing the block contents from starting block to current height
+    #      Rule 7 - Start analysing the block contents from starting block to current height
 
     # Find current block height
-    response = multiRequest('blocks?limit=1', config['DEFAULT']['NET'])
-    current_index = response['blocks'][0]['height']
-    logger.debug("Current block height is %s" % str(current_index))
-
+    current_index = -1
+    while(current_index == -1):
+        response = multiRequest('blocks?limit=1', config['DEFAULT']['NET'])
+        try:
+            current_index = response['blocks'][0]['height']
+        except:
+            logger.debug('Latest block count response from multiRequest() is not in the right format. Displaying the data received in the log below')
+            logger.debug(response)
+            logger.debug('Program will wait for 10 seconds and try to reconnect')
+            time.sleep(10)
+        else:
+            logger.debug("Current block height is %s" % str(current_index))
+            break
+            
     for blockindex in range(startblock, current_index):
         processBlock(blockindex)
 
@@ -2303,7 +2315,7 @@ if args.reset == 1:
 # MAIN LOGIC 
 # scan from the latest block saved locally to latest network block
 scanBlockchain()
-scanBlockchain()
+
 
 def switchNeturl(neturl):
     testserverlist = ['http://0.0.0.0:9000/', 'https://testnet-flosight.duckdns.org/', 'https://testnet.flocha.in/']
@@ -2321,16 +2333,15 @@ def switchNeturl(neturl):
         else:
             return testserverlist[neturlindex+1]
 
-def reconnectSSE(neturl):
 
+def reconnectSSE(neturl):
     # Connect to Flosight websocket to get data on new incoming blocks
     sio = socketio.Client(reconnection=False)
     try:
         sio.connect( neturl + "socket.io/socket.io.js")
     except:
         logger.debug(f"Could not connect to the websocket endpoint {neturl}. Switching & retrying to next")
-        neturl = switchNeturl(neturl)
-        reconnectSSE(neturl)
+        return
 
     @sio.on('connect')
     def on_connect():
@@ -2340,17 +2351,12 @@ def reconnectSSE(neturl):
     @sio.on('disconnect')
     def disconnect():
         logger.debug(f"Token Tracker disconnected from websocket endpoint {neturl}")
-        logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
-        scanBlockchain()
-        logger.debug("Rescan completed")
-        logger.debug('Attempting reconnect to websocket ...')
-        reconnectSSE(neturl)
+        return
 
     @sio.on('connect_error')
     def connect_error():
         logger.debug(f"CONNECTION_ERROR to the websocket endpoint {neturl}. Switching & retrying to next")
-        neturl = switchNeturl(neturl)
-        reconnectSSE(neturl)
+        return
 
     @sio.on('block')
     def on_block(data):
@@ -2358,7 +2364,14 @@ def reconnectSSE(neturl):
         logger.debug(str(data))
         processApiBlock(data)
 
+
 # At this point the script has updated to the latest block
 # Now we connect to flosight's websocket API to get information about the latest blocks
 neturl = 'https://flosight.duckdns.org/'
-reconnectSSE(neturl)
+while(True):
+    logger.debug('The script will rescan from the latest block in local db to latest server on FLO network')
+    scanBlockchain()
+    logger.debug("Rescan completed")
+    logger.debug('Attempting reconnect to websocket ...')
+    reconnectSSE(neturl)
+    neturl = switchNeturl(neturl)
