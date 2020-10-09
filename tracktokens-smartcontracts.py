@@ -2332,7 +2332,7 @@ def switchNeturl(neturl):
             return testserverlist[neturlindex+1]
 
 
-def reconnectSSE(neturl):
+def reconnectSSE(websocketApi):
     # Switch a to different flosight
     # neturl = switchNeturl(neturl)
     # Connect to Flosight websocket to get data on new incoming blocks
@@ -2342,18 +2342,18 @@ def reconnectSSE(neturl):
         scanBlockchain()
         logger.debug("Rescan completed")
         try:
-            logger.debug(f"Attempting websocket connection to {neturl}")
-            sio.connect(neturl + "socket.io/socket.io.js")
+            logger.debug(f"Attempting websocket connection to {websocketApi}")
+            sio.connect(websocketApi + "socket.io/socket.io.js")
             connection_status = True
-            return neturl
+            return websocketApi
         except:
-            logger.debug(f"Could not connect to the websocket endpoint {neturl}")
-            neturl = switchNeturl(neturl)
+            logger.debug(f"Could not connect to the websocket endpoint {websocketApi}")
+            websocketApi = switchNeturl(websocketApi)
 
 
 # At this point the script has updated to the latest block
 # Now we connect to flosight's websocket API to get information about the latest blocks
-neturl = 'https://flosight.duckdns.org/' # Neturl is the URL for Flosight API whose websocket endpoint is being connected to 
+global neturl = 'https://flosight.duckdns.org/' # Neturl is the URL for Flosight API whose websocket endpoint is being connected to 
 sio = socketio.Client(reconnection=False)
 
 # Connect to the websocket endpoint and return the new neturl
