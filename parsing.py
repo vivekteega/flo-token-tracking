@@ -316,7 +316,7 @@ def parse_flodata(string, blockinfo, netvariable):
         # todo Rule 31 - Extract number of tokens to be sent and the address to which to be sent, both data is mandatory
         elif not incorporation and transfer:
             amount = extractAmount(cleanstring, hashList[0][:-1])
-            if None not in [amount]:
+            if None not in [amount] and amount!='Too many':
                 parsed_data = {'type': 'transfer', 'transferType': 'token', 'flodata': string,
                                'tokenIdentification': hashList[0][:-1],
                                'tokenAmount': amount}
