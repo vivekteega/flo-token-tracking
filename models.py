@@ -240,11 +240,9 @@ class ContractParticipants1(ContinuosContractBase):
     id = Column('id', Integer, primary_key=True)
     participantAddress = Column('participantAddress', String)
     tokenAmount = Column('tokenAmount', Float)
-    userChoice = Column('userChoice', String)
     transactionHash = Column('transactionHash', String)
     blockNumber = Column('blockNumber', Integer)
     blockHash = Column('blockHash', String)
-    winningAmount = Column('winningAmount', Float)
 
 
 class ContractDeposits1(ContinuosContractBase):
