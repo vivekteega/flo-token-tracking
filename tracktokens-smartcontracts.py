@@ -42,7 +42,7 @@ def retryRequest(tempserverlist, apicall):
 
 
 def multiRequest(apicall, net):
-    testserverlist = ['http://0.0.0.0:8495/']
+    testserverlist = ['https://testnet-flosight.duckdns.org/','http://0.0.0.0:8495/']
     mainserverlist = ['https://flosight.duckdns.org/','http://0.0.0.0:9495/']
     if net == 'mainnet':
         return retryRequest(mainserverlist, apicall)
