@@ -42,11 +42,8 @@ def retryRequest(tempserverlist, apicall):
 
 
 def multiRequest(apicall, net):
-    if net == 'mainnet':
-        return retryRequest(mainserverlist, apicall)
-    elif net == 'testnet':
-        return retryRequest(testserverlist, apicall)
-
+    return retryRequest(serverlist, apicall)
+    
 
 def pushData_SSEapi(message):
     signature = pybtc.sign_message(message.encode(), privKey)
@@ -104,8 +101,6 @@ def processBlock(blockindex):
 
         # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
         returnval = None
-        if(transaction in ["34e4dc385deac31a7f54b13e7c5890b45a604d93094c84ec607632ac5fb7800f","77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8","b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551", "fec1be48683c8f9a7d22e9fc6afddb68a641a364a26716fdfeaf3c21f27346c0"]):
-            pdb.set_trace()
         parsed_data = parsing.parse_flodata(text, blockinfo, config['DEFAULT']['NET'])
         if parsed_data['type'] != 'noise':
             logger.info(f"Processing transaction {transaction}")
@@ -2703,7 +2698,7 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 # todo - rename to flosight url 
 neturl = config['DEFAULT']['NETURL'] 
-tokenapi_sse_url = config['DEFAULT']['SSE_URL']
+tokenapi_sse_url = config['DEFAULT']['TOKENAPI_SSE_URL']
 
 # Assignment the flo-cli command
 if (config['DEFAULT']['NET'] != 'mainnet') and (config['DEFAULT']['NET'] != 'testnet'):
@@ -2713,6 +2708,12 @@ if (config['DEFAULT']['NET'] != 'mainnet') and (config['DEFAULT']['NET'] != 'tes
 # Specify mainnet and testnet server list for API calls and websocket calls 
 testserverlist = config['DEFAULT']['TESTNET_SERVER_LIST']
 mainserverlist = config['DEFAULT']['MAINNET_SERVER_LIST']
+serverlist = None
+if config['DEFAULT']['NET'] == 'mainnet':
+    serverlist = config['DEFAULT']['MAINNET_SERVER_LIST']
+elif config['DEFAULT']['NET'] == 'testnet':
+    serverlist = config['DEFAULT']['TESTNET_SERVER_LIST']
+serverlist = serverlist.split(',')
 
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:
@@ -2748,12 +2749,11 @@ if args.reset == 1:
 
 
 def switchNeturl(currentneturl):
-    mainserverlist = ['http://0.0.0.0:8495/']
-    neturlindex = mainserverlist.index(currentneturl)
-    if neturlindex+1 >= len(mainserverlist):
-        return mainserverlist[neturlindex+1  - len(mainserverlist)]
+    neturlindex = serverlist.index(currentneturl)
+    if neturlindex+1 >= len(serverlist):
+        return serverlist[neturlindex+1  - len(serverlist)]
     else:
-        return mainserverlist[neturlindex+1]
+        return serverlist[neturlindex+1]
 
 
 def reconnectWebsocket(socket_variable):
