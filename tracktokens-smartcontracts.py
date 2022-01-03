@@ -42,8 +42,6 @@ def retryRequest(tempserverlist, apicall):
 
 
 def multiRequest(apicall, net):
-    testserverlist = ['https://testnet-flosight.duckdns.org/','http://0.0.0.0:8495/']
-    mainserverlist = ['https://flosight.duckdns.org/','http://0.0.0.0:9495/']
     if net == 'mainnet':
         return retryRequest(mainserverlist, apicall)
     elif net == 'testnet':
@@ -220,8 +218,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
         return 0
 
     elif availableTokens < commentTransferAmount:
-        logger.info(
-            "The transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
+        logger.info("The transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
         session.close()
         return 0
 
@@ -744,9 +741,8 @@ def processTransaction(transaction_data, parsed_data):
                 connection.close()
 
                 # Pass information to SSE channel
-                url = 'https://ranchimallflo.duckdns.org/'
                 headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                # r = requests.post(url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
+                # r = requests.post(tokenapi_sse_url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
                 return 1
             else:
                 logger.info(
@@ -815,9 +811,8 @@ def processTransaction(transaction_data, parsed_data):
                         session.commit()
                         session.close()
 
-                        url = 'https://ranchimallflo.duckdns.org/'
                         headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                        '''r = requests.post(url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"},
+                        '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"},
                                           headers=headers)'''
 
                         # Pass information to SSE channel
@@ -861,10 +856,8 @@ def processTransaction(transaction_data, parsed_data):
                     session.commit()
                     session.close()
 
-                    url = 'https://ranchimallflo.duckdns.org/'
                     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                    '''r = requests.post(url, json={
-                        'message': f"Error | Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
+                    '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
                                       headers=headers)'''
                     return 0
                 else:
@@ -1384,11 +1377,8 @@ def processTransaction(transaction_data, parsed_data):
                     session.commit()
                     session.close()
 
-                    url = 'https://ranchimallflo.duckdns.org/'
                     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                    '''r = requests.post(url, json={
-                        'message': f"Error | Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type"},
-                                      headers=headers)'''
+                    '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type"}, headers=headers)'''
                     return 0
 
             else:
@@ -1419,11 +1409,8 @@ def processTransaction(transaction_data, parsed_data):
                 session.commit()
                 session.close()
 
-                url = 'https://ranchimallflo.duckdns.org/'
                 headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                '''r = requests.post(url, json={
-                    'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "},
-                                  headers=headers)'''
+                '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "}, headers=headers)'''
                 return 0
 
         elif parsed_data['transferType'] == 'swapParticipaton':
@@ -1461,9 +1448,8 @@ def processTransaction(transaction_data, parsed_data):
                         session.commit()
                         session.close()
 
-                        url = 'https://ranchimallflo.duckdns.org/'
                         headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                        '''r = requests.post(url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"},
+                        '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"},
                                           headers=headers)'''
 
                         # Pass information to SSE channel
@@ -1503,9 +1489,8 @@ def processTransaction(transaction_data, parsed_data):
                 connection.close()
 
                 # Pass information to SSE channel
-                url = 'https://ranchimallflo.duckdns.org/'
                 headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                # r = requests.post(url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
+                # r = requests.post(tokenapi_sse_url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
 
                 returnval = transferToken(contractStructure['selling_token'], swapPrice, outputlist[0], inputlist[0], transaction_data, parsed_data)
                 if returnval is None:
@@ -1556,9 +1541,8 @@ def processTransaction(transaction_data, parsed_data):
                 return 0
 
                 # Pass information to SSE channel
-                url = 'https://ranchimallflo.duckdns.org/'
                 headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                # r = requests.post(url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)               
+                # r = requests.post(tokenapi_sse_url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)               
 
                 return 1
 
@@ -1588,9 +1572,8 @@ def processTransaction(transaction_data, parsed_data):
                 session.commit()
                 session.close()
 
-                url = 'https://ranchimallflo.duckdns.org/'
                 headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                '''r = requests.post(url, json={
+                '''r = requests.post(tokenapi_sse_url, json={
                     'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "},
                                   headers=headers)'''
                 return 0
@@ -2052,9 +2035,8 @@ def processTransaction(transaction_data, parsed_data):
             session.commit()
             session.close()
 
-            url = 'https://ranchimallflo.duckdns.org/'
             headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-            '''r = requests.post(url, json={
+            '''r = requests.post(tokenapi_sse_url, json={
                 'message': 'Error | Contract Incorporation rejected as a smartcontract with same name {}-{} is active currentlyt at transaction {}'.format(parsed_data['contractName'], parsed_data['contractAddress'], transaction_data['txid'])}, headers=headers)
             '''
             return 0
@@ -2208,9 +2190,8 @@ def processTransaction(transaction_data, parsed_data):
                     session.commit()
                     session.close()
 
-                    url = 'https://ranchimallflo.duckdns.org/'
                     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                    '''r = requests.post(url, json={
+                    '''r = requests.post(tokenapi_sse_url, json={
                         'message': f"Error | Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
                                       headers=headers)'''
                     return 0
@@ -2557,9 +2538,8 @@ def processTransaction(transaction_data, parsed_data):
                     session.commit()
                     session.close()
 
-                    url = 'https://ranchimallflo.duckdns.org/'
                     headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                    '''r = requests.post(url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"}, headers=headers)'''
+                    '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"}, headers=headers)'''
 
                     # Pass information to SSE channel
                     pushData_SSEapi('Error| Mismatch in contract address specified in flodata and the output address of the transaction {}'.format(transaction_data['txid']))
@@ -2640,9 +2620,8 @@ def processTransaction(transaction_data, parsed_data):
             session.commit()
             session.close()
 
-            url = 'https://ranchimallflo.duckdns.org/'
             headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-            '''r = requests.post(url, json={'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "}, headers=headers)'''
+            '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "}, headers=headers)'''
             return 0
     
     ''' {'type': 'smartContractDeposit', 'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1], 'flodata': string, 'depositConditions': deposit_conditions} '''
@@ -2722,14 +2701,18 @@ if not os.path.isdir(dirpath):
 # Read configuration
 config = configparser.ConfigParser()
 config.read('config.ini')
+# todo - rename to flosight url 
+neturl = config['DEFAULT']['NETURL'] 
+tokenapi_sse_url = config['DEFAULT']['SSE_URL']
 
 # Assignment the flo-cli command
-if config['DEFAULT']['NET'] == 'mainnet':
-    neturl = 'http://0.0.0.0:9495/'
-elif config['DEFAULT']['NET'] == 'testnet':
-    neturl = 'http://0.0.0.0:8495/'
-else:
+if (config['DEFAULT']['NET'] != 'mainnet') and (config['DEFAULT']['NET'] != 'testnet'):
     logger.error("NET parameter in config.ini invalid. Options are either 'mainnet' or 'testnet'. Script is exiting now")
+    sys.exit(0)
+
+# Specify mainnet and testnet server list for API calls and websocket calls 
+testserverlist = config['DEFAULT']['TESTNET_SERVER_LIST']
+mainserverlist = config['DEFAULT']['MAINNET_SERVER_LIST']
 
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:
@@ -2772,6 +2755,7 @@ def switchNeturl(currentneturl):
     else:
         return mainserverlist[neturlindex+1]
 
+
 def reconnectWebsocket(socket_variable):
     # Switch a to different flosight
     # neturl = switchNeturl(neturl)
@@ -2783,10 +2767,8 @@ def reconnectWebsocket(socket_variable):
         logger.info(f"Sleeping for 3 seconds before attempting reconnect to {newurl}")
         time.sleep(3)
         try:
-            """ neturl = temp
-            logger.info(f"neturl: {neturl}") """
             scanBlockchain()
-            logger.info(f"Websocket endpoint which is being connected to   {newurl}socket.io/socket.io.js")
+            logger.info(f"Websocket endpoint which is being connected to {newurl}socket.io/socket.io.js")
             socket_variable.connect(f"{newurl}socket.io/socket.io.js")
             i=i+1
         except:
@@ -2803,7 +2785,6 @@ scanBlockchain()
 # Now we connect to flosight's websocket API to get information about the latest blocks
 # Neturl is the URL for Flosight API whose websocket endpoint is being connected to
 
-neturl = 'https://testnet-flosight.duckdns.org/'
 sio = socketio.Client()
 # Connect to a websocket endpoint and wait for further events
 reconnectWebsocket(sio)
