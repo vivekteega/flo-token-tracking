@@ -2681,7 +2681,7 @@ def scanBlockchain():
     # At this point the script has updated to the latest block
     # Now we connect to flosight's websocket API to get information about the latest blocks
 
-
+# MAIN EXECUTION STARTS
 # Configuration of required variables 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -2795,7 +2795,7 @@ def reconnectWebsocket(socket_variable):
             i=i+1
 
 
-# MAIN LOGIC
+# MAIN LOGIC STARTS
 # scan from the latest block saved locally to latest network block
 scanBlockchain()
 
