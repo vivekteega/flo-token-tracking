@@ -106,7 +106,7 @@ def processBlock(blockindex):
 
         # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
         returnval = None
-        if(transaction in ["77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8","b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551", "fec1be48683c8f9a7d22e9fc6afddb68a641a364a26716fdfeaf3c21f27346c0"]):
+        if(transaction in ["34e4dc385deac31a7f54b13e7c5890b45a604d93094c84ec607632ac5fb7800f","77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8","b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551", "fec1be48683c8f9a7d22e9fc6afddb68a641a364a26716fdfeaf3c21f27346c0"]):
             pdb.set_trace()
         parsed_data = parsing.parse_flodata(text, blockinfo, config['DEFAULT']['NET'])
         if parsed_data['type'] != 'noise':
@@ -2699,10 +2699,10 @@ logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
 
-# todo Rule 1 - Read command line arguments to reset the databases as blank
+#  Rule 1 - Read command line arguments to reset the databases as blank
 #  Rule 2     - Read config to set testnet/mainnet
 #  Rule 3     - Set flo blockexplorer location depending on testnet or mainnet
-#  Rule 4     - Set the local flo-cli path depending on testnet or mainnet
+#  Rule 4     - Set the local flo-cli path depending on testnet or mainnet ( removed this feature | Flosights are the only source )
 #  Rule 5     - Set the block number to scan from
 
 
@@ -2726,13 +2726,10 @@ config.read('config.ini')
 # Assignment the flo-cli command
 if config['DEFAULT']['NET'] == 'mainnet':
     neturl = 'http://0.0.0.0:9495/'
-    localapi = config['DEFAULT']['FLO_CLI_PATH']
 elif config['DEFAULT']['NET'] == 'testnet':
     neturl = 'http://0.0.0.0:8495/'
-    localapi = '{} --testnet'.format(config['DEFAULT']['FLO_CLI_PATH'])
 else:
-    logger.error(
-        "NET parameter in config.ini invalid. Options are either 'mainnet' or 'testnet'. Script is exiting now")
+    logger.error("NET parameter in config.ini invalid. Options are either 'mainnet' or 'testnet'. Script is exiting now")
 
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:
