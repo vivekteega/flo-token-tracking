@@ -17,9 +17,11 @@ Docker-compatibility branch is needed right now because Docker image made for fl
 ## How to start the system 
 
 1. Create a virtual environment with python3.7 and activate it 
-   ```python3.7 -m venv py3.7 
-   source py3.7/bin/activate```
-2. Install python packages required for the virtual environment from `pip install -r requirements.txt` 
+   ```
+   python3.7 -m venv py3.7 
+   source py3.7/bin/activate
+   ```
+2. Install python packages required for the virtual environment from `pip3 install -r requirements.txt` 
 3. Setup config files with the following information  
    For testnet 
    ```
@@ -47,4 +49,4 @@ Docker-compatibility branch is needed right now because Docker image made for fl
     sseAPI_url = 'https://ranchimallflo.duckdns.org/'
     ```
     
-4. If running for the first time, run  `python tracktokens-smartcontracts.py --reset` otherwise run `python3 tracktokens-smartcontracts.py`
+4. If running for the first time, run  `python3.7 tracktokens-smartcontracts.py --reset` otherwise run `python3.7 tracktokens-smartcontracts.py`
