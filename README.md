@@ -1,5 +1,6 @@
 # FLO Token & Smart Contract System 
 
+## Important versions and their hashes
 The python script scans the FLO Blockchain for Token and Smart Contract activity and creates/updates local SQLite databases accordingly. 
 
 `339dac6a50bcd973dda4caf43998fc61dd79ea68` 
