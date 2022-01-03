@@ -20,30 +20,26 @@ from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, Transac
 
 
 goodblockset = {}
-
 goodtxset = {}
 
 
-def retryRequest(tempserverlist, apicall):
-    while len(tempserverlist) != 0:
+def newMultiRequest(apicall):
+    current_server = serverlist[0]
+    while True:
         try:
-            response = requests.get('{}api/{}'.format(tempserverlist[0], apicall))
+            response = requests.get('{}api/{}'.format(current_server, apicall))
         except:
-            tempserverlist.pop(0)
+            current_server = switchNeturl(current_server)
+            logger.info(f"newMultiRequest() switched to {current_server}")
+            time.sleep(2)
         else:
             if response.status_code == 200:
                 return json.loads(response.content)
             else:
-                tempserverlist.pop(0)
-                
-        if len(tempserverlist) == 0:
-            logger.error("None of the APIs are responding for the call {}".format(apicall))
-            return 0
+                current_server = switchNeturl(current_server) 
+                logger.info(f"newMultiRequest() switched to {current_server}")
+                time.sleep(2)
 
-
-def multiRequest(apicall, net):
-    return retryRequest(serverlist, apicall)
-    
 
 def pushData_SSEapi(message):
     signature = pybtc.sign_message(message.encode(), privKey)
@@ -58,11 +54,10 @@ def pushData_SSEapi(message):
 
 def processBlock(blockindex):
     logger.info(f'Processing block {blockindex}')
-    logger.info('Processing block ' + str(blockindex))
     # Get block details
-    response = multiRequest(f"block-index/{blockindex}", config['DEFAULT']['NET'])
+    response = newMultiRequest(f"block-index/{blockindex}")
     blockhash = response['blockHash']
-    blockinfo = multiRequest(f"block/{blockhash}", config['DEFAULT']['NET'])
+    blockinfo = newMultiRequest(f"block/{blockhash}")
 
     # todo Rule 8 - read every transaction from every block to find and parse flodata
     counter = 0
@@ -85,7 +80,7 @@ def processBlock(blockindex):
         
         current_index = -1
         while(current_index == -1):
-            transaction_data = multiRequest(f"tx/{transaction}", config['DEFAULT']['NET'])
+            transaction_data = newMultiRequest(f"tx/{transaction}")
             try:
                 text = transaction_data["floData"]
                 text = text.replace("\n", " \n ")
@@ -136,14 +131,14 @@ def processBlock(blockindex):
 
 def processApiBlock(blockhash):
     logger.info(config['DEFAULT']['NET'])
-    blockinfo = multiRequest('block/{}'.format(str(blockhash)), config['DEFAULT']['NET'])
+    blockinfo = newMultiRequest('block/{}'.format(str(blockhash)))
 
     # todo Rule 8 - read every transaction from every block to find and parse flodata
     counter = 0
     acceptedTxList = []
     # Scan every transaction
     for transaction in blockinfo["tx"]:
-        transaction_data = multiRequest(f"tx/{transaction}", config['DEFAULT']['NET'])
+        transaction_data = newMultiRequest(f"tx/{transaction}")
         text = transaction_data["floData"]
         text = text.replace("\n", " \n ")
 
@@ -219,7 +214,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
 
     elif availableTokens >= commentTransferAmount:
         table = session.query(ActiveTable).filter(ActiveTable.address == inputAddress).all()
-        block_data = multiRequest('block/{}'.format(transaction_data['blockhash']), config['DEFAULT']['NET'])
+        block_data = newMultiRequest('block/{}'.format(transaction_data['blockhash']))
 
         pidlst = []
         checksum = 0
@@ -325,7 +320,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                 session.commit()
             session.commit()
 
-        block_data = multiRequest('block/{}'.format(transaction_data['blockhash']), config['DEFAULT']['NET'])
+        block_data = newMultiRequest('block/{}'.format(transaction_data['blockhash']))
 
         blockchainReference = neturl + 'tx/' + transaction_data['txid']
         session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
@@ -644,7 +639,7 @@ def processTransaction(transaction_data, parsed_data):
 
     # todo Rule 40 - For each vin, find the feeding address and the fed value. Make an inputlist containing [inputaddress, n value]
     for query in querylist:
-        content = multiRequest('tx/{}'.format(str(query[0])), config['DEFAULT']['NET'])
+        content = newMultiRequest('tx/{}'.format(str(query[0])))
         for objec in content["vout"]:
             if objec["n"] == query[1]:
                 inputadd = objec["scriptPubKey"]["addresses"][0]
@@ -2637,7 +2632,7 @@ def scanBlockchain():
     # Find current block height
     current_index = -1
     while(current_index == -1):
-        response = multiRequest('blocks?limit=1', config['DEFAULT']['NET'])
+        response = newMultiRequest('blocks?limit=1')
         try:
             current_index = response['blocks'][0]['height']
         except:
@@ -2654,6 +2649,36 @@ def scanBlockchain():
 
     # At this point the script has updated to the latest block
     # Now we connect to flosight's websocket API to get information about the latest blocks
+
+
+def switchNeturl(currentneturl):
+    neturlindex = serverlist.index(currentneturl)
+    if neturlindex+1 >= len(serverlist):
+        return serverlist[neturlindex+1  - len(serverlist)]
+    else:
+        return serverlist[neturlindex+1]
+
+
+def reconnectWebsocket(socket_variable):
+    # Switch a to different flosight
+    # neturl = switchNeturl(neturl)
+    # Connect to Flosight websocket to get data on new incoming blocks
+    i=0
+    newurl = serverlist[0]
+    while(not socket_variable.connected):
+        logger.info(f"While loop {i}")
+        logger.info(f"Sleeping for 3 seconds before attempting reconnect to {newurl}")
+        time.sleep(3)
+        try:
+            scanBlockchain()
+            logger.info(f"Websocket endpoint which is being connected to {newurl}socket.io/socket.io.js")
+            socket_variable.connect(f"{newurl}socket.io/socket.io.js")
+            i=i+1
+        except:
+            logger.info(f"disconnect block: Failed reconnect attempt to {newurl}")
+            newurl = switchNeturl(newurl)
+            i=i+1
+
 
 # MAIN EXECUTION STARTS
 # Configuration of required variables 
@@ -2696,24 +2721,21 @@ if not os.path.isdir(dirpath):
 # Read configuration
 config = configparser.ConfigParser()
 config.read('config.ini')
-# todo - rename to flosight url 
-neturl = config['DEFAULT']['NETURL'] 
-tokenapi_sse_url = config['DEFAULT']['TOKENAPI_SSE_URL']
 
-# Assignment the flo-cli command
+# todo - write all assertions to make sure default configs are right 
 if (config['DEFAULT']['NET'] != 'mainnet') and (config['DEFAULT']['NET'] != 'testnet'):
     logger.error("NET parameter in config.ini invalid. Options are either 'mainnet' or 'testnet'. Script is exiting now")
     sys.exit(0)
 
 # Specify mainnet and testnet server list for API calls and websocket calls 
-testserverlist = config['DEFAULT']['TESTNET_SERVER_LIST']
-mainserverlist = config['DEFAULT']['MAINNET_SERVER_LIST']
 serverlist = None
 if config['DEFAULT']['NET'] == 'mainnet':
-    serverlist = config['DEFAULT']['MAINNET_SERVER_LIST']
+    serverlist = config['DEFAULT']['MAINNET_FLOSIGHT_SERVER_LIST']
 elif config['DEFAULT']['NET'] == 'testnet':
-    serverlist = config['DEFAULT']['TESTNET_SERVER_LIST']
+    serverlist = config['DEFAULT']['TESTNET_FLOSIGHT_SERVER_LIST']
 serverlist = serverlist.split(',')
+neturl = config['DEFAULT']['FLOSIGHT_NETURL']
+tokenapi_sse_url = config['DEFAULT']['TOKENAPI_SSE_URL']
 
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:
@@ -2746,35 +2768,6 @@ if args.reset == 1:
     LatestCacheBase.metadata.create_all(bind=engine)
     session.commit()
     session.close()
-
-
-def switchNeturl(currentneturl):
-    neturlindex = serverlist.index(currentneturl)
-    if neturlindex+1 >= len(serverlist):
-        return serverlist[neturlindex+1  - len(serverlist)]
-    else:
-        return serverlist[neturlindex+1]
-
-
-def reconnectWebsocket(socket_variable):
-    # Switch a to different flosight
-    # neturl = switchNeturl(neturl)
-    # Connect to Flosight websocket to get data on new incoming blocks
-    i=0
-    newurl = neturl
-    while(not socket_variable.connected):
-        logger.info(f"While loop {i}")
-        logger.info(f"Sleeping for 3 seconds before attempting reconnect to {newurl}")
-        time.sleep(3)
-        try:
-            scanBlockchain()
-            logger.info(f"Websocket endpoint which is being connected to {newurl}socket.io/socket.io.js")
-            socket_variable.connect(f"{newurl}socket.io/socket.io.js")
-            i=i+1
-        except:
-            logger.info(f"disconnect block: Failed reconnect attempt to {newurl}")
-            newurl = switchNeturl(newurl)
-            i=i+1
 
 
 # MAIN LOGIC STARTS
