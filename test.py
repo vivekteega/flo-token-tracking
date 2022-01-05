@@ -46,21 +46,13 @@ def findrules(rawstring, special_characters):
     return wordList
 
 
-def checkSearchPattern1(parsed_list, searchpatterns):
+def findFirstCategorization(parsed_list, searchpatterns):
     for firstCategorization in searchpatterns.keys():
         counter = 0
         for key in searchpatterns[firstCategorization].keys():
-            if len(parsed_list) != len(searchpatterns[firstCategorization][key]):
-                continue
-            else:
-                pdb.set_trace()
-                for idx,val in enumerate(parsed_list):
-                    if not parsed_list[idx].endswith(searchpatterns[firstCategorization][key][idx]):
-                        return False 
-                return True 
-        if counter >= 1:
-            return firstCategorization
-    return 'noise'
+            if checkSearchPattern(parsed_list, searchpatterns[firstCategorization][key]):
+                return {'categorization':f"{firstCategorization}",'key':f"{key}",'pattern':searchpatterns[firstCategorization][key]}
+    return {'categorization':"noise"}
 
 
 def checkSearchPattern(parsed_list, searchpattern):
@@ -81,9 +73,6 @@ def className(rawstring):
     # Check for @ in the first position, * in the second position and : in the third position, then hash is in 4th position, then hash in 5th position | Token swap creation 
 
     allList = findrules(rawstring,['#','*','@',':'])
-
-    allList = ['rmt@','rmt*',':',"rmt#","rmt#"]
-    allList1 = ['rmt#',':',"rmt@"]
 
     search_patterns = {
         'tokensystem-C':{
@@ -109,9 +98,11 @@ def className(rawstring):
         }
     }
 
-    patternmatch = checkSearchPattern(allList1, ['#',':','@','@'])
+    pattern_list1 = ['rmt@','rmt*',':',"rmt#","rmt#"]
+    pattern_list2 = ['rmt#',':',"rmt@"]
+    pattern_list3 = ['rmt#']
+    patternmatch = findFirstCategorization(pattern_list3, search_patterns)
     print(f"Patternmatch is {patternmatch}")
-
 
 rawstring = "test rmt# rmt@ rmt* : rmt# rmt# test" 
 className(rawstring)
