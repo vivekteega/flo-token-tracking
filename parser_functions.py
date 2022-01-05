@@ -18,7 +18,8 @@ def findrule1_1(rawstring, special_character):
     else:
         False
 
-'''rawstring = "Create Smart Contract with the name swap-rupee-bioscope@ of the type continuous-event* at the address oRRCHWouTpMSPuL6yZRwFCuh87ZhuHoL78$ with contract-conditions :(1) subtype = tokenswap (2) accepting_token=rupee# (3) selling_token = bioscope# (4) price = '15' (5) priceType = ‘predetermined’ (6) direction = oneway"
+'''
+rawstring = "Create Smart Contract with the name swap-rupee-bioscope@ of the type continuous-event* at the address oRRCHWouTpMSPuL6yZRwFCuh87ZhuHoL78$ with contract-conditions :(1) subtype = tokenswap (2) accepting_token=rupee# (3) selling_token = bioscope# (4) price = '15' (5) priceType = ‘predetermined’ (6) direction = oneway"
 rawstring1 = "send 500 rmt1# rmt2# rmt3#"
 
 response = findrule1(rawstring1, '#')
@@ -27,8 +28,8 @@ print(response)
 
 response = findrule1(rawstring, '#')
 print(f"\n\nResponse for rawstring searching #")
-print(response) '''
-
+print(response)
+'''
 
 inputstring = " : rmt3# "
 special_character = "#"
@@ -86,9 +87,6 @@ def findrule3(text):
 
 ##########
 
-denied_list = ['transfer', 'send', 'give']  # keep everything lowercase
-permitted_list = ['incorporate', 'create', 'start']  # keep everything lowercase
-
 def findWholeWord(w):
     return re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search
 
@@ -116,17 +114,30 @@ def truefalse_rule2(rawstring, permitted_list, denied_list):
 response = truefalse_rule2(teststring, permitted_list, denied_list)
 print(response)'''
 
-
 # Token incorporation operation 
 ## Existance of keyword 
 
-rawstring = "create 5 million rmt#"
-operation = truefalse_rule2(rawstring, permitted_list, denied_list)
-if not operation:
-    formatOutput("noise")
-tokenName = findrule1_1(rawstring, "#")
-if not tokenName:
-    formatOutput("noise")
-transferamount = findrule3(rawstring)
-pdb.set_trace()
+def apply_rule1(*argv):
+    a = argv[0](*argv[1:])
+    if a is False:
+        return None
+    else:
+        return a
 
+
+rawstring = "create 5 million rmt# transfer"
+
+# desired output format - outputreturn('token_incorporation',f"{flodata}", f"{tokenname}", f"{tokenamount}")
+tokenname = apply_rule1(findrule1_1,rawstring,"#")
+print(tokenname)
+denied_list = ['transfer', 'send', 'give']  # keep everything lowercase
+permitted_list = ['incorporate', 'create', 'start']  # keep everything lowercase
+if tokenname is not None:
+    isIncorporate = apply_rule1(truefalse_rule2, rawstring, permitted_list, denied_list)
+
+operationname = apply_rule1(truefalse_rule2, rawstring, permitted_list, denied_list)
+if not operation:
+    formatOutput("noise") 
+
+#response_string = outputreturn('token_incorporation','create 5000 rmt#', 'rmt', 5000.0)
+#print(response_string)
