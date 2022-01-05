@@ -37,8 +37,32 @@ for word in allList:
 
 """ 
 
+search_patterns = {
+    'tokensystem-C':{
+        1:['#']
+    },
+    'smart-contract-creation-C':{
+        1:['@','*','#','$',':'],
+        2:['@','*','#','$',':','#']
+    },
+    'smart-contract-participation-deposit-C':{
+        1:['#','@',':'],
+        2:['#','@','$',':']
+    },
+    'userchoice-trigger':{
+        1:['@',':'] 
+    },
+    'smart-contract-participation-ote-ce-C':{
+        1:['#','@'],
+        2:['#','@','$']
+    },
+    'smart-contract-creation-ce-tokenswap':{
+        1:['@','*','$',':','#','#']
+    }
+}
 
-def findrules(rawstring, special_characters):
+
+def extract_specialcharacter_words(rawstring, special_characters):
     wordList = []
     for word in rawstring.split(' '):
         if word[-1] in special_characters and (len(word) != 1 or word==":"):
@@ -46,13 +70,39 @@ def findrules(rawstring, special_characters):
     return wordList
 
 
-def findFirstCategorization(parsed_list, searchpatterns):
-    for firstCategorization in searchpatterns.keys():
+def find_first_classification(parsed_list, search_patterns):
+    for first_classification in search_patterns.keys():
         counter = 0
-        for key in searchpatterns[firstCategorization].keys():
-            if checkSearchPattern(parsed_list, searchpatterns[firstCategorization][key]):
-                return {'categorization':f"{firstCategorization}",'key':f"{key}",'pattern':searchpatterns[firstCategorization][key]}
+        for key in search_patterns[first_classification].keys():
+            if checkSearchPattern(parsed_list, search_patterns[first_classification][key]):
+                return {'categorization':f"{first_classification}",'key':f"{key}",'pattern':search_patterns[first_classification][key]}
     return {'categorization':"noise"}
+
+
+def sort_specialcharacter_wordlist(inputlist):
+    weight_values = {
+        '@': 5,
+        '*': 4,
+        '#': 3,
+        '$': 2
+    }
+    
+    weightlist = []
+    for word in inputlist:
+        if word.endswith("@"):
+            weightlist.append(5)
+        elif word.endswith("*"):
+            weightlist.append(4)
+        elif word.endswith("#"):
+            weightlist.append(4)
+        elif word.endswith("$"):
+            weightlist.append(4)
+
+
+def classify_rawstring(rawstring):
+    specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
+
+    return find_first_classification(specialcharacter_wordlist, search_patterns)
 
 
 def checkSearchPattern(parsed_list, searchpattern):
@@ -74,35 +124,15 @@ def className(rawstring):
 
     allList = findrules(rawstring,['#','*','@',':'])
 
-    search_patterns = {
-        'tokensystem-C':{
-            1:['#']
-        },
-        'smart-contract-creation-C':{
-            1:['@','*','#','$',':'],
-            2:['@','*','#','$',':','#']
-        },
-        'smart-contract-participation-deposit-C':{
-            1:['#','@',':'],
-            2:['#','@','$',':']
-        },
-        'userchoice-trigger':{
-            1:['@',':']
-        },
-        'smart-contract-participation-ote-ce-C':{
-            1:['#','@'],
-            2:['#','@','$']
-        },
-        'smart-contract-creation-ce-tokenswap':{
-            1:['@','*','$',':','#','#']
-        }
-    }
-
     pattern_list1 = ['rmt@','rmt*',':',"rmt#","rmt#"]
     pattern_list2 = ['rmt#',':',"rmt@"]
     pattern_list3 = ['rmt#']
-    patternmatch = findFirstCategorization(pattern_list3, search_patterns)
+    pattern_list4 = ["rmt@","one-time-event*","floAddress$",':',"rupee#","bioscope#"]
+    patternmatch = find_first_classification(pattern_list4, search_patterns)
     print(f"Patternmatch is {patternmatch}")
 
+
 rawstring = "test rmt# rmt@ rmt* : rmt# rmt# test" 
-className(rawstring)
+#className(rawstring)
+text = 'Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) userChoices=Narendra Modi wins| Narendra Modi loses (3) expiryTime= Wed May 22 2019 21:00:00 GMT+0530'
+print(classify_rawstring(text))
