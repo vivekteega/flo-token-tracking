@@ -110,7 +110,7 @@
     ['#']                      -  Token particiation
 
 
-    ['@','*','#','$',':']      -  Smart contract creation user-choice  
+    ['@','*','#','$',':']      -  Smart contract creation ote-userchoice  
     ['@','*','#','$',':','#']
 
     ['@','*','#','$',':']      -  Smart contract creation - ote-timebased
@@ -145,5 +145,19 @@ Conflicts -
 2. Smart contract CREATION of the type one-time-event-userchoice | one-time-event-timebased 
 3. Smart contract PARTICIPATION user-choice | Smart contract DEPOSIT continuos-event token-swap
 4. Smart contract PARTICIPATION one-time-event-timebased | Smart contract participation - continuos event - tokenswap 
+
+'''
+
+'''
+
+Emerging parser design 
+
+Phase 1 - Input processing | Special character position based classification and noise detection (FINISHED)
+Phase 2 - Conflict recognition (FINISHED)
+Phase 3 - Category based keyword checks 
+Phase 4 - Parser rules for finding data 
+Phase 5 - Rules for applying parser rules 
+Phase 6 - Category based data field extraction 
+Phase 7 - Output formatting and return (FINISHED)
 
 '''
