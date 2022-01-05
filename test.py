@@ -61,6 +61,29 @@ search_patterns = {
     }
 }
 
+conflict_matrix = {
+    'tokensystem-C':{
+        # Check for send, check for create, if both are there noise, else conflict resolved
+        'tokentransfer',
+        'tokencreation'
+    },
+    'smart-contract-creation-C':{
+        # Check contract-conditions for userchoice, if present then userchoice contract, else time based contract
+        'creation-one-time-event-userchoice',
+        'creation-one-time-event-timebased'
+    },
+    'smart-contract-participation-deposit-C':{
+        # Check *-word, its either one-time-event or a continuos-event
+        'participation-one-time-event-userchoice',
+        'deposit-continuos-event-tokenswap'
+    },
+    'smart-contract-participation-ote-ce-C':{
+        # Check *-word, its either one-time-event or a continuos-event
+        'participation-one-time-event-timebased',
+        'participation-continuos-event-tokenswap'
+    }
+}
+
 def extract_specialcharacter_words(rawstring, special_characters):
     wordList = []
     for word in rawstring.strip().split(' '):
@@ -101,7 +124,10 @@ def sort_specialcharacter_wordlist(inputlist):
 def classify_rawstring(rawstring):
     specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
     print(specialcharacter_wordlist)
-    return find_first_classification(specialcharacter_wordlist, search_patterns)
+    first_classication = find_first_classification(specialcharacter_wordlist, search_patterns)
+
+    if first_classication == 
+
 
 
 def checkSearchPattern(parsed_list, searchpattern):
