@@ -50,7 +50,7 @@ search_patterns = {
         2:['#','@','$',':']
     },
     'userchoice-trigger':{
-        1:['@',':'] 
+        1:['@'] 
     },
     'smart-contract-participation-ote-ce-C':{
         1:['#','@'],
@@ -61,10 +61,9 @@ search_patterns = {
     }
 }
 
-
 def extract_specialcharacter_words(rawstring, special_characters):
     wordList = []
-    for word in rawstring.split(' '):
+    for word in rawstring.strip().split(' '):
         if word[-1] in special_characters and (len(word) != 1 or word==":"):
             wordList.append(word)
     return wordList
@@ -101,7 +100,7 @@ def sort_specialcharacter_wordlist(inputlist):
 
 def classify_rawstring(rawstring):
     specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
-
+    print(specialcharacter_wordlist)
     return find_first_classification(specialcharacter_wordlist, search_patterns)
 
 
@@ -134,5 +133,27 @@ def className(rawstring):
 
 rawstring = "test rmt# rmt@ rmt* : rmt# rmt# test" 
 #className(rawstring)
-text = 'Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) userChoices=Narendra Modi wins| Narendra Modi loses (3) expiryTime= Wed May 22 2019 21:00:00 GMT+0530'
-print(classify_rawstring(text))
+text_list = [
+    "create 500 million rmt#",
+
+    "transfer 200 rmt#",
+
+    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) userChoices=Narendra Modi wins| Narendra Modi loses (3) expiryTime= Wed May 22 2019 21:00:00 GMT+0530",
+
+    "send 0.001 rmt# to india-elections-2019@ to FLO address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1 with the userchoice:'narendra modi wins'",
+
+    "india-elections-2019@ winning-choice:'narendra modi wins'",
+
+    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) expiryTime= Wed May 22 2019 21:00:00 GMT+0530",
+
+    "send 0.001 rmt# to india-elections-2019@ to FLO address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1",
+
+    "Create Smart Contract with the name swap-rupee-bioscope@ of the type continuous-event* at the address oRRCHWouTpMSPuL6yZRwFCuh87ZhuHoL78$ with contract-conditions : (1) subtype = tokenswap (2) accepting_token = rupee# (3) selling_token = bioscope# (4) price = '15' (5) priceType = ‘predetermined’ (6) direction = oneway",
+    
+    "Deposit 15 bioscope# to swap-rupee-bioscope@ its FLO address being oRRCHWouTpMSPuL6yZRwFCuh87ZhuHoL78$ with deposit-conditions: (1) expiryTime= Wed Nov 17 2021 21:00:00 GMT+0530 ",
+
+    "Send 15 rupee# to swap-rupee-article@ its FLO address being FJXw6QGVVaZVvqpyF422Aj4FWQ6jm8p2dL$"
+]
+
+for text in text_list:
+    print(f"{classify_rawstring(text)} \n\n")
