@@ -414,23 +414,23 @@ text_list = [
     "Send 15 rupee# to swap-rupee-article@ its FLO address being FJXw6QGVVaZVvqpyF422Aj4FWQ6jm8p2dL$"
 ]
 
-text_list1 = [
-    "create 5 million rmt#"
-]
 
 for text in text_list1:
     text = text_preprocessing(text)
     first_classification = firstclassification_rawstring(text)
     parsed_data = None
     if first_classification['categorization'] == 'tokensystem-C':
-        pdb.set_trace()
+        # Resolving conflict for 'tokensystem-C'
         tokenamount = apply_rule1(extractAmount_rule,text)
         operation = apply_rule1(selectCateogry, text, category1, category2)
-        if operation == 'category1':
+        if operation == 'category1' and tokenamount is not None:
             parsed_data = outputreturn('token_transfer',f"{text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
-        elif operation == 'category2':
+        elif operation == 'category2' and tokenamount is not None:
             parsed_data = outputreturn('token_incorporation',f"{text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
         else:
             parsed_data = outputreturn('noise')
+    else:
+        parsed_data = outputreturn('noise')
 
+    print(f"\n\n{text}")
     print(parsed_data)
