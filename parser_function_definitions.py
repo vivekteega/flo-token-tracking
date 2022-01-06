@@ -106,8 +106,11 @@ def truefalse_rule2(rawstring, permitted_list, denied_list):
     if (foundPermitted in not None) and (foundDenied is None):
         return True
     else:
-        return False 
-    
+        return False
+
+
+def selectCateogry(rawstring, wordlist, category1, category2):
+
 
 """
 CLASSIFY RULES 
@@ -119,7 +122,6 @@ CLASSIFY RULES
 2. Check if it is of the value 'one-time-event' or 'continuos-event'
 
 """
-
 
 """
 REJECT RULES 
@@ -140,7 +142,6 @@ REJECT RULES
 def rejectrule9(rawtext, starword):
     pass
     
-''''''
 
 extractContractConditions(cleanstring, contracttype, blocktime=blockinfo['time'], marker=hashList[0][:-1])
 

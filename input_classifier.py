@@ -1,4 +1,5 @@
 import pdb
+import re
 
 """ 
 Find make lists of #, *, @ words 
@@ -57,6 +58,7 @@ for word in allList:
 rawstring = "test rmt# rmt@ rmt* : rmt# rmt# test" 
 #className(rawstring) '''
 
+# Variable configurations
 search_patterns = {
     'tokensystem-C':{
         1:['#']
@@ -104,20 +106,29 @@ conflict_matrix = {
     }
 }
 
+# Find some value or return as noise
+def apply_rule1(*argv):
+    a = argv[0](*argv[1:])
+    if a is False:
+        return None
+    else:
+        return a
+
+
 def extract_specialcharacter_words(rawstring, special_characters):
     wordList = []
-    for word in rawstring.strip().split(' '):
-        if word[-1] in special_characters and (len(word) != 1 or word==":"):
+    for word in rawstring.split(' '):
+        if (len(word) != 1 or word==":") and word[-1] in special_characters:
             wordList.append(word)
     return wordList
 
 
-def find_first_classification(parsed_list, search_patterns):
+def find_first_classification(parsed_word_list, search_patterns):
     for first_classification in search_patterns.keys():
         counter = 0
         for key in search_patterns[first_classification].keys():
-            if checkSearchPattern(parsed_list, search_patterns[first_classification][key]):
-                return {'categorization':f"{first_classification}",'key':f"{key}",'pattern':search_patterns[first_classification][key]}
+            if checkSearchPattern(parsed_word_list, search_patterns[first_classification][key]):
+                return {'categorization':f"{first_classification}",'key':f"{key}",'pattern':search_patterns[first_classification][key], 'wordlist':parsed_word_list}
     return {'categorization':"noise"}
 
 
@@ -143,7 +154,6 @@ def sort_specialcharacter_wordlist(inputlist):
 
 def classify_rawstring(rawstring):
     specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
-    print(specialcharacter_wordlist)
     first_classification = find_first_classification(specialcharacter_wordlist, search_patterns)
     return first_classification
 
@@ -156,6 +166,54 @@ def checkSearchPattern(parsed_list, searchpattern):
             if not parsed_list[idx].endswith(searchpattern[idx]):
                 return False
         return True
+
+
+def extractAmount_rule(text):
+    base_units = {'thousand': 10 ** 3, 'million': 10 ** 6, 'billion': 10 ** 9, 'trillion': 10 ** 12}
+    textList = text.split(' ')
+    counter = 0
+    value = None
+    for idx, word in enumerate(textList):
+        try:
+            result = float(word)
+            if textList[idx + 1] in base_units:
+                value = result * base_units[textList[idx + 1]]
+                counter = counter + 1
+            else:
+                value = result
+                counter = counter + 1
+        except:
+            for unit in base_units:
+                result = word.split(unit)
+                if len(result) == 2 and result[1] == '' and result[0] != '':
+                    try:
+                        value = float(result[0]) * base_units[unit]
+                        counter = counter + 1
+                    except:
+                        continue
+
+    if counter == 1:
+        return value
+    else:
+        return None
+
+
+def selectCateogry(rawstring, wordlist, category1, category2):
+    
+
+def text_preprocessing(text):
+    # strip white spaces at the beginning and end 
+    processed_text = text.strip()
+    # remove tab spaces
+    processed_text = re.sub('\t', ' ', processed_text)
+    # remove new lines/line changes 
+    processed_text = re.sub('\n', ' ', processed_text)
+    # remove extra whitespaces in between
+    processed_text = ' '.join(processed_text.split())
+    processed_text = re.sub(' +', ' ', processed_text)
+    # make everything lowercase 
+    processed_text = processed_text.lower()
+    return processed_text
 
 
 text_list = [
@@ -180,5 +238,14 @@ text_list = [
     "Send 15 rupee# to swap-rupee-article@ its FLO address being FJXw6QGVVaZVvqpyF422Aj4FWQ6jm8p2dL$"
 ]
 
-for text in text_list:
-    print(f"{classify_rawstring(text)} \n\n")
+text_list1 = [
+    "create 5 million rmt#"
+]
+
+for text in text_list1:
+    text = text_preprocessing(text)
+    first_classification = classify_rawstring(text)
+    if first_classification['categorization'] == 'tokensystem-C':
+        amount = apply_rule1(extractAmount_rule,text)
+        operation = apply_rule1()
+
