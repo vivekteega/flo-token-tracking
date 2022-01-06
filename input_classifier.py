@@ -106,6 +106,8 @@ conflict_matrix = {
     }
 }
 
+# HELPER FUNCTIONS
+
 # Find some value or return as noise
 def apply_rule1(*argv):
     a = argv[0](*argv[1:])
@@ -113,6 +115,132 @@ def apply_rule1(*argv):
         return None
     else:
         return a
+
+
+def outputreturn(*argv):
+    if argv[0] == 'noise':
+        parsed_data = {'type': 'noise'}
+        return parsed_data
+    elif argv[0] == 'token_incorporation':
+        parsed_data = {
+            'type': 'tokenIncorporation',
+            'flodata': argv[1], #string 
+            'tokenIdentification': argv[2], #hashList[0][:-1] 
+            'tokenAmount': argv[3] #initTokens
+            }
+        return parsed_data
+    elif argv[0] == 'token_transfer':
+        parsed_data = {
+            'type': 'transfer', 
+            'transferType': 'token', 
+            'flodata': argv[1], #string
+            'tokenIdentification': argv[2], #hashList[0][:-1]
+            'tokenAmount': argv[3] #amount
+            }
+        return parsed_data
+    elif argv[0] == 'one-time-event-userchoice-smartcontract-incorporation':
+        parsed_data = {
+            'type': 'smartContractIncorporation', 
+            'contractType': 'one-time-event',
+            'tokenIdentification': argv[1], #hashList[0][:-1] 
+            'contractName': argv[2], #atList[0][:-1]
+            'contractAddress': argv[3], #contractaddress[:-1] 
+            'flodata': argv[4], #string
+            'contractConditions': {
+                'contractamount' : argv[5],
+                'minimumsubscriptionamount' : argv[6],
+                'maximumsubscriptionamount' : argv[7],
+                'payeeaddress' : argv[8],
+                'userchoice' : argv[9],
+                'expiryTime' : argv[10]
+            }
+        }
+        return parsed_data
+    elif argv[0] == 'one-time-event-userchoice-smartcontract-participation':
+        parsed_data = {
+            'type': 'transfer', 
+            'transferType': 'smartContract', 
+            'flodata': argv[1], #string
+            'tokenIdentification': argv[2], #hashList[0][:-1]
+            'operation': 'transfer', 
+            'tokenAmount': argv[3], #amount 
+            'contractName': argv[4], #atList[0][:-1]
+            'userChoice': argv[5] #userChoice
+            }
+        return parsed_data
+    elif argv[0] == 'one-time-event-userchoice-smartcontract-trigger':
+        parsed_data = {
+            'type': 'smartContractPays', 
+            'contractName': argv[1], #atList[0][:-1] 
+            'triggerCondition': argv[2] #triggerCondition.group().strip()[1:-1]
+            }
+        return parsed_data
+    elif argv[0] == 'one-time-event-time-smartcontract-incorporation':
+        parsed_data = {
+            'type': 'smartContractIncorporation', 
+            'contractType': 'one-time-event',
+            'tokenIdentification': argv[1], #hashList[0][:-1] 
+            'contractName': argv[2], #atList[0][:-1]
+            'contractAddress': argv[3], #contractaddress[:-1] 
+            'flodata': argv[4], #string
+            'contractConditions': {
+                'contractamount' : argv[5],
+                'minimumsubscriptionamount' : argv[6],
+                'maximumsubscriptionamount' : argv[7],
+                'payeeaddress' : argv[8],
+                'expiryTime' : argv[9]
+            }
+        }
+        return parsed_data
+    elif argv[0] == 'one-time-event-time-smartcontract-participation':
+        parsed_data = {
+            'type': 'transfer', 
+            'transferType': 'smartContract', 
+            'flodata': argv[1], #string
+            'tokenIdentification': argv[2], #hashList[0][:-1]
+            'operation': 'transfer', 
+            'tokenAmount': argv[3], #amount 
+            'contractName': argv[4] #atList[0][:-1]
+            }
+        return parsed_data
+    elif argv[0] == 'continuos-event-token-swap-incorporation':
+        parsed_data = {
+            'type': 'smartContractIncorporation', 
+            'contractType': 'continuos-event',
+            'tokenIdentification': argv[1], #hashList[0][:-1] 
+            'contractName': argv[2], #atList[0][:-1]
+            'contractAddress': argv[3], #contractaddress[:-1] 
+            'flodata': argv[4], #string
+            'contractConditions': {
+                'subtype' : argv[5], #tokenswap
+                'accepting_token' : argv[6],
+                'selling_token' : argv[7],
+                'pricetype' : argv[8],
+                'price' : argv[9],
+            }
+        }
+        return parsed_data
+    elif argv[0] == 'continuos-event-token-swap-deposit':
+        parsed_data = {
+            'type': 'smartContractDeposit',
+            'tokenIdentification': argv[1], #hashList[0][:-1]
+            'depositAmount': argv[2], #depositAmount 
+            'contractName': argv[3], #atList[0][:-1] 
+            'flodata': argv[4], #string
+            'depositConditions': {
+                'expiryTime' : argv[5]
+            }
+        }
+        return parsed_data
+    elif argv[0] == 'continuos-event-token-swap-participation':
+        parsed_data = {
+            'type': 'smartContractParticipation',
+            'tokenIdentification': argv[1], #hashList[0][:-1]
+            'tokenAmount': argv[2], #tokenAmount 
+            'contractName': argv[3], #atList[0][:-1] 
+            'flodata': argv[4] #string 
+        }
+        return parsed_data
 
 
 def extract_specialcharacter_words(rawstring, special_characters):
@@ -152,7 +280,7 @@ def sort_specialcharacter_wordlist(inputlist):
             weightlist.append(4)
 
 
-def classify_rawstring(rawstring):
+def firstclassification_rawstring(rawstring):
     specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
     first_classification = find_first_classification(specialcharacter_wordlist, search_patterns)
     return first_classification
@@ -198,7 +326,55 @@ def extractAmount_rule(text):
         return None
 
 
-def selectCateogry(rawstring, wordlist, category1, category2):
+def findWholeWord(w):
+    return re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search
+
+
+category1 = ['transfer', 'send', 'give']  # keep everything lowercase
+category2 = ['incorporate', 'create', 'start']  # keep everything lowercase
+
+
+def truefalse_rule2(rawstring, permitted_list, denied_list):
+    # Find transfer , send , give
+    foundPermitted = None 
+    foundDenied = None
+
+    for word in permitted_list:
+        if findWholeWord(word)(rawstring):
+            foundPermitted = word
+            break
+
+    for word in denied_list:
+        if findWholeWord(word)(rawstring):
+            foundDenied = word
+            break
+    
+    if (foundPermitted is not None) and (foundDenied is None):
+        return True
+    else:
+        return False
+
+
+def selectCateogry(rawstring, category1, category2):
+    foundCategory1 = None
+    foundCategory2 = None
+
+    for word in category1:
+        if findWholeWord(word)(rawstring):
+            foundCategory1 = word
+            break
+
+    for word in category2:
+        if findWholeWord(word)(rawstring):
+            foundCategory2 = word
+            break
+    
+    if ((foundCategory1 is not None) and (foundCategory2 is not None)) or ((foundCategory1 is None) and (foundCategory2 is None)):
+        return False
+    elif foundCategory1 is not None:
+        return 'category1'
+    elif foundCategory2 is not None:
+        return 'category2'
     
 
 def text_preprocessing(text):
@@ -244,8 +420,17 @@ text_list1 = [
 
 for text in text_list1:
     text = text_preprocessing(text)
-    first_classification = classify_rawstring(text)
+    first_classification = firstclassification_rawstring(text)
+    parsed_data = None
     if first_classification['categorization'] == 'tokensystem-C':
-        amount = apply_rule1(extractAmount_rule,text)
-        operation = apply_rule1()
+        pdb.set_trace()
+        tokenamount = apply_rule1(extractAmount_rule,text)
+        operation = apply_rule1(selectCateogry, text, category1, category2)
+        if operation == 'category1':
+            parsed_data = outputreturn('token_transfer',f"{text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+        elif operation == 'category2':
+            parsed_data = outputreturn('token_incorporation',f"{text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+        else:
+            parsed_data = outputreturn('noise')
 
+    print(parsed_data)
