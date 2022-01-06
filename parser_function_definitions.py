@@ -12,7 +12,7 @@ Special character words - A word followed by either of the special character(#,*
 """
 FIND RULES 
 
-1. Idenitfy all Special character words in a text string >> and output as a list of those words
+1. Identify all Special character words in a text string >> and output as a list of those words
 2. Apply rule 1, but only before a marker or keyword like ":" and output as a list of those words 
 3. Find a number in the string 
 5. Check for an occurance of exact order of pattern of special character words 
