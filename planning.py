@@ -1,3 +1,18 @@
+TEMPLATE FOR SECOND STAGE AFTER INPUT CLASSIFIER
+
+IF BLOCK If the output of input classifier is tokensystem-C, 
+JUST LINEARLY START BUILDING IT
+
+then first start building the known outputs
+
+// outputreturn('token_incorporation',f"{flodata}", f"{tokenname}", f"{tokenamount}")
+
+f"{flodata} = rawstring
+f"{tokenname}" = wordlist entry
+tokensystem-C-resolved = Output of second stage clasification
+f"{tokenamount}" = find_number_function
+
+
 '''
     The problem we are facing:
 
