@@ -37,6 +37,26 @@ for word in allList:
 
 """ 
 
+'''def className(rawstring):
+    # Create a list that contains @ , # , * and : ; in actual order of occurence with their words. Only : is allowed to exist without a word in front of it. 
+    # Check for 1 @ only followed by :, and the class is trigger
+    # Check for 1 # only, then the class is tokensystem
+    # Check for @ in the first position, * in the second position, # in the third position and : in the fourth position, then class is one time event creation 
+    # Check for @ in the first position, * in the second position and : in the third position, then hash is in 4th position, then hash in 5th position | Token swap creation 
+
+    allList = findrules(rawstring,['#','*','@',':'])
+
+    pattern_list1 = ['rmt@','rmt*',':',"rmt#","rmt#"]
+    pattern_list2 = ['rmt#',':',"rmt@"]
+    pattern_list3 = ['rmt#']
+    pattern_list4 = ["rmt@","one-time-event*","floAddress$",':',"rupee#","bioscope#"]
+    patternmatch = find_first_classification(pattern_list4, search_patterns)
+    print(f"Patternmatch is {patternmatch}")
+
+
+rawstring = "test rmt# rmt@ rmt* : rmt# rmt# test" 
+#className(rawstring) '''
+
 search_patterns = {
     'tokensystem-C':{
         1:['#']
@@ -124,10 +144,8 @@ def sort_specialcharacter_wordlist(inputlist):
 def classify_rawstring(rawstring):
     specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
     print(specialcharacter_wordlist)
-    first_classication = find_first_classification(specialcharacter_wordlist, search_patterns)
-
-    if first_classication == 
-
+    first_classification = find_first_classification(specialcharacter_wordlist, search_patterns)
+    return first_classification
 
 
 def checkSearchPattern(parsed_list, searchpattern):
@@ -140,25 +158,6 @@ def checkSearchPattern(parsed_list, searchpattern):
         return True
 
 
-def className(rawstring):
-    # Create a list that contains @ , # , * and : ; in actual order of occurence with their words. Only : is allowed to exist without a word in front of it. 
-    # Check for 1 @ only followed by :, and the class is trigger
-    # Check for 1 # only, then the class is tokensystem
-    # Check for @ in the first position, * in the second position, # in the third position and : in the fourth position, then class is one time event creation 
-    # Check for @ in the first position, * in the second position and : in the third position, then hash is in 4th position, then hash in 5th position | Token swap creation 
-
-    allList = findrules(rawstring,['#','*','@',':'])
-
-    pattern_list1 = ['rmt@','rmt*',':',"rmt#","rmt#"]
-    pattern_list2 = ['rmt#',':',"rmt@"]
-    pattern_list3 = ['rmt#']
-    pattern_list4 = ["rmt@","one-time-event*","floAddress$",':',"rupee#","bioscope#"]
-    patternmatch = find_first_classification(pattern_list4, search_patterns)
-    print(f"Patternmatch is {patternmatch}")
-
-
-rawstring = "test rmt# rmt@ rmt* : rmt# rmt# test" 
-#className(rawstring)
 text_list = [
     "create 500 million rmt#",
 
