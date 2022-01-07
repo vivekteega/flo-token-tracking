@@ -5,7 +5,7 @@ import arrow
 """ 
 Find make lists of #, *, @ words 
 
-If only 1 hash word and nothing else, then it is token related ( tokencreation or tokentransfer )
+If only 1 hash word and nothing else, then it is token related ( tokencreation or tokentransfer ) 
 
 If @ is present, then we know it is smart contract related 
    @ (#)pre:       -  participation , deposit 
@@ -227,7 +227,7 @@ def outputreturn(*argv):
                 'expiryTime' : argv[9]
             }
         }
-        return parsed_data
+        return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'one-time-event-time-smartcontract-participation':
         parsed_data = {
             'type': 'transfer', 
@@ -436,6 +436,12 @@ def find_original_case(contract_address, original_text):
         None
 
 
+def find_word_index_fromstring(originaltext, word):
+    lowercase_text = originaltext.lower()
+    result = lowercase_text.find(word)
+    return originaltext[result:result+len(word)]
+
+
 def find_first_classification(parsed_word_list, search_patterns):
     for first_classification in search_patterns.keys():
         counter = 0
@@ -600,9 +606,7 @@ text_list = [
 ]
 
 text_list1 = [
-    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) userChoices=Narendra Modi wins| Narendra Modi loses (3) expiryTime= Wed May 22 2019 21:00:00 GMT+0530",
-    
-    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) expiryTime= Wed May 22 2019 21:00:00 GMT+0530"
+    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) expiryTime= Wed May 22 2019 21:00:00 GMT+0530 (3) payeeAddress='F2sfawpoejgoiwjeogieowijgosBpjJ2dPR1'"
 ]
 
 
@@ -629,8 +633,8 @@ for text in text_list1:
         contract_token = extract_special_character_word(first_classification['wordlist'],'#')
         contract_address = extract_special_character_word(first_classification['wordlist'],'$')
         contract_address = find_original_case(contract_address, original_text)
-        contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token)  
-        if not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeaddress']]):
+        contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token)
+        if not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeAddress']]):
             parsed_data = outputreturn('noise')
         else:
             minimum_subscription_amount = ''
@@ -642,11 +646,11 @@ for text in text_list1:
 
             if 'userchoices' in contract_conditions.keys():
                 parsed_data = outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
-            else 'payeeaddress' in contract_conditions.keys():
-                parsed_data = outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeaddress']}", f"{contract_conditions['expiryTime']}")
+            elif 'payeeAddress' in contract_conditions.keys():
+                contract_conditions['payeeAddress'] = find_word_index_fromstring(original_text,contract_conditions['payeeAddress'])
+                parsed_data = outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
         
     else:
         parsed_data = outputreturn('noise')
 
-    pdb.set_trace() 
-    #print(parsed_data) 
+    print(f"{parsed_data}\n") 

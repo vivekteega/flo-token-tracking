@@ -6,12 +6,12 @@ JUST LINEARLY START BUILDING IT
 
 then first start building the known outputs
 
-// outputreturn('token_incorporation',f"{flodata}", f"{tokenname}", f"{tokenamount}")
+// outputreturn('token_incorporation',f"{flodata}", f"{tokenname}", f"{tokenamount}") 
 
-f"{flodata} = rawstring
-f"{tokenname}" = wordlist entry
-tokensystem-C-resolved = Output of second stage clasification
-f"{tokenamount}" = find_number_function
+f"{flodata} = rawstring 
+f"{tokenname}" = wordlist entry 
+tokensystem-C-resolved = Output of second stage classification 
+f"{tokenamount}" = find_number_function 
 '''
 
 '''
@@ -25,7 +25,7 @@ f"{tokenamount}" = find_number_function
 
     * Smart Contract transaction of the type continuous event has 2 # after colon 
 
-    * So we are checking for hashes based on the type of smart contract(identified by *)
+    * So we are checking for hashes based on the type of smart contract(identified by *) 
 
     * But the above check disregards checking hashes in token transactions 
 '''
