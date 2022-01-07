@@ -133,11 +133,13 @@ def outputreturn_parameterlist(nameoflist, value):
     return nameoflist
 
 
+outputreturn('noise')
+
 outputreturn('token_incorporation',f"{flodata}", f"{tokenname}", f"{tokenamount}")
 
 outputreturn('token_transfer',f"{flodata}", f"{tokenname}", f"{tokenamount}")
 
-outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{tokenIdentification}", f"{contractName}", f"{contractAddress}", f"{flodata}", f"{contractamount}", f"{minimumsubscriptionamount}", f"{maximumsubscriptionamount}", f"{payeeaddress}", f"{userchoice}", f"{expiryTime}")
+outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{tokenIdentification}", f"{contractName}", f"{contractAddress}", f"{flodata}", f"{contractamount}", f"{minimumsubscriptionamount}", f"{maximumsubscriptionamount}", f"{userchoice}", f"{expiryTime}")
 
 outputreturn('one-time-event-userchoice-smartcontract-participation',f"{flodata}", f"{tokenIdentification}", f"{tokenAmount}", f"{contractName}", f"{userChoice}")
 

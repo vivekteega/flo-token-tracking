@@ -1,5 +1,6 @@
 import pdb
 import re
+import arrow
 
 """ 
 Find make lists of #, *, @ words 
@@ -7,10 +8,10 @@ Find make lists of #, *, @ words
 If only 1 hash word and nothing else, then it is token related ( tokencreation or tokentransfer )
 
 If @ is present, then we know it is smart contract related 
-    @ (#)pre:       -  participation , deposit 
-    @ * (#)pre:     -  one time event creation 
-    @ * (# #)post:  -  token swap creation 
-    @               -  trigger 
+   @ (#)pre:       -  participation , deposit 
+   @ * (#)pre:     -  one time event creation 
+   @ * (# #)post:  -  token swap creation 
+   @               -  trigger 
 
 Check for 1 @ only 
 Check for 1 # only 
@@ -58,7 +59,7 @@ for word in allList:
 rawstring = "test rmt# rmt@ rmt* : rmt# rmt# test" 
 #className(rawstring) '''
 
-# Variable configurations
+# Variable configurations 
 search_patterns = {
     'tokensystem-C':{
         1:['#']
@@ -106,15 +107,51 @@ conflict_matrix = {
     }
 }
 
-# HELPER FUNCTIONS
+months = {
+    'jan': 1,
+    'feb': 2,
+    'mar': 3,
+    'apr': 4,
+    'may': 5,
+    'jun': 6,
+    'jul': 7,
+    'aug': 8,
+    'sep': 9,
+    'oct': 10,
+    'nov': 11,
+    'dec': 12
+}
 
-# Find some value or return as noise
+# HELPER FUNCTIONS 
+
+# Find some value or return as noise 
 def apply_rule1(*argv):
     a = argv[0](*argv[1:])
     if a is False:
         return None
     else:
         return a
+
+
+# conflict_list = [['userchoice','payeeaddress'],['userchoice','xxx']]
+def resolve_incategory_conflict(input_dictionary , conflict_list):
+    for conflict_pair in conflict_list:
+        key0 = conflict_pair[0]
+        key1 = conflict_pair[1]
+        dictionary_keys = input_dictionary.keys()
+        if (key0 in dictionary_keys and key1 in dictionary_keys) or (key0 not in dictionary_keys and key1 not in dictionary_keys):
+            return False
+        else:
+            return True
+
+
+def remove_empty_from_dict(d):
+    if type(d) is dict:
+        return dict((k, remove_empty_from_dict(v)) for k, v in d.items() if v and remove_empty_from_dict(v))
+    elif type(d) is list:
+        return [remove_empty_from_dict(v) for v in d if v and remove_empty_from_dict(v)]
+    else:
+        return d
 
 
 def outputreturn(*argv):
@@ -150,12 +187,11 @@ def outputreturn(*argv):
                 'contractamount' : argv[5],
                 'minimumsubscriptionamount' : argv[6],
                 'maximumsubscriptionamount' : argv[7],
-                'payeeaddress' : argv[8],
-                'userchoice' : argv[9],
-                'expiryTime' : argv[10]
+                'userchoice' : argv[8],
+                'expiryTime' : argv[9]
             }
         }
-        return parsed_data
+        return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'one-time-event-userchoice-smartcontract-participation':
         parsed_data = {
             'type': 'transfer', 
@@ -249,6 +285,155 @@ def extract_specialcharacter_words(rawstring, special_characters):
         if (len(word) != 1 or word==":") and word[-1] in special_characters:
             wordList.append(word)
     return wordList
+
+
+def extract_contract_conditions(text, contracttype, marker=None, blocktime=None):
+    rulestext = re.split('contract-conditions:\s*', text)[-1]
+    # rulelist = re.split('\d\.\s*', rulestext)
+    rulelist = []
+    numberList = re.findall(r'\(\d\d*\)', rulestext)
+
+    for idx, item in enumerate(numberList):
+        numberList[idx] = int(item[1:-1])
+
+    numberList = sorted(numberList)
+    for idx, item in enumerate(numberList):
+        if numberList[idx] + 1 != numberList[idx + 1]:
+            print('Contract condition numbers are not in order')
+            return None
+        if idx == len(numberList) - 2:
+            break
+
+    for i in range(len(numberList)):
+        rule = rulestext.split('({})'.format(
+            i + 1))[1].split('({})'.format(i + 2))[0]
+        rulelist.append(rule.strip())
+
+    if contracttype == 'one-time-event':
+        extractedRules = {}
+        for rule in rulelist:
+            if rule == '':
+                continue
+            elif rule[:10] == 'expirytime':
+                expirytime = re.split('expirytime[\s]*=[\s]*', rule)[1].strip()
+                try:
+                    expirytime_split = expirytime.split(' ')
+                    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                    expirytime_object = arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
+                    '''blocktime_object = arrow.get(blocktime)
+                    if expirytime_object < blocktime_object:
+                        print('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
+                        return None'''
+                    extractedRules['expiryTime'] = expirytime
+                except:
+                    print('Error parsing expiry time')
+                    return None
+
+        for rule in rulelist:
+            if rule == '':
+                continue
+            elif rule[:14] == 'contractamount':
+                pattern = re.compile('[^contractamount\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                contractamount = searchResult.split(marker)[0]
+                try:
+                    extractedRules['contractAmount'] = float(contractamount)
+                except:
+                    print("Contract amount entered is not a decimal")
+            elif rule[:11] == 'userchoices':
+                pattern = re.compile('[^userchoices\s*=\s*].*')
+                conditions = pattern.search(rule).group(0)
+                conditionlist = conditions.split('|')
+                extractedRules['userchoices'] = {}
+                for idx, condition in enumerate(conditionlist):
+                    extractedRules['userchoices'][idx] = condition.strip()
+            elif rule[:25] == 'minimumsubscriptionamount':
+                pattern = re.compile('[^minimumsubscriptionamount\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                minimumsubscriptionamount = searchResult.split(marker)[0]
+                try:
+                    extractedRules['minimumsubscriptionamount'] = float(
+                        minimumsubscriptionamount)
+                except:
+                    print("Minimum subscription amount entered is not a decimal")
+            elif rule[:25] == 'maximumsubscriptionamount':
+                pattern = re.compile('[^maximumsubscriptionamount\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                maximumsubscriptionamount = searchResult.split(marker)[0]
+                try:
+                    extractedRules['maximumsubscriptionamount'] = float(
+                        maximumsubscriptionamount)
+                except:
+                    print("Maximum subscription amount entered is not a decimal")
+            elif rule[:12] == 'payeeaddress':
+                pattern = re.compile('[^payeeAddress\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                payeeAddress = searchResult.split(marker)[0]
+                extractedRules['payeeAddress'] = payeeAddress
+
+        if len(extractedRules) > 1 and 'expiryTime' in extractedRules:
+            return extractedRules
+        else:
+            return None
+
+    elif contracttype == 'continuous-event':
+        extractedRules = {}
+        for rule in rulelist:
+            print(rule)
+            if rule == '':
+                continue
+            elif rule[:7] == 'subtype':
+                # todo : recheck the regular expression for subtype, find an elegant version which covers all permutations and combinations
+                '''pattern = re.compile('[^subtype\s*=].*')
+                searchResult = pattern.search(rule).group(0)
+                subtype = searchResult.split(marker)[0]'''
+                extractedRules['subtype'] = rule.split('=')[1].strip()
+            elif rule[:15] == 'accepting_token':
+                pattern = re.compile('[^accepting_token\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                accepting_token = searchResult.split(marker)[0]
+                extractedRules['accepting_token'] = accepting_token
+            elif rule[:13] == 'selling_token':
+                pattern = re.compile('[^selling_token\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                selling_token = searchResult.split(marker)[0]
+                extractedRules['selling_token'] = selling_token
+            elif rule[:9].lower() == 'pricetype':
+                pattern = re.compile('[^pricetype\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                priceType = searchResult.split(marker)[0]
+                extractedRules['priceType'] = priceType
+            elif rule[:5] == 'price':
+                pattern = re.compile('[^price\s*=\s*].*')
+                searchResult = pattern.search(rule).group(0)
+                price = searchResult.split(marker)[0]
+                if price[0]=="'" or price[0]=='"':
+                    price = price[1:]
+                if price[-1]=="'" or price[-1]=='"':
+                    price = price[:-1]
+                extractedRules['price'] = float(price)
+            # else:
+            #    pdb.set_trace()
+        if len(extractedRules) > 1:
+            return extractedRules
+        else:
+            return None
+    return None
+
+
+def extract_special_character_word(special_character_list, special_character):
+    for word in special_character_list:
+        if word.endswith(special_character):
+            return word[:-1]
+    return False
+
+
+def find_original_case(contract_address, original_text):
+    dollar_word = extract_specialcharacter_words(original_text,["$"])
+    if len(dollar_word)==1 and dollar_word[0][:-1].lower()==contract_address:
+        return dollar_word[0][:-1]
+    else:
+        None
 
 
 def find_first_classification(parsed_word_list, search_patterns):
@@ -355,7 +540,7 @@ def truefalse_rule2(rawstring, permitted_list, denied_list):
         return False
 
 
-def selectCateogry(rawstring, category1, category2):
+def selectCategory(rawstring, category1, category2):
     foundCategory1 = None
     foundCategory2 = None
 
@@ -377,9 +562,9 @@ def selectCateogry(rawstring, category1, category2):
         return 'category2'
     
 
-def text_preprocessing(text):
+def text_preprocessing(original_text):
     # strip white spaces at the beginning and end 
-    processed_text = text.strip()
+    processed_text = original_text.strip()
     # remove tab spaces
     processed_text = re.sub('\t', ' ', processed_text)
     # remove new lines/line changes 
@@ -389,7 +574,7 @@ def text_preprocessing(text):
     processed_text = re.sub(' +', ' ', processed_text)
     # make everything lowercase 
     processed_text = processed_text.lower()
-    return processed_text
+    return original_text,processed_text
 
 
 text_list = [
@@ -414,23 +599,54 @@ text_list = [
     "Send 15 rupee# to swap-rupee-article@ its FLO address being FJXw6QGVVaZVvqpyF422Aj4FWQ6jm8p2dL$"
 ]
 
+text_list1 = [
+    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) userChoices=Narendra Modi wins| Narendra Modi loses (3) expiryTime= Wed May 22 2019 21:00:00 GMT+0530",
+    
+    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) expiryTime= Wed May 22 2019 21:00:00 GMT+0530"
+]
+
 
 for text in text_list1:
-    text = text_preprocessing(text)
-    first_classification = firstclassification_rawstring(text)
+    original_text, processed_text = text_preprocessing(text)
+    first_classification = firstclassification_rawstring(processed_text)
     parsed_data = None
+
     if first_classification['categorization'] == 'tokensystem-C':
-        # Resolving conflict for 'tokensystem-C'
-        tokenamount = apply_rule1(extractAmount_rule,text)
-        operation = apply_rule1(selectCateogry, text, category1, category2)
+        # Resolving conflict for 'tokensystem-C' 
+        tokenamount = apply_rule1(extractAmount_rule,processed_text)
+        operation = apply_rule1(selectCategory, processed_text, category1, category2)
         if operation == 'category1' and tokenamount is not None:
-            parsed_data = outputreturn('token_transfer',f"{text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+            parsed_data = outputreturn('token_transfer',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
         elif operation == 'category2' and tokenamount is not None:
-            parsed_data = outputreturn('token_incorporation',f"{text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+            parsed_data = outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
         else:
             parsed_data = outputreturn('noise')
+
+    if first_classification['categorization'] == 'smart-contract-creation-C':
+        # Resolving conflict for 'smart-contract-creation-C'
+        contract_type = extract_special_character_word(first_classification['wordlist'],'*')
+        contract_name = extract_special_character_word(first_classification['wordlist'],'@')
+        contract_token = extract_special_character_word(first_classification['wordlist'],'#')
+        contract_address = extract_special_character_word(first_classification['wordlist'],'$')
+        contract_address = find_original_case(contract_address, original_text)
+        contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token)  
+        if not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeaddress']]):
+            parsed_data = outputreturn('noise')
+        else:
+            minimum_subscription_amount = ''
+            if 'minimumsubscriptionamount' in contract_conditions.keys():
+                minimum_subscription_amount = contract_conditions['minimumsubscriptionamount']
+            maximum_subscription_amount = ''
+            if 'maximumsubscriptionamount' in contract_conditions.keys():
+                maximum_subscription_amount = contract_conditions['maximumsubscriptionamount']
+
+            if 'userchoices' in contract_conditions.keys():
+                parsed_data = outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
+            else 'payeeaddress' in contract_conditions.keys():
+                parsed_data = outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeaddress']}", f"{contract_conditions['expiryTime']}")
+        
     else:
         parsed_data = outputreturn('noise')
 
-    print(f"\n\n{text}")
-    print(parsed_data)
+    pdb.set_trace() 
+    #print(parsed_data) 
