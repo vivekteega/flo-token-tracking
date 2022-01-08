@@ -187,4 +187,8 @@ Allowed formats of Smart Contract and token names
 
 Check for FLO Address 
 
+Write checks for conditions inside contract conditions 
+Serious error handling for contract-conditions
+* 2222:00 gives error 
+* contractAmount = 0.022rt gives error | check if space is allowed between 0.022 rt
 '''

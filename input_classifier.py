@@ -650,13 +650,14 @@ text_list = [
 ]
 
 text_list1 = [
-    "CReate __rMt# 200crOre hello vivek "
+    "send 0.001 rmt# to india-elections-2019@ to FLO address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1 with the userchoice:'narendra modi wins'"
 ]
 
 def super_main_function(text):
     original_text, processed_text = text_preprocessing(text)
     first_classification = firstclassification_rawstring(processed_text)
     parsed_data = None
+    pdb.set_trace()
 
     if first_classification['categorization'] == 'tokensystem-C':
         # Resolving conflict for 'tokensystem-C' 
@@ -726,7 +727,13 @@ def super_main_function(text):
                     return outputreturn('noise')
                 else:
                     return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
-        
+
+    if first_classification['categorization'] == 'smart-contract-participation-ote-ce-C':
+        # either participation of one-time-event contract or 
+        operation = apply_rule1(selectCategory, processed_text, category1, category2)
+        if operation == 'category1' and tokenamount is not None:
+            return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", f"{tokenamount}")
+
     return outputreturn('noise')
 
 
