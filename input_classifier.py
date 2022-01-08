@@ -474,7 +474,6 @@ def sort_specialcharacter_wordlist(inputlist):
 
 
 def firstclassification_rawstring(rawstring):
-    #pdb.set_trace()
     specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
     first_classification = find_first_classification(specialcharacter_wordlist, search_patterns)
     return first_classification
@@ -506,8 +505,6 @@ def extractAmount_rule(text):
                 value = result
                 counter = counter + 1
         except:
-            #if word=='5000':
-            #    pdb.set_trace()
             for unit in base_units:
                 result = word.split(unit)
                 print(result)
@@ -517,7 +514,7 @@ def extractAmount_rule(text):
                         counter = counter + 1
                     except:
                         continue
-    #pdb.set_trace()
+
     if counter == 1:
         return value
     else:
@@ -563,9 +560,9 @@ def check_existence_of_keyword(inputlist, keywordlist):
     return True
 
 
-category1 = ['transfer', 'send', 'give']  # keep everything lowercase
+send_category = ['transfer', 'send', 'give']  # keep everything lowercase
 category2 = ['incorporate', 'create', 'start']  # keep everything lowercase
-category3 = ['submit','deposit']
+deposit_category = ['submit','deposit']
 
 
 def truefalse_rule2(rawstring, permitted_list, denied_list):
@@ -609,7 +606,36 @@ def selectCategory(rawstring, category1, category2):
         return 'category1'
     elif foundCategory2 is not None:
         return 'category2'
-    
+
+
+def select_category_reject(rawstring, category1, category2, reject_list):
+    foundCategory1 = None
+    foundCategory2 = None
+    rejectCategory = None
+
+    for word in category1:
+        if findWholeWord(word)(rawstring):
+            foundCategory1 = word
+            break
+
+    for word in category2:
+        if findWholeWord(word)(rawstring):
+            foundCategory2 = word
+            break
+
+    for word in reject_list:
+        if findWholeWord(word)(rawstring):
+            rejectCategory = word
+            break
+
+        
+    if ((foundCategory1 is not None) and (foundCategory2 is not None)) or ((foundCategory1 is None) and (foundCategory2 is None)) or (rejectCategory is not None):
+        return False
+    elif foundCategory1 is not None:
+        return 'category1'
+    elif foundCategory2 is not None:
+        return 'category2'
+  
 
 def text_preprocessing(original_text):
     # strip white spaces at the beginning and end 
@@ -624,7 +650,6 @@ def text_preprocessing(original_text):
     # make everything lowercase 
     processed_text = processed_text.lower()
     return original_text,processed_text
-
 
 
 text_list = [
@@ -657,6 +682,7 @@ def super_main_function(text):
     original_text, processed_text = text_preprocessing(text)
     first_classification = firstclassification_rawstring(processed_text)
     parsed_data = None
+
     pdb.set_trace()
 
     if first_classification['categorization'] == 'tokensystem-C':
@@ -669,7 +695,7 @@ def super_main_function(text):
         if not tokenamount:
             return outputreturn('noise')
 
-        operation = apply_rule1(selectCategory, processed_text, category1, category2)
+        operation = apply_rule1(selectCategory, processed_text, send_category, category2)
         if operation == 'category1' and tokenamount is not None:
             return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", f"{tokenamount}")
         elif operation == 'category2' and tokenamount is not None:
@@ -679,7 +705,7 @@ def super_main_function(text):
 
     if first_classification['categorization'] == 'smart-contract-creation-C':
         # Resolving conflict for 'smart-contract-creation-C'
-        operation = apply_rule1(selectCategory, processed_text, category2, category1+category3)
+        operation = apply_rule1(selectCategory, processed_text, category2, send_category+deposit_category)
         if not operation:
             return outputreturn('noise') 
 
@@ -728,11 +754,38 @@ def super_main_function(text):
                 else:
                     return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
 
-    if first_classification['categorization'] == 'smart-contract-participation-ote-ce-C':
+    if first_classification['categorization'] == 'smart-contract-participation-deposit-C':
         # either participation of one-time-event contract or 
-        operation = apply_rule1(selectCategory, processed_text, category1, category2)
-        if operation == 'category1' and tokenamount is not None:
-            return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", f"{tokenamount}")
+        operation = apply_rule1(select_category_reject, processed_text, send_category, deposit_category, category2)
+        print(operation)
+        if not operation:
+            return outputreturn('noise')
+        elif operation == 'category1':
+            print('category1')
+            parsed_data = {
+                'type': 'transfer', 
+                'transferType': 'smartContract', 
+                'flodata': argv[1], #string
+                'tokenIdentification': argv[2], #hashList[0][:-1]
+                'operation': 'transfer', 
+                'tokenAmount': argv[3], #amount 
+                'contractName': argv[4], #atList[0][:-1]
+                'userChoice': argv[5] #userChoice
+                }
+            return parsed_data
+        elif operation == 'category2':
+            print('category2')
+            parsed_data = {
+                'type': 'smartContractDeposit',
+                'tokenIdentification': argv[1], #hashList[0][:-1]
+                'depositAmount': argv[2], #depositAmount 
+                'contractName': argv[3], #atList[0][:-1] 
+                'flodata': argv[4], #string
+                'depositConditions': {
+                    'expiryTime' : argv[5]
+                }
+            }
+            return parsed_data
 
     return outputreturn('noise')
 
