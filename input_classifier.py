@@ -1,6 +1,7 @@
 import pdb
 import re
 import arrow
+import pybtc
 
 """ 
 Find make lists of #, *, @ words 
@@ -39,7 +40,8 @@ for word in allList:
 
 """ 
 
-'''def className(rawstring):
+'''
+def className(rawstring):
     # Create a list that contains @ , # , * and : ; in actual order of occurence with their words. Only : is allowed to exist without a word in front of it. 
     # Check for 1 @ only followed by :, and the class is trigger
     # Check for 1 # only, then the class is tokensystem
@@ -472,6 +474,7 @@ def sort_specialcharacter_wordlist(inputlist):
 
 
 def firstclassification_rawstring(rawstring):
+    #pdb.set_trace()
     specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
     first_classification = find_first_classification(specialcharacter_wordlist, search_patterns)
     return first_classification
@@ -493,6 +496,7 @@ def extractAmount_rule(text):
     counter = 0
     value = None
     for idx, word in enumerate(textList):
+        print(word)
         try:
             result = float(word)
             if textList[idx + 1] in base_units:
@@ -502,15 +506,18 @@ def extractAmount_rule(text):
                 value = result
                 counter = counter + 1
         except:
+            #if word=='5000':
+            #    pdb.set_trace()
             for unit in base_units:
                 result = word.split(unit)
+                print(result)
                 if len(result) == 2 and result[1] == '' and result[0] != '':
                     try:
                         value = float(result[0]) * base_units[unit]
                         counter = counter + 1
                     except:
                         continue
-
+    #pdb.set_trace()
     if counter == 1:
         return value
     else:
@@ -521,8 +528,30 @@ def findWholeWord(w):
     return re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search
 
 
+def check_flo_address(floaddress):
+    if pybtc.is_address_valid(floaddress):
+        return floaddress
+    else:
+        return False
+
+
+# Regex pattern for Smart Contract and Token name ^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$
+def check_regex(pattern, test_string):
+    matched = re.match(pattern, test_string)
+    is_match = bool(matched)
+    return is_match
+
+
+def check_existence_of_keyword(inputlist, keywordlist):
+    for word in keywordlist:
+       if not word in inputlist:
+           return False
+    return True
+
+
 category1 = ['transfer', 'send', 'give']  # keep everything lowercase
 category2 = ['incorporate', 'create', 'start']  # keep everything lowercase
+category3 = ['submit','deposit']
 
 
 def truefalse_rule2(rawstring, permitted_list, denied_list):
@@ -559,7 +588,7 @@ def selectCategory(rawstring, category1, category2):
         if findWholeWord(word)(rawstring):
             foundCategory2 = word
             break
-    
+        
     if ((foundCategory1 is not None) and (foundCategory2 is not None)) or ((foundCategory1 is None) and (foundCategory2 is None)):
         return False
     elif foundCategory1 is not None:
@@ -581,6 +610,7 @@ def text_preprocessing(original_text):
     # make everything lowercase 
     processed_text = processed_text.lower()
     return original_text,processed_text
+
 
 
 text_list = [
@@ -606,51 +636,79 @@ text_list = [
 ]
 
 text_list1 = [
-    "Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) expiryTime= Wed May 22 2019 21:00:00 GMT+0530 (3) payeeAddress='F2sfawpoejgoiwjeogieowijgosBpjJ2dPR1'"
+    "create rmt# 5000"
 ]
 
-
-for text in text_list1:
+def super_main_function(text):
     original_text, processed_text = text_preprocessing(text)
     first_classification = firstclassification_rawstring(processed_text)
     parsed_data = None
 
     if first_classification['categorization'] == 'tokensystem-C':
         # Resolving conflict for 'tokensystem-C' 
-        tokenamount = apply_rule1(extractAmount_rule,processed_text)
+        tokenamount = apply_rule1(extractAmount_rule, processed_text)
         operation = apply_rule1(selectCategory, processed_text, category1, category2)
         if operation == 'category1' and tokenamount is not None:
-            parsed_data = outputreturn('token_transfer',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+            return outputreturn('token_transfer',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
         elif operation == 'category2' and tokenamount is not None:
-            parsed_data = outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+            return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
         else:
-            parsed_data = outputreturn('noise')
+            return outputreturn('noise')
 
     if first_classification['categorization'] == 'smart-contract-creation-C':
         # Resolving conflict for 'smart-contract-creation-C'
+        operation = apply_rule1(selectCategory, processed_text, category2, category1+category3)
+        if not operation:
+            return outputreturn('noise') 
+
         contract_type = extract_special_character_word(first_classification['wordlist'],'*')
+        if not check_existence_of_keyword(['one-time-event'],[contract_type]):
+            return outputreturn('noise') 
+
         contract_name = extract_special_character_word(first_classification['wordlist'],'@')
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_name):
+            return outputreturn('noise')
+
         contract_token = extract_special_character_word(first_classification['wordlist'],'#')
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_token):
+            return outputreturn('noise') 
+
         contract_address = extract_special_character_word(first_classification['wordlist'],'$')
         contract_address = find_original_case(contract_address, original_text)
+        if not check_flo_address(contract_address):
+            return outputreturn('noise') 
+
         contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token)
         if not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeAddress']]):
-            parsed_data = outputreturn('noise')
+            return outputreturn('noise') 
         else:
             minimum_subscription_amount = ''
             if 'minimumsubscriptionamount' in contract_conditions.keys():
                 minimum_subscription_amount = contract_conditions['minimumsubscriptionamount']
+                try:
+                    float(minimum_subscription_amount)
+                except:
+                    return outputreturn('noise')
             maximum_subscription_amount = ''
             if 'maximumsubscriptionamount' in contract_conditions.keys():
                 maximum_subscription_amount = contract_conditions['maximumsubscriptionamount']
+                try:
+                    float(maximum_subscription_amount)
+                except:
+                    return outputreturn('noise')
 
             if 'userchoices' in contract_conditions.keys():
-                parsed_data = outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
+                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
             elif 'payeeAddress' in contract_conditions.keys():
                 contract_conditions['payeeAddress'] = find_word_index_fromstring(original_text,contract_conditions['payeeAddress'])
-                parsed_data = outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
+                if not check_flo_address(contract_conditions['payeeAddress']):
+                    return outputreturn('noise')
+                else:
+                    return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
         
     else:
-        parsed_data = outputreturn('noise')
+        return outputreturn('noise')
 
-    print(f"{parsed_data}\n") 
+
+for text in text_list1:
+    print(super_main_function(text))

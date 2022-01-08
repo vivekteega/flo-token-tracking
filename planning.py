@@ -177,3 +177,14 @@ Phase 6 - Category based data field extraction
 Phase 7 - Output formatting and return (FINISHED)
 
 '''
+
+'''
+Allowed formats of Smart Contract and token names 
+
+1. First character should always be an Alphabet, lower case or upper case 
+2. The last character should always be an Alphabet, lower case or upper case 
+3. The middle characters can be a - or _
+
+Check for FLO Address 
+
+'''
