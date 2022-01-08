@@ -524,6 +524,20 @@ def extractAmount_rule(text):
         return None
 
 
+def extractAmount_rule_new(text):
+    base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'lakh':10 ** 5, 'crore':10 ** 7, 'quadrillion':10 ** 15}
+    amount_tuple = re.findall(r'\b([.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
+    if len(amount_tuple) > 1 or len(amount_tuple) == 0:
+        return False
+    else:
+        amount_tuple_list = list(amount_tuple[0])
+        extracted_amount = float(amount_tuple_list[0])
+        extracted_base_unit = amount_tuple_list[1]
+        if extracted_base_unit in base_units.keys():
+            extracted_amount = float(extracted_amount) * base_units[extracted_base_unit]
+        return extracted_amount
+
+
 def findWholeWord(w):
     return re.compile(r'\b({0})\b'.format(w), flags=re.IGNORECASE).search
 
@@ -636,7 +650,7 @@ text_list = [
 ]
 
 text_list1 = [
-    "create rmt# 5000"
+    "CReate __rMt# 200crOre hello vivek "
 ]
 
 def super_main_function(text):
@@ -646,10 +660,17 @@ def super_main_function(text):
 
     if first_classification['categorization'] == 'tokensystem-C':
         # Resolving conflict for 'tokensystem-C' 
-        tokenamount = apply_rule1(extractAmount_rule, processed_text)
+        tokenname = first_classification['wordlist'][0][:-1]
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", tokenname):
+            return outputreturn('noise')
+
+        tokenamount = apply_rule1(extractAmount_rule_new, processed_text)
+        if not tokenamount:
+            return outputreturn('noise')
+
         operation = apply_rule1(selectCategory, processed_text, category1, category2)
         if operation == 'category1' and tokenamount is not None:
-            return outputreturn('token_transfer',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+            return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", f"{tokenamount}")
         elif operation == 'category2' and tokenamount is not None:
             return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
         else:
@@ -667,7 +688,7 @@ def super_main_function(text):
 
         contract_name = extract_special_character_word(first_classification['wordlist'],'@')
         if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_name):
-            return outputreturn('noise')
+            return outputreturn('noise') 
 
         contract_token = extract_special_character_word(first_classification['wordlist'],'#')
         if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_token):
@@ -706,8 +727,7 @@ def super_main_function(text):
                 else:
                     return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
         
-    else:
-        return outputreturn('noise')
+    return outputreturn('noise')
 
 
 for text in text_list1:
