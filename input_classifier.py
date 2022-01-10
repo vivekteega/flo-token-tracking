@@ -281,7 +281,7 @@ def extract_specialcharacter_words(rawstring, special_characters):
     return wordList
 
 
-def extract_contract_conditions(text, contracttype, marker=None, blocktime=None):
+def extract_contract_conditions(text, contract_type, marker=None, blocktime=None):
     rulestext = re.split('contract-conditions:\s*', text)[-1]
     # rulelist = re.split('\d\.\s*', rulestext)
     rulelist = []
@@ -299,11 +299,10 @@ def extract_contract_conditions(text, contracttype, marker=None, blocktime=None)
             break
 
     for i in range(len(numberList)):
-        rule = rulestext.split('({})'.format(
-            i + 1))[1].split('({})'.format(i + 2))[0]
+        rule = rulestext.split('({})'.format(i + 1))[1].split('({})'.format(i + 2))[0]
         rulelist.append(rule.strip())
 
-    if contracttype == 'one-time-event':
+    if contract_type == 'one-time-event':
         extractedRules = {}
         for rule in rulelist:
             if rule == '':
@@ -370,7 +369,71 @@ def extract_contract_conditions(text, contracttype, marker=None, blocktime=None)
         else:
             return None
 
-    elif contracttype == 'continuous-event':
+    elif contract_type == 'continuous-event':
+        extractedRules = {}
+        for rule in rulelist:
+            if rule == '':
+                continue
+            elif rule[:7] == 'subtype':
+                # todo : recheck the regular expression for subtype, find an elegant version which covers all permutations and combinations
+                pattern = re.compile('(?<=subtype\s=\s).*')
+                subtype = pattern.search(rule).group(0)
+                extractedRules['subtype'] = subtype
+            elif rule[:15] == 'accepting_token':
+                pattern = re.compile('(?<=accepting_token\s=\s).*(?<!#)')
+                accepting_token = pattern.search(rule).group(0)
+                extractedRules['accepting_token'] = accepting_token
+            elif rule[:13] == 'selling_token':
+                pattern = re.compile('(?<=selling_token\s=\s).*(?<!#)')
+                selling_token = pattern.search(rule).group(0)
+                extractedRules['selling_token'] = selling_token
+            elif rule[:9].lower() == 'pricetype':
+                pattern = re.compile('[^pricetype\s*=\s*].*')
+                priceType = pattern.search(rule).group(0)
+                extractedRules['priceType'] = priceType
+            elif rule[:5] == 'price':
+                pattern = re.compile('[^price\s*=\s*].*')
+                price = pattern.search(rule).group(0)
+                if price[0]=="'" or price[0]=='"':
+                    price = price[1:]
+                if price[-1]=="'" or price[-1]=='"':
+                    price = price[:-1]
+                extractedRules['price'] = float(price)
+            elif rule[:9].lower() == 'direction':
+                pattern = re.compile('(?<=direction\s=\s).*')
+                direction = pattern.search(rule).group(0)
+                extractedRules['direction'] = direction
+            # else:
+            #    pdb.set_trace()
+        if len(extractedRules) > 1:
+            return extractedRules
+        else:
+            return False
+    return False
+
+
+def extract_tokenswap_contract_conditions(processed_text, contract_type, contract_token):
+    rulestext = re.split('contract-conditions:\s*', processed_text)[-1]
+    # rulelist = re.split('\d\.\s*', rulestext)
+    rulelist = []
+    numberList = re.findall(r'\(\d\d*\)', rulestext)
+
+    for idx, item in enumerate(numberList):
+        numberList[idx] = int(item[1:-1])
+
+    numberList = sorted(numberList)
+    for idx, item in enumerate(numberList):
+        if numberList[idx] + 1 != numberList[idx + 1]:
+            print('Contract condition numbers are not in order')
+            return None
+        if idx == len(numberList) - 2:
+            break
+
+    for i in range(len(numberList)):
+        rule = rulestext.split('({})'.format(i + 1))[1].split('({})'.format(i + 2))[0]
+        rulelist.append(rule.strip())
+
+    if contract_type == 'continuous-event':
         extractedRules = {}
         for rule in rulelist:
             if rule == '':
@@ -382,37 +445,36 @@ def extract_contract_conditions(text, contracttype, marker=None, blocktime=None)
                 subtype = searchResult.split(marker)[0]'''
                 extractedRules['subtype'] = rule.split('=')[1].strip()
             elif rule[:15] == 'accepting_token':
-                pdb.set_trace()
-                pattern = re.compile('[^accepting_token\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
-                accepting_token = searchResult.split(marker)[0]
+                pattern = re.compile('(?<=accepting_token\s=\s).*(?<!#)')
+                accepting_token = pattern.search(rule).group(0)
                 extractedRules['accepting_token'] = accepting_token
             elif rule[:13] == 'selling_token':
-                pdb.set_trace()
-                pattern = re.compile('[^selling_token\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
-                selling_token = searchResult.split(marker)[0]
+                pattern = re.compile('(?<=selling_token\s=\s).*(?<!#)')
+                selling_token = pattern.search(rule).group(0)
                 extractedRules['selling_token'] = selling_token
             elif rule[:9].lower() == 'pricetype':
                 pattern = re.compile('[^pricetype\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
-                priceType = searchResult.split(marker)[0]
+                priceType = pattern.search(rule).group(0)
                 extractedRules['priceType'] = priceType
             elif rule[:5] == 'price':
                 pattern = re.compile('[^price\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
-                price = searchResult.split(marker)[0]
+                price = pattern.search(rule).group(0)
                 if price[0]=="'" or price[0]=='"':
                     price = price[1:]
                 if price[-1]=="'" or price[-1]=='"':
                     price = price[:-1]
                 extractedRules['price'] = float(price)
+            elif rule[:9].lower() == 'direction':
+                pattern = re.compile('(?<=direction\s=\s).*')
+                direction = pattern.search(rule).group(0)
+                extractedRules['direction'] = direction
             # else:
             #    pdb.set_trace()
         if len(extractedRules) > 1:
             return extractedRules
         else:
             return None
+    
     return None
 
 
@@ -748,7 +810,7 @@ def text_preprocessing(original_text):
     clean_text = processed_text
     # make everything lowercase 
     processed_text = processed_text.lower()
-    
+
     return clean_text,processed_text
 
 
@@ -782,14 +844,14 @@ text_list1 = [
     (2) accepting_token = rupee#
     (3) selling_token = bioscope#
     (4) price = '15'
-    (5) priceType = ‘predetermined’
+    (5) priceType = 'predetermined'
     (6) direction = oneway'''
 ]
 
 def super_main_function(text):
     clean_text, processed_text = text_preprocessing(text)
     first_classification = firstclassification_rawstring(processed_text)
-    parsed_data = None
+    parsed_data = None 
 
     if first_classification['categorization'] == 'tokensystem-C':
         # Resolving conflict for 'tokensystem-C' 
@@ -959,11 +1021,16 @@ def super_main_function(text):
             return outputreturn('noise') 
 
         contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token)
-        '''if not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeAddress']]):
-            return outputreturn('noise') 
-        else:
-            pass '''
-        print(contract_conditions)
+        # todo - Add checks for token swap extract contract conditions 
+        try:
+            assert contract_conditions['subtype'] == 'tokenswap'
+            assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
+            assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
+            assert contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined" or check_flo_address(find_original_case(contract_conditions['priceType'], clean_text))
+            assert float(contract_conditions['price'])
+        except AssertionError:
+            return outputreturn('noise')
+        return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}")
     
     return outputreturn('noise') 
 
