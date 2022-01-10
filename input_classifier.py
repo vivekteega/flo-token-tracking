@@ -203,9 +203,10 @@ def outputreturn(*argv):
             'operation': 'transfer', 
             'tokenAmount': argv[3], #amount 
             'contractName': argv[4], #atList[0][:-1]
-            'userChoice': argv[5] #userChoice
+            'contractAddress': argv[5],
+            'userChoice': argv[6] #userChoice
             }
-        return parsed_data
+        return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'one-time-event-userchoice-smartcontract-trigger':
         parsed_data = {
             'type': 'smartContractPays', 
@@ -236,7 +237,6 @@ def outputreturn(*argv):
             'transferType': 'smartContract', 
             'flodata': argv[1], #string
             'tokenIdentification': argv[2], #hashList[0][:-1]
-            'operation': 'transfer', 
             'tokenAmount': argv[3], #amount 
             'contractName': argv[4] #atList[0][:-1]
             }
@@ -272,12 +272,13 @@ def outputreturn(*argv):
         return parsed_data
     elif argv[0] == 'continuos-event-token-swap-participation':
         parsed_data = {
-            'type': 'smartContractParticipation',
-            'tokenIdentification': argv[1], #hashList[0][:-1]
-            'tokenAmount': argv[2], #tokenAmount 
-            'contractName': argv[3], #atList[0][:-1] 
-            'flodata': argv[4] #string 
-        }
+            'type': 'transfer', 
+            'transferType': 'smartContract', 
+            'flodata': argv[1], #string
+            'tokenIdentification': argv[2], #hashList[0][:-1]
+            'tokenAmount': argv[3], #amount 
+            'contractName': argv[4] #atList[0][:-1]
+            }
         return parsed_data
 
 
@@ -381,7 +382,6 @@ def extract_contract_conditions(text, contracttype, marker=None, blocktime=None)
     elif contracttype == 'continuous-event':
         extractedRules = {}
         for rule in rulelist:
-            print(rule)
             if rule == '':
                 continue
             elif rule[:7] == 'subtype':
@@ -421,6 +421,66 @@ def extract_contract_conditions(text, contracttype, marker=None, blocktime=None)
         else:
             return None
     return None
+
+
+def extract_deposit_conditions(text, blocktime=None):
+    rulestext = re.split('deposit-conditions:\s*', text)[-1]
+    # rulelist = re.split('\d\.\s*', rulestext)
+    rulelist = []
+    numberList = re.findall(r'\(\d\d*\)', rulestext)
+    for idx, item in enumerate(numberList):
+        numberList[idx] = int(item[1:-1])
+
+    numberList = sorted(numberList)
+    for idx, item in enumerate(numberList):
+        if len(numberList) > 1 and numberList[idx] + 1 != numberList[idx + 1]:
+            print('Deposit condition numbers are not in order')
+            return None
+        if idx == len(numberList) - 2:
+            break
+
+    for i in range(len(numberList)):
+        rule = rulestext.split('({})'.format(
+            i + 1))[1].split('({})'.format(i + 2))[0]
+        rulelist.append(rule.strip())
+
+    # elif contracttype == 'continuous-event*':
+    extractedRules = {}
+    for rule in rulelist:
+        if rule == '':
+            continue
+        elif rule[:10] == 'expirytime':
+            expirytime = re.split('expirytime[\s]*=[\s]*', rule)[1].strip()
+            try:
+                expirytime_split = expirytime.split(' ')
+                parse_string = '{}/{}/{} {}'.format(
+                    expirytime_split[3], months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                expirytime_object = arrow.get(
+                    parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
+                """blocktime_object = arrow.get(blocktime)
+                if expirytime_object < blocktime_object:
+                    print(
+                        'Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
+                    return None"""
+                extractedRules['expiryTime'] = expirytime
+            except:
+                print('Error parsing expiry time')
+                return None
+
+    """for rule in rulelist:
+        if rule == '':
+            continue
+        elif rule[:7] == 'subtype':
+            subtype=rule[8:]
+            #pattern = re.compile('[^subtype\s*=\s*].*')
+            #searchResult = pattern.search(rule).group(0)
+            #contractamount = searchResult.split(marker)[0]
+            extractedRules['subtype'] = subtype    """
+
+    if len(extractedRules) > 0:
+        return extractedRules
+    else:
+        return None
 
 
 def extract_special_character_word(special_character_list, special_character):
@@ -474,7 +534,7 @@ def sort_specialcharacter_wordlist(inputlist):
 
 
 def firstclassification_rawstring(rawstring):
-    specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])
+    specialcharacter_wordlist = extract_specialcharacter_words(rawstring,['@','*','$','#',':'])    
     first_classification = find_first_classification(specialcharacter_wordlist, search_patterns)
     return first_classification
 
@@ -520,7 +580,6 @@ def extractAmount_rule(text):
     else:
         return None
 
-
 def extractAmount_rule_new(text):
     base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'lakh':10 ** 5, 'crore':10 ** 7, 'quadrillion':10 ** 15}
     amount_tuple = re.findall(r'\b([.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
@@ -533,6 +592,37 @@ def extractAmount_rule_new(text):
         if extracted_base_unit in base_units.keys():
             extracted_amount = float(extracted_amount) * base_units[extracted_base_unit]
         return extracted_amount
+
+def extractAmount_rule_new1(text, split_word=None, split_direction=None):
+    base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'lakh':10 ** 5, 'crore':10 ** 7, 'quadrillion':10 ** 15}
+    if split_word and split_direction:
+        if split_direction=='pre':
+            text = text.split(split_word)[0]
+        if split_direction=='post':
+            text = text.split(split_word)[1]
+
+    # appending dummy because the regex does not recognize a number at the start of a string
+    text = f"dummy {text}"
+    text = text.replace("'", "")
+    text = text.replace('"', '')
+    amount_tuple = re.findall(r'\b\s([.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
+    if len(amount_tuple) > 1 or len(amount_tuple) == 0:
+        return False
+    else:
+        amount_tuple_list = list(amount_tuple[0])
+        extracted_amount = float(amount_tuple_list[0])
+        extracted_base_unit = amount_tuple_list[1]
+        if extracted_base_unit in base_units.keys():
+            extracted_amount = float(extracted_amount) * base_units[extracted_base_unit]
+        return extracted_amount
+
+
+def extract_userchoice(text):
+    result = re.split('userchoice:\s*', text)
+    if len(result) != 1 and result[1] != '':
+        return result[1].strip().strip('"').strip("'")
+    else:
+        return False
 
 
 def findWholeWord(w):
@@ -609,9 +699,9 @@ def selectCategory(rawstring, category1, category2):
 
 
 def select_category_reject(rawstring, category1, category2, reject_list):
-    foundCategory1 = None
-    foundCategory2 = None
-    rejectCategory = None
+    foundCategory1 = None 
+    foundCategory2 = None 
+    rejectCategory = None 
 
     for word in category1:
         if findWholeWord(word)(rawstring):
@@ -644,12 +734,18 @@ def text_preprocessing(original_text):
     processed_text = re.sub('\t', ' ', processed_text)
     # remove new lines/line changes 
     processed_text = re.sub('\n', ' ', processed_text)
+    # add a white space after every special character found 
+    processed_text = re.sub("contract-conditions:", "contract-conditions: ", processed_text)
+    processed_text = re.sub("deposit-conditions:", "deposit-conditions: ", processed_text)
+    processed_text = re.sub("userchoice:", "userchoice: ", processed_text)
     # remove extra whitespaces in between
     processed_text = ' '.join(processed_text.split())
     processed_text = re.sub(' +', ' ', processed_text)
+    clean_text = processed_text
     # make everything lowercase 
     processed_text = processed_text.lower()
-    return original_text,processed_text
+    
+    return clean_text,processed_text
 
 
 text_list = [
@@ -671,19 +767,21 @@ text_list = [
     
     "Deposit 15 bioscope# to swap-rupee-bioscope@ its FLO address being oRRCHWouTpMSPuL6yZRwFCuh87ZhuHoL78$ with deposit-conditions: (1) expiryTime= Wed Nov 17 2021 21:00:00 GMT+0530 ",
 
-    "Send 15 rupee# to swap-rupee-article@ its FLO address being FJXw6QGVVaZVvqpyF422Aj4FWQ6jm8p2dL$"
-]
+    "Send 15 rupee# to swap-rupee-article@ its FLO address being FJXw6QGVVaZVvqpyF422Aj4FWQ6jm8p2dL$",
 
-text_list1 = [
     "send 0.001 rmt# to india-elections-2019@ to FLO address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1 with the userchoice:'narendra modi wins'"
 ]
 
-def super_main_function(text):
-    original_text, processed_text = text_preprocessing(text)
-    first_classification = firstclassification_rawstring(processed_text)
-    parsed_data = None
+text_list1 = [
+    "rmt# give to india-elections-2019@ to FLO address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with the 0.001 million userchoice:'narendra modi wins'"
+]
 
-    pdb.set_trace()
+def super_main_function(text):
+    clean_text, processed_text = text_preprocessing(text)
+    first_classification = firstclassification_rawstring(processed_text)
+    parsed_data = None     
+
+    pdb.set_trace()  
 
     if first_classification['categorization'] == 'tokensystem-C':
         # Resolving conflict for 'tokensystem-C' 
@@ -697,9 +795,9 @@ def super_main_function(text):
 
         operation = apply_rule1(selectCategory, processed_text, send_category, category2)
         if operation == 'category1' and tokenamount is not None:
-            return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", f"{tokenamount}")
+            return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", tokenamount)
         elif operation == 'category2' and tokenamount is not None:
-            return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", f"{tokenamount}")
+            return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", tokenamount)
         else:
             return outputreturn('noise')
 
@@ -722,7 +820,7 @@ def super_main_function(text):
             return outputreturn('noise') 
 
         contract_address = extract_special_character_word(first_classification['wordlist'],'$')
-        contract_address = find_original_case(contract_address, original_text)
+        contract_address = find_original_case(contract_address, clean_text)
         if not check_flo_address(contract_address):
             return outputreturn('noise') 
 
@@ -746,49 +844,55 @@ def super_main_function(text):
                     return outputreturn('noise')
 
             if 'userchoices' in contract_conditions.keys():
-                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
+                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
             elif 'payeeAddress' in contract_conditions.keys():
-                contract_conditions['payeeAddress'] = find_word_index_fromstring(original_text,contract_conditions['payeeAddress'])
+                contract_conditions['payeeAddress'] = find_word_index_fromstring(clean_text,contract_conditions['payeeAddress'])
                 if not check_flo_address(contract_conditions['payeeAddress']):
                     return outputreturn('noise')
                 else:
-                    return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{original_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
+                    return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
 
     if first_classification['categorization'] == 'smart-contract-participation-deposit-C':
         # either participation of one-time-event contract or 
         operation = apply_rule1(select_category_reject, processed_text, send_category, deposit_category, category2)
-        print(operation)
         if not operation:
             return outputreturn('noise')
-        elif operation == 'category1':
-            print('category1')
-            parsed_data = {
-                'type': 'transfer', 
-                'transferType': 'smartContract', 
-                'flodata': argv[1], #string
-                'tokenIdentification': argv[2], #hashList[0][:-1]
-                'operation': 'transfer', 
-                'tokenAmount': argv[3], #amount 
-                'contractName': argv[4], #atList[0][:-1]
-                'userChoice': argv[5] #userChoice
-                }
-            return parsed_data
-        elif operation == 'category2':
-            print('category2')
-            parsed_data = {
-                'type': 'smartContractDeposit',
-                'tokenIdentification': argv[1], #hashList[0][:-1]
-                'depositAmount': argv[2], #depositAmount 
-                'contractName': argv[3], #atList[0][:-1] 
-                'flodata': argv[4], #string
-                'depositConditions': {
-                    'expiryTime' : argv[5]
-                }
-            }
-            return parsed_data
+        else:
+            tokenname = first_classification['wordlist'][0][:-1]
+            if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", tokenname):
+                return outputreturn('noise')
+        
+            contract_name = extract_special_character_word(first_classification['wordlist'],'@')
+            if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_name):
+                return outputreturn('noise')
 
-    return outputreturn('noise')
+            contract_address = extract_special_character_word(first_classification['wordlist'],'$')
+            if contract_address is False:
+                contract_address = '' 
+            else:
+                contract_address = find_original_case(contract_address, clean_text)
+                if not check_flo_address(contract_address):
+                    return outputreturn('noise') 
 
+            if operation == 'category1':
+                tokenamount = apply_rule1(extractAmount_rule_new1, processed_text, 'userchoice:', 'pre')
+                if not tokenamount:
+                    return outputreturn('noise')
+                userchoice = extract_userchoice(processed_text)
+                # todo - do we need more validations for user choice?
+                if not userchoice:
+                    return outputreturn('noise')
+
+                return outputreturn('one-time-event-userchoice-smartcontract-participation',f"{clean_text}", f"{tokenname}", tokenamount, f"{contract_name}", f"{contract_address}", f"{userchoice}")
+
+            elif operation == 'category2':
+                tokenamount = apply_rule1(extractAmount_rule_new1, processed_text, 'deposit-conditions:', 'pre')
+                if not tokenamount:
+                    return outputreturn('noise')
+                deposit_conditions = extract_deposit_conditions(processed_text)
+                return outputreturn('continuos-event-token-swap-deposit', f"{tokenname}", tokenamount, f"{contract_name}", f"{clean_text}", f"{deposit_conditions['expiryTime']}")
+
+    return outputreturn('noise') 
 
 for text in text_list1:
-    print(super_main_function(text))
+    print(super_main_function(text)) 
