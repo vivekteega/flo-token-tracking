@@ -68,15 +68,6 @@ def processBlock(blockindex):
     for transaction in blockinfo["tx"]:
         counter = counter + 1
         logger.info(f"Transaction {counter} {transaction}")
-        #transaction_data = multiRequest(f"tx/{transaction}", config['DEFAULT']['NET'])
-        #try:
-        #    text = transaction_data["floData"]
-        #    text = text.replace("\n", " \n ")
-        #except:
-        #    logger.info("The API has passed the Block height test but failed transaction_data['floData'] test. transaction_data response from the API is logged below")
-        #    logger.info(f"{transaction_data}")
-
-        #if current_index == -1:
         
         current_index = -1
         while(current_index == -1):
@@ -403,10 +394,7 @@ def checkLocaltriggerContracts(blockinfo):
                                         (participant[1], participant[0], participant[2])))
 
                             # add transaction to ContractTransactionHistory
-                            engine = create_engine(
-                                'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
-                                                                           contract[1]),
-                                echo=True)
+                            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0], contract[1]), echo=True)
                             ContractBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             session.add(ContractTransactionHistory(transactionType='trigger',
