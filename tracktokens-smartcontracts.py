@@ -52,11 +52,13 @@ def pushData_SSEapi(message):
     print('')
 
 
-def processBlock(blockindex):
-    logger.info(f'Processing block {blockindex}')
-    # Get block details
-    response = newMultiRequest(f"block-index/{blockindex}")
-    blockhash = response['blockHash']
+def processBlock(blockindex=None, blockhash=None):
+    if blockindex is not None and blockhash is None:
+        logger.info(f'Processing block {blockindex}')
+        # Get block details
+        response = newMultiRequest(f"block-index/{blockindex}")
+        blockhash = response['blockHash']
+
     blockinfo = newMultiRequest(f"block/{blockhash}")
 
     # todo Rule 8 - read every transaction from every block to find and parse flodata
@@ -78,7 +80,7 @@ def processBlock(blockindex):
                 current_index = 2
             except:
                 logger.info("The API has passed the Block height test but failed transaction_data['floData'] test")
-                logger.info(f"Block Height : {blockindex}")
+                logger.info(f"Block Height : {blockinfo['height']}")
                 logger.info(f"Transaction {transaction} data : ")
                 logger.info(transaction_data)
                 logger.info('Program will wait for 1 seconds and try to reconnect')
@@ -110,7 +112,7 @@ def processBlock(blockindex):
     SystemBase.metadata.create_all(bind=engine)
     session = sessionmaker(bind=engine)()
     entry = session.query(SystemData).filter(SystemData.attribute == 'lastblockscanned').all()[0]
-    entry.value = str(blockindex)
+    entry.value = str(blockinfo['height'])
     session.commit()
     session.close()
 
@@ -118,53 +120,6 @@ def processBlock(blockindex):
     checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
     checkReturnDeposits(blockinfo)
-
-
-def processApiBlock(blockhash):
-    logger.info(config['DEFAULT']['NET'])
-    blockinfo = newMultiRequest('block/{}'.format(str(blockhash)))
-
-    # todo Rule 8 - read every transaction from every block to find and parse flodata
-    counter = 0
-    acceptedTxList = []
-    # Scan every transaction
-    for transaction in blockinfo["tx"]:
-        transaction_data = newMultiRequest(f"tx/{transaction}")
-        text = transaction_data["floData"]
-        text = text.replace("\n", " \n ")
-
-        # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
-        returnval = None
-        parsed_data = parsing.parse_flodata(text, blockinfo, config['DEFAULT']['NET'])
-        if parsed_data['type'] != 'noise':
-            logger.info(f"Processing transaction {transaction}")
-            logger.info(f"flodata {text} is parsed to {parsed_data}")
-            returnval = processTransaction(transaction_data, parsed_data)
-
-        if returnval == 1:
-            acceptedTxList.append(transaction)
-        elif returnval == 0:
-            logger.info("Transfer for the transaction %s is illegitimate. Moving on" % transaction)
-
-    if len(acceptedTxList) > 0:
-        tempinfo = blockinfo['tx'].copy()
-        for tx in blockinfo['tx']:
-            if tx not in acceptedTxList:
-                tempinfo.remove(tx)
-        blockinfo['tx'] = tempinfo
-        updateLatestBlock(blockinfo)
-
-    engine = create_engine('sqlite:///system.db')
-    SystemBase.metadata.create_all(bind=engine)
-    session = sessionmaker(bind=engine)()
-    entry = session.query(SystemData).filter(SystemData.attribute == 'lastblockscanned').all()[0]
-    entry.value = str(blockinfo['height'])
-    logger.info('Last scanned block value should be '+ str(entry.value))
-    session.commit()
-    session.close()
-
-    # Check smartContracts which will be triggered locally, and not by the contract committee
-    checkLocaltriggerContracts(blockinfo)
 
 
 def updateLatestTransaction(transactionData, parsed_data):
@@ -2633,7 +2588,7 @@ def scanBlockchain():
             break
             
     for blockindex in range(startblock, current_index):
-        processBlock(blockindex)
+        processBlock(blockindex=blockindex)
 
     # At this point the script has updated to the latest block
     # Now we connect to flosight's websocket API to get information about the latest blocks
@@ -2799,4 +2754,4 @@ def connect_error():
 def on_block(data):
     logger.info('New block received')
     logger.info(str(data))
-    processApiBlock(data)
+    processBlock(blockhash=data)
