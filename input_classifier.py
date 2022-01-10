@@ -231,16 +231,6 @@ def outputreturn(*argv):
             }
         }
         return remove_empty_from_dict(parsed_data)
-    elif argv[0] == 'one-time-event-time-smartcontract-participation':
-        parsed_data = {
-            'type': 'transfer', 
-            'transferType': 'smartContract', 
-            'flodata': argv[1], #string
-            'tokenIdentification': argv[2], #hashList[0][:-1]
-            'tokenAmount': argv[3], #amount 
-            'contractName': argv[4] #atList[0][:-1]
-            }
-        return parsed_data
     elif argv[0] == 'continuos-event-token-swap-incorporation':
         parsed_data = {
             'type': 'smartContractIncorporation', 
@@ -270,16 +260,17 @@ def outputreturn(*argv):
             }
         }
         return parsed_data
-    elif argv[0] == 'continuos-event-token-swap-participation':
+    elif argv[0] == 'smart-contract-one-time-event-continuos-event-participation':
         parsed_data = {
             'type': 'transfer', 
             'transferType': 'smartContract', 
-            'flodata': argv[1], #string
-            'tokenIdentification': argv[2], #hashList[0][:-1]
+            'flodata': argv[1], #string 
+            'tokenIdentification': argv[2], #hashList[0][:-1] 
             'tokenAmount': argv[3], #amount 
-            'contractName': argv[4] #atList[0][:-1]
+            'contractName': argv[4], #atList[0][:-1] 
+            'contractAddress': argv[5]
             }
-        return parsed_data
+        return remove_empty_from_dict(parsed_data)
 
 
 def extract_specialcharacter_words(rawstring, special_characters):
@@ -391,11 +382,13 @@ def extract_contract_conditions(text, contracttype, marker=None, blocktime=None)
                 subtype = searchResult.split(marker)[0]'''
                 extractedRules['subtype'] = rule.split('=')[1].strip()
             elif rule[:15] == 'accepting_token':
+                pdb.set_trace()
                 pattern = re.compile('[^accepting_token\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
                 accepting_token = searchResult.split(marker)[0]
                 extractedRules['accepting_token'] = accepting_token
             elif rule[:13] == 'selling_token':
+                pdb.set_trace()
                 pattern = re.compile('[^selling_token\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
                 selling_token = searchResult.split(marker)[0]
@@ -636,6 +629,17 @@ def check_flo_address(floaddress):
         return False
 
 
+def extract_trigger_condition(text):
+    searchResult = re.search('\".*\"', text)
+    if searchResult is None:
+        searchResult = re.search('\'.*\'', text)
+
+    if searchResult is not None:
+        return searchResult.group().strip()[1:-1]
+    else: 
+        return False
+
+
 # Regex pattern for Smart Contract and Token name ^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$
 def check_regex(pattern, test_string):
     matched = re.match(pattern, test_string)
@@ -651,7 +655,7 @@ def check_existence_of_keyword(inputlist, keywordlist):
 
 
 send_category = ['transfer', 'send', 'give']  # keep everything lowercase
-category2 = ['incorporate', 'create', 'start']  # keep everything lowercase
+create_category = ['incorporate', 'create', 'start']  # keep everything lowercase
 deposit_category = ['submit','deposit']
 
 
@@ -773,15 +777,19 @@ text_list = [
 ]
 
 text_list1 = [
-    "rmt# give to india-elections-2019@ to FLO address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with the 0.001 million userchoice:'narendra modi wins'"
+    '''Create Smart Contract with the name swap-rupee-bioscope@ of the type continuous-event* at the address FKw9Rq33K1GFghviG5QVab5NvMERCtwQcU$ with contract-conditions :
+    (1) subtype = tokenswap
+    (2) accepting_token = rupee#
+    (3) selling_token = bioscope#
+    (4) price = '15'
+    (5) priceType = ‘predetermined’
+    (6) direction = oneway'''
 ]
 
 def super_main_function(text):
     clean_text, processed_text = text_preprocessing(text)
     first_classification = firstclassification_rawstring(processed_text)
-    parsed_data = None     
-
-    pdb.set_trace()  
+    parsed_data = None
 
     if first_classification['categorization'] == 'tokensystem-C':
         # Resolving conflict for 'tokensystem-C' 
@@ -793,7 +801,7 @@ def super_main_function(text):
         if not tokenamount:
             return outputreturn('noise')
 
-        operation = apply_rule1(selectCategory, processed_text, send_category, category2)
+        operation = apply_rule1(selectCategory, processed_text, send_category, create_category)
         if operation == 'category1' and tokenamount is not None:
             return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", tokenamount)
         elif operation == 'category2' and tokenamount is not None:
@@ -803,7 +811,7 @@ def super_main_function(text):
 
     if first_classification['categorization'] == 'smart-contract-creation-C':
         # Resolving conflict for 'smart-contract-creation-C'
-        operation = apply_rule1(selectCategory, processed_text, category2, send_category+deposit_category)
+        operation = apply_rule1(selectCategory, processed_text, create_category, send_category+deposit_category)
         if not operation:
             return outputreturn('noise') 
 
@@ -854,7 +862,7 @@ def super_main_function(text):
 
     if first_classification['categorization'] == 'smart-contract-participation-deposit-C':
         # either participation of one-time-event contract or 
-        operation = apply_rule1(select_category_reject, processed_text, send_category, deposit_category, category2)
+        operation = apply_rule1(select_category_reject, processed_text, send_category, deposit_category, create_category)
         if not operation:
             return outputreturn('noise')
         else:
@@ -892,6 +900,71 @@ def super_main_function(text):
                 deposit_conditions = extract_deposit_conditions(processed_text)
                 return outputreturn('continuos-event-token-swap-deposit', f"{tokenname}", tokenamount, f"{contract_name}", f"{clean_text}", f"{deposit_conditions['expiryTime']}")
 
+    if first_classification['categorization'] == 'smart-contract-participation-ote-ce-C':
+        # There is no way to properly differentiate between one-time-event-time-trigger participation and token swap participation 
+        # so we merge them in output return 
+
+        tokenname = first_classification['wordlist'][0][:-1]
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", tokenname):
+            return outputreturn('noise')
+
+        tokenamount = apply_rule1(extractAmount_rule_new1, processed_text)
+        if not tokenamount:
+            return outputreturn('noise')
+        
+        contract_name = extract_special_character_word(first_classification['wordlist'],'@')
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_name):
+            return outputreturn('noise')
+        
+        contract_address = extract_special_character_word(first_classification['wordlist'],'$')
+        if contract_address is False:
+            contract_address = '' 
+        else:
+            contract_address = find_original_case(contract_address, clean_text)
+            if not check_flo_address(contract_address):
+                return outputreturn('noise') 
+
+        return outputreturn('smart-contract-one-time-event-continuos-event-participation', f"{clean_text}", f"{tokenname}", tokenamount, f"{contract_name}", f"{contract_address}")
+    
+    if first_classification['categorization'] == 'userchoice-trigger':
+        contract_name = extract_special_character_word(first_classification['wordlist'],'@')
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_name):
+            return outputreturn('noise')
+
+        trigger_condition = extract_trigger_condition(processed_text)
+        if not trigger_condition:
+            return outputreturn('noise')
+        return outputreturn('one-time-event-userchoice-smartcontract-trigger', f"{contract_name}", f"{trigger_condition}")
+
+    if first_classification['categorization'] == 'smart-contract-creation-ce-tokenswap':
+        operation = apply_rule1(selectCategory, processed_text, create_category, send_category+deposit_category)
+        if operation != 'category1':
+            return outputreturn('noise') 
+
+        contract_type = extract_special_character_word(first_classification['wordlist'],'*')
+        if not check_existence_of_keyword(['continuous-event'],[contract_type]):
+            return outputreturn('noise') 
+
+        contract_name = extract_special_character_word(first_classification['wordlist'],'@')
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_name):
+            return outputreturn('noise') 
+
+        contract_token = extract_special_character_word(first_classification['wordlist'],'#')
+        if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_token):
+            return outputreturn('noise') 
+
+        contract_address = extract_special_character_word(first_classification['wordlist'],'$')
+        contract_address = find_original_case(contract_address, clean_text)
+        if not check_flo_address(contract_address):
+            return outputreturn('noise') 
+
+        contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token)
+        '''if not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeAddress']]):
+            return outputreturn('noise') 
+        else:
+            pass '''
+        print(contract_conditions)
+    
     return outputreturn('noise') 
 
 for text in text_list1:
