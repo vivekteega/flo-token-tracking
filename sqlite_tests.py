@@ -44,4 +44,4 @@ def create_database_session_orm(type, parameters, base):
 
 session = create_database_session_orm('token', {'token_name': 'test'}, Base)
 session = create_database_session_orm('smart_contract', {'contract_name': f"{}", 'contract_address': f"{}"}, Base)
-session = create_database_session_orm('system_dbs', {'db_name': f"{}"}, SystemBase)
+session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)

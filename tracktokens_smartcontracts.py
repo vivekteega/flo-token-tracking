@@ -63,12 +63,12 @@ def check_database_existence(type, parameters):
 def create_database_connection(type, parameters):
     if type == 'token':
         engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
-        connection = engine.connect()
-        
     elif type == 'smart_contract':
         engine = create_engine(f"sqlite:///smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db", echo=True)
-        connection = engine.connect()
-        
+    elif type == 'system_dbs':
+        engine = create_engine(f"sqlite:///{parameters['db_name']}.db", echo=False)
+
+    connection = engine.connect()
     return connection
 
 
@@ -317,18 +317,15 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
 
 
 def checkLocaltriggerContracts(blockinfo):
-    engine = create_engine('sqlite:///system.db', echo=False)
-    connection = engine.connect()
+    connection = create_database_connection('system_dbs', {'db_name':"system"})
     # todo : filter activeContracts which only have local triggers
-    activeContracts = connection.execute(
-        'select contractName, contractAddress from activecontracts where status=="active" ').fetchall()
+    activeContracts = connection.execute('select contractName, contractAddress from activecontracts where status=="active" ').fetchall()
     connection.close()
 
     for contract in activeContracts:
 
         # pull out the contract structure into a dictionary
-        engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0], contract[1]), echo=True)
-        connection = engine.connect()
+        connection = create_database_connection('smart_contract', {'contract_name':f"{contract[0]}", 'contract_address':f"{contract[1]}"})
         # todo : filter activeContracts which only have local triggers
         attributevaluepair = connection.execute(
             "select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
@@ -394,8 +391,7 @@ def checkLocaltriggerContracts(blockinfo):
                             session.commit()
                             session.close()
 
-                            engine = create_engine('sqlite:///system.db', echo=True)
-                            connection = engine.connect()
+                            connection = create_database_connection('system_dbs', {'db_name':'system'})
                             connection.execute(
                                 'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                                     contract[0], contract[1]))
@@ -405,8 +401,7 @@ def checkLocaltriggerContracts(blockinfo):
                                     contract[0], contract[1]))
                             connection.close()
 
-                    engine = create_engine('sqlite:///system.db', echo=True)
-                    connection = engine.connect()
+                    connection = create_database_connection('system_dbs', {'db_name':'system'})
                     connection.execute(
                         'update activecontracts set status="expired" where contractName="{}" and contractAddress="{}"'.format(
                             contract[0], contract[1]))
@@ -451,8 +446,7 @@ def checkLocaltriggerContracts(blockinfo):
                         session.commit()
                         session.close()
 
-                        engine = create_engine('sqlite:///system.db', echo=False)
-                        connection = engine.connect()
+                        connection = create_database_connection('system_dbs', {'db_name':'system'})
                         connection.execute(
                             'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                                 contract[0], contract[1]))
@@ -513,8 +507,7 @@ def checkLocaltriggerContracts(blockinfo):
                             session.commit()
                             session.close()
 
-                            engine = create_engine('sqlite:///system.db', echo=False)
-                            connection = engine.connect()
+                            connection = create_database_connection('system_dbs', {'db_name':'system'})
                             connection.execute(
                                 'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                                     contract[0], contract[1]))
@@ -531,9 +524,7 @@ def checkLocaltriggerContracts(blockinfo):
                     payeeAddress = contractStructure['payeeAddress']
                     tokenIdentification = contractStructure['tokenIdentification']
                     contractAddress = contractStructure['contractAddress']
-                    engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0], contract[1]),
-                                           echo=True)
-                    connection = engine.connect()
+                    connection = create_database_connection('smart_contract', {'contract_name':f"{contract[0]}", 'contract_address':f"{contract[1]}"})
                     tokenAmount_sum = \
                         connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                     returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress)
@@ -556,8 +547,7 @@ def checkLocaltriggerContracts(blockinfo):
                     session.commit()
                     session.close()
 
-                    engine = create_engine('sqlite:///system.db', echo=False)
-                    connection = engine.connect()
+                    connection = create_database_connection('system_dbs', {'db_name':'system'})
                     connection.execute(
                         'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                             contract[0], contract[1]))
@@ -682,8 +672,7 @@ def processTransaction(transaction_data, parsed_data):
                     updateLatestTransaction(transaction_data, parsed_data)
 
                 # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
-                engine = create_engine('sqlite:///system.db', echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('system_dbs', {'db_name':'system'})
                 firstInteractionCheck = connection.execute(f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
 
                 if len(firstInteractionCheck) == 0:
@@ -764,8 +753,7 @@ def processTransaction(transaction_data, parsed_data):
                         return 0
 
                 # check the status of the contract
-                engine = create_engine('sqlite:///system.db', echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('system_dbs', {'db_name':'system'})
                 contractStatus = connection.execute(f"select status from activecontracts where contractName=='{parsed_data['contractName']}' and contractAddress='{outputlist[0]}'").fetchall()[0][0]
                 connection.close()
                 contractList = []
@@ -840,8 +828,7 @@ def processTransaction(transaction_data, parsed_data):
                             return 0
 
                 # pull out the contract structure into a dictionary
-                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                 attributevaluepair = connection.execute("select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
                 contractStructure = {}
                 conditionDict = {}
@@ -1074,8 +1061,7 @@ def processTransaction(transaction_data, parsed_data):
                                     session.commit()
 
                                     # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
-                                    engine = create_engine('sqlite:///system.db', echo=True)
-                                    connection = engine.connect()
+                                    connection = create_database_connection('system_dbs', {'db_name':'system'})
                                     firstInteractionCheck = connection.execute(
                                         f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
 
@@ -1299,8 +1285,7 @@ def processTransaction(transaction_data, parsed_data):
         elif parsed_data['transferType'] == 'swapParticipaton':
             if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
-                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                 participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
                 participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
@@ -1338,8 +1323,7 @@ def processTransaction(transaction_data, parsed_data):
                         return 0
 
                 # pull out the contract structure into a dictionary
-                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                 attributevaluepair = connection.execute("select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
                 contractStructure = {}
                 conditionDict = {}
@@ -1360,8 +1344,7 @@ def processTransaction(transaction_data, parsed_data):
                     updateLatestTransaction(transaction_data, parsed_data)
 
                 # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
-                engine = create_engine('sqlite:///system.db', echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('system_dbs', {'db_name':'system'})
                 firstInteractionCheck = connection.execute(f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
 
                 if len(firstInteractionCheck) == 0:
@@ -1382,8 +1365,7 @@ def processTransaction(transaction_data, parsed_data):
                     updateLatestTransaction(transaction_data, parsed_data)
                 
                 # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
-                engine = create_engine('sqlite:///system.db', echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('system_dbs', {'db_name':'system'})
                 firstInteractionCheck = connection.execute(f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
 
                 if len(firstInteractionCheck) == 0:
@@ -1480,8 +1462,7 @@ def processTransaction(transaction_data, parsed_data):
             session.close()
 
             # add it to token address to token mapping db table
-            engine = create_engine('sqlite:///system.db'.format(parsed_data['tokenIdentification']), echo=True)
-            connection = engine.connect()
+            connection = create_database_connection('system_dbs', {'db_name':'system'})
             connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
             connection.close()
 
@@ -1888,8 +1869,7 @@ def processTransaction(transaction_data, parsed_data):
             # check if the contract exists
             if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
-                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                 participantAdd_txhash = connection.execute(
                     f"select sourceFloAddress, transactionHash from contractTransactionHistory where transactionType != 'incorporation'").fetchall()
                 participantAdd_txhash_T = list(zip(*participantAdd_txhash))
@@ -1902,11 +1882,8 @@ def processTransaction(transaction_data, parsed_data):
                     return 0
 
                 # pull out the contract structure into a dictionary
-                engine = create_engine(
-                    'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-                connection = engine.connect()
-                attributevaluepair = connection.execute(
-                    "select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
+                attributevaluepair = connection.execute("select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
                 contractStructure = {}
                 conditionDict = {}
                 counter = 0
@@ -1982,8 +1959,7 @@ def processTransaction(transaction_data, parsed_data):
                     return 0
 
                 # check the status of the contract
-                engine = create_engine('sqlite:///system.db', echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('system_dbs', {'db_name':'system'})
                 contractStatus = connection.execute(
                     f"select status from activecontracts where contractName=='{parsed_data['contractName']}' and contractAddress='{outputlist[0]}'").fetchall()[
                     0][0]
@@ -2115,10 +2091,7 @@ def processTransaction(transaction_data, parsed_data):
                         logger.info(
                             'Minimum subscription amount hasn\'t been reached\n The token will be returned back')
                         # Initialize payback to contract participants
-                        engine = create_engine(
-                            'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
-                            echo=True)
-                        connection = engine.connect()
+                        connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                         contractParticipants = connection.execute(
                             'select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[
                             0][0]
@@ -2160,8 +2133,7 @@ def processTransaction(transaction_data, parsed_data):
                         session.commit()
                         session.close()
 
-                        engine = create_engine('sqlite:///system.db', echo=True)
-                        connection = engine.connect()
+                        connection = create_database_connection('system_dbs', {'db_name':'system'})
                         connection.execute(
                             'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                                 parsed_data['contractName'], outputlist[0]))
@@ -2179,10 +2151,7 @@ def processTransaction(transaction_data, parsed_data):
                         return 1
 
                 # Trigger the contract
-                engine = create_engine(
-                    'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
-                    echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                 contractWinners = connection.execute(
                     'select * from contractparticipants where userChoice="{}"'.format(
                         parsed_data['triggerCondition'])).fetchall()
@@ -2223,8 +2192,7 @@ def processTransaction(transaction_data, parsed_data):
                 session.commit()
                 session.close()
 
-                engine = create_engine('sqlite:///system.db', echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('system_dbs', {'db_name':'system'})
                 connection.execute(
                     'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
                         parsed_data['contractName'], outputlist[0]))
@@ -2300,8 +2268,7 @@ def processTransaction(transaction_data, parsed_data):
     elif parsed_data['type'] == 'smartContractDeposit':
         if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
             # Check if the transaction hash already exists in the contract db (Safety check)
-            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-            connection = engine.connect()
+            connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
             participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
             participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
@@ -2342,8 +2309,7 @@ def processTransaction(transaction_data, parsed_data):
                     return 0
 
             # pull out the contract structure into a dictionary
-            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-            connection = engine.connect()
+            connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
             attributevaluepair = connection.execute("select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
             contractStructure = {}
             conditionDict = {}
