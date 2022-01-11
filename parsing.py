@@ -2,6 +2,7 @@ import pdb
 import re
 import arrow
 import pybtc
+import logging
 
 """ 
 Find make lists of #, *, @ words 
@@ -293,7 +294,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
     numberList = sorted(numberList)
     for idx, item in enumerate(numberList):
         if numberList[idx] + 1 != numberList[idx + 1]:
-            print('Contract condition numbers are not in order')
+            logger.info('Contract condition numbers are not in order')
             return None
         if idx == len(numberList) - 2:
             break
@@ -315,11 +316,11 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                     expirytime_object = arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
                     blocktime_object = arrow.get(blocktime)
                     if expirytime_object < blocktime_object:
-                        print('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
+                        logger.info('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
                         return False
                     extractedRules['expiryTime'] = expirytime
                 except:
-                    print('Error parsing expiry time')
+                    logger.info('Error parsing expiry time')
                     return False
 
         for rule in rulelist:
@@ -332,7 +333,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 try:
                     extractedRules['contractAmount'] = float(contractamount)
                 except:
-                    print("Contract amount entered is not a decimal")
+                    logger.info("Contract amount entered is not a decimal")
             elif rule[:11] == 'userchoices':
                 pattern = re.compile('[^userchoices\s*=\s*].*')
                 conditions = pattern.search(rule).group(0)
@@ -348,7 +349,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                     extractedRules['minimumsubscriptionamount'] = float(
                         minimumsubscriptionamount)
                 except:
-                    print("Minimum subscription amount entered is not a decimal")
+                    logger.info("Minimum subscription amount entered is not a decimal")
             elif rule[:25] == 'maximumsubscriptionamount':
                 pattern = re.compile('[^maximumsubscriptionamount\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
@@ -357,7 +358,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                     extractedRules['maximumsubscriptionamount'] = float(
                         maximumsubscriptionamount)
                 except:
-                    print("Maximum subscription amount entered is not a decimal")
+                    logger.info("Maximum subscription amount entered is not a decimal")
             elif rule[:12] == 'payeeaddress':
                 pattern = re.compile('[^payeeAddress\s*=\s*].*')
                 searchResult = pattern.search(rule).group(0)
@@ -424,7 +425,7 @@ def extract_tokenswap_contract_conditions(processed_text, contract_type, contrac
     numberList = sorted(numberList)
     for idx, item in enumerate(numberList):
         if numberList[idx] + 1 != numberList[idx + 1]:
-            print('Contract condition numbers are not in order')
+            logger.info('Contract condition numbers are not in order')
             return None
         if idx == len(numberList) - 2:
             break
@@ -489,7 +490,7 @@ def extract_deposit_conditions(text, blocktime=None):
     numberList = sorted(numberList)
     for idx, item in enumerate(numberList):
         if len(numberList) > 1 and numberList[idx] + 1 != numberList[idx + 1]:
-            print('Deposit condition numbers are not in order')
+            logger.info('Deposit condition numbers are not in order')
             return None
         if idx == len(numberList) - 2:
             break
@@ -511,11 +512,11 @@ def extract_deposit_conditions(text, blocktime=None):
                 expirytime_object = arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5])
                 blocktime_object = arrow.get(blocktime)
                 if expirytime_object < blocktime_object:
-                    print('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
+                    logger.info('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
                     return False
                 extractedRules['expiryTime'] = expirytime
             except:
-                print('Error parsing expiry time')
+                logger.info('Error parsing expiry time')
                 return False
 
     """for rule in rulelist:
@@ -606,7 +607,7 @@ def extractAmount_rule(text):
     counter = 0
     value = None
     for idx, word in enumerate(textList):
-        print(word)
+        logger.info(word)
         try:
             result = float(word)
             if textList[idx + 1] in base_units:
@@ -618,7 +619,7 @@ def extractAmount_rule(text):
         except:
             for unit in base_units:
                 result = word.split(unit)
-                print(result)
+                logger.info(result)
                 if len(result) == 2 and result[1] == '' and result[0] != '':
                     try:
                         value = float(result[0]) * base_units[unit]
@@ -838,11 +839,29 @@ text_list1 = [
     '''Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) userChoices=Narendra Modi wins| Narendra Modi loses (3) expiryTime= Wed May 22 2019 21:00:00 GMT+0530'''
 ]
 
-def parse_flodata(text, blockinfo, config['DEFAULT']['NET']):
-    if config['DEFAULT']['NET'] == 'testnet':
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
+
+file_handler = logging.FileHandler('tracking.log')
+file_handler.setLevel(logging.INFO)
+file_handler.setFormatter(formatter)
+
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+
+logger.addHandler(file_handler)
+logger.addHandler(stream_handler)
+
+def parse_flodata(text, blockinfo, net):
+    if net == 'testnet':
         is_testnet = True
     else:
         is_testnet = False
+
+    if text == '':
+        return outputreturn('noise')
 
     clean_text, processed_text = text_preprocessing(text)
     first_classification = firstclassification_rawstring(processed_text)
@@ -1031,8 +1050,4 @@ def parse_flodata(text, blockinfo, config['DEFAULT']['NET']):
             return outputreturn('noise')
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}")
     
-    return outputreturn('noise') 
-
-
-for text in text_list1:
-    print(parse_flodata(text)) 
+    return outputreturn('noise')

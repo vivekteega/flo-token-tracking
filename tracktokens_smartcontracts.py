@@ -70,13 +70,13 @@ def processBlock(blockindex=None, blockhash=None):
     for transaction in blockinfo["tx"]:
         counter = counter + 1
         logger.info(f"Transaction {counter} {transaction}")
-        
         current_index = -1
         while(current_index == -1):
             transaction_data = newMultiRequest(f"tx/{transaction}")
             try:
                 text = transaction_data["floData"]
                 text = text.replace("\n", " \n ")
+                text = "create 1000 rmt#"
                 current_index = 2
             except:
                 logger.info("The API has passed the Block height test but failed transaction_data['floData'] test")
@@ -557,8 +557,21 @@ def checkReturnDeposits(blockinfo):
     pass
 
 
-def check_database_existance(type, parameters):
-    pass
+def check_database_existence(type, parameters):
+    if type == 'token':
+        return os.path.isfile(f"./tokens/{parameters['token_name']}.db")
+        
+    if type == 'smart_contract':
+        pass
+
+
+def create_database_connection(type, parameters):
+    if type == 'token':
+        engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
+        connection = engine.connect()
+        return connection
+    if type == 'smart_contract':
+        pass
 
 
 def processTransaction(transaction_data, parsed_data):
@@ -579,6 +592,8 @@ def processTransaction(transaction_data, parsed_data):
 
     # todo Rule 39 - Create a list of vins for a given transaction id
     for obj in transaction_data["vin"]:
+        if 'coinbase' in obj.keys():
+            return 0
         querylist.append([obj["txid"], obj["vout"]])
 
     totalinputval = 0
@@ -627,8 +642,7 @@ def processTransaction(transaction_data, parsed_data):
     if addresscounter == inputcounter:
         outputlist = [inputlist[0]]
     elif len(outputlist) != 1:
-        logger.info(
-            f"Transaction's change is not coming back to the input address. Transaction {transaction_data['txid']} is rejected")
+        logger.info(f"Transaction's change is not coming back to the input address. Transaction {transaction_data['txid']} is rejected")
         return 0
     else:
         outputlist = outputlist[0]
@@ -646,10 +660,9 @@ def processTransaction(transaction_data, parsed_data):
         # todo Rule 45 - If the transfer type is token, then call the function transferToken to adjust the balances
         if parsed_data['transferType'] == 'token':
             # check if the token exists in the database
-            if os.path.isfile(f"./tokens/{parsed_data['tokenIdentification']}.db"):
+            if check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 # Check if the transaction hash already exists in the token db
-                engine = create_engine(f"sqlite:///tokens/{parsed_data['tokenIdentification']}.db", echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('token', {'token_name':f"{create_database_connection}"})
                 blockno_txhash = connection.execute('select blockNumber, transactionHash from transactionHistory').fetchall()
                 connection.close()
                 blockno_txhash_T = list(zip(*blockno_txhash))
@@ -825,8 +838,7 @@ def processTransaction(transaction_data, parsed_data):
                             SystemBase.metadata.create_all(bind=engine)
                             session = sessionmaker(bind=engine)()
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(
-                                RejectedContractTransactionHistory(transactionType='participation',
+                            session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                    contractName=parsed_data['contractName'],
                                                                    contractAddress=outputlist[0],
                                                                    sourceFloAddress=inputadd,
@@ -839,7 +851,6 @@ def processTransaction(transaction_data, parsed_data):
                                                                    blockchainReference=blockchainReference,
                                                                    jsonData=json.dumps(transaction_data),
                                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation",
-
                                                                    parsedFloData=json.dumps(parsed_data)
                                                                    ))
                             session.commit()
@@ -2589,7 +2600,7 @@ def scanBlockchain():
             break
             
     for blockindex in range(startblock, current_index):
-        processBlock(blockindex=blockindex)
+        processBlock(blockindex=blockindex) 
 
     # At this point the script has updated to the latest block
     # Now we connect to flosight's websocket API to get information about the latest blocks
