@@ -52,6 +52,45 @@ def pushData_SSEapi(message):
     print('')
 
 
+def check_database_existence(type, parameters):
+    if type == 'token':
+        return os.path.isfile(f"./tokens/{parameters['token_name']}.db")
+
+    if type == 'smart_contract':
+        return os.path.isfile(f"./smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db")
+
+
+def create_database_connection(type, parameters):
+    if type == 'token':
+        engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
+        connection = engine.connect()
+        
+    elif type == 'smart_contract':
+        engine = create_engine(f"sqlite:///smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db", echo=True)
+        connection = engine.connect()
+        
+    return connection
+
+
+def create_database_session_orm(type, parameters, base):
+    if type == 'token':
+        engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
+        base.metadata.create_all(bind=engine)
+        session = sessionmaker(bind=engine)()
+
+    elif type == 'smart_contract':
+        engine = create_engine(f"sqlite:///smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db", echo=True)
+        base.metadata.create_all(bind=engine)
+        session = sessionmaker(bind=engine)()
+    
+    elif type == 'system_dbs':
+        engine = create_engine(f"sqlite:///{parameters['db_name']}.db", echo=False)
+        base.metadata.create_all(bind=engine)
+        session = sessionmaker(bind=engine)()
+    
+    return session
+
+
 def processBlock(blockindex=None, blockhash=None):
     if blockindex is not None and blockhash is None:
         logger.info(f'Processing block {blockindex}')
@@ -108,9 +147,7 @@ def processBlock(blockindex=None, blockhash=None):
         blockinfo['tx'] = tempinfo
         updateLatestBlock(blockinfo)
 
-    engine = create_engine('sqlite:///system.db')
-    SystemBase.metadata.create_all(bind=engine)
-    session = sessionmaker(bind=engine)()
+    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
     entry = session.query(SystemData).filter(SystemData.attribute == 'lastblockscanned').all()[0]
     entry.value = str(blockinfo['height'])
     session.commit()
@@ -142,9 +179,8 @@ def updateLatestBlock(blockData):
 
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress, transaction_data=None, parsed_data=None):
-    engine = create_engine('sqlite:///tokens/{}.db'.format(tokenIdentification), echo=True)
-    Base.metadata.create_all(bind=engine)
-    session = sessionmaker(bind=engine)()
+    session = create_database_session_orm('token', {'token_name': f"{tokenIdentification}"}, Base)
+
     availableTokens = session.query(func.sum(ActiveTable.transferBalance)).filter_by(address=inputAddress).all()[0][0]
     commentTransferAmount = float(tokenAmount)
     if availableTokens is None:
@@ -348,9 +384,7 @@ def checkLocaltriggerContracts(blockinfo):
                                         (participant[1], participant[0], participant[2])))
 
                             # add transaction to ContractTransactionHistory
-                            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(contract[0], contract[1]), echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('smart_contract', {'contract_name': f"{contract[0]}", 'contract_address': f"{contract[1]}"}, ContractBase)
                             session.add(ContractTransactionHistory(transactionType='trigger',
                                                                    transactionSubType='minimumsubscriptionamount-payback',
                                                                    transferAmount=None,
@@ -404,13 +438,8 @@ def checkLocaltriggerContracts(blockinfo):
                             'update contractparticipants set winningAmount="{}"'.format(
                                 (0)))
 
-                        # add transaction to ContractTransactionHistory
-                        engine = create_engine(
-                            'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
-                                                                       contract[1]),
-                            echo=True)
-                        ContractBase.metadata.create_all(bind=engine)
-                        session = sessionmaker(bind=engine)()
+                        # add transaction to ContractTransactionHistory                        
+                        session = create_database_session_orm('smart_contract', {'contract_name': f"{contract[0]}", 'contract_address': f"{contract[1]}"}, ContractBase)
                         session.add(ContractTransactionHistory(transactionType='trigger',
                                                                transactionSubType='maximumsubscriptionamount',
                                                                sourceFloAddress=contractAddress,
@@ -474,12 +503,7 @@ def checkLocaltriggerContracts(blockinfo):
                                         (participant[1], participant[0], participant[2])))
 
                             # add transaction to ContractTransactionHistory
-                            engine = create_engine(
-                                'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
-                                                                           contract[1]),
-                                echo=True)
-                            ContractBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('smart_contract', {'contract_name': f"{contract[0]}", 'contract_address': f"{contract[1]}"}, ContractBase)
                             session.add(ContractTransactionHistory(transactionType='trigger',
                                                                    transactionSubType='minimumsubscriptionamount-payback',
                                                                    transferAmount=None,
@@ -520,12 +544,7 @@ def checkLocaltriggerContracts(blockinfo):
                     connection.execute('update contractparticipants set winningAmount="{}"'.format(0))
 
                     # add transaction to ContractTransactionHistory
-                    engine = create_engine(
-                        'sqlite:///smartContracts/{}-{}.db'.format(contract[0],
-                                                                   contract[1]),
-                        echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('smart_contract', {'contract_name': f"{contract[0]}", 'contract_address': f"{contract[1]}"}, ContractBase)
                     session.add(ContractTransactionHistory(transactionType='trigger',
                                                            transactionSubType='expiryTime',
                                                            sourceFloAddress=contractAddress,
@@ -554,23 +573,6 @@ def checkLocaltriggerContracts(blockinfo):
 
 def checkReturnDeposits(blockinfo):
     pass
-
-
-def check_database_existence(type, parameters):
-    if type == 'token':
-        return os.path.isfile(f"./tokens/{parameters['token_name']}.db")
-
-    if type == 'smart_contract':
-        return os.path.isfile(f"./smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db")
-
-
-def create_database_connection(type, parameters):
-    if type == 'token':
-        engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
-        connection = engine.connect()
-        return connection
-    if type == 'smart_contract':
-        pass
 
 
 def processTransaction(transaction_data, parsed_data):
@@ -695,9 +697,8 @@ def processTransaction(transaction_data, parsed_data):
                 return 1
             else:
                 logger.info(f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
-                engine = create_engine(f"sqlite:///system.db", echo=True)
-                SystemBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
+                session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
+                
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                        sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -714,16 +715,14 @@ def processTransaction(transaction_data, parsed_data):
                                                        ))
                 session.commit()
                 session.close()
-                pushData_SSEapi(
-                    f"Error | Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
+                pushData_SSEapi(f"Error | Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
                 return 0
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
             if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
-                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-                connection = engine.connect()
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}, echo=True)
                 participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
                 participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
@@ -737,9 +736,7 @@ def processTransaction(transaction_data, parsed_data):
                     if parsed_data['contractAddress'] != outputlist[0]:
                         logger.info(f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}")
                         # Store transfer as part of RejectedContractTransactionHistory
-                        engine = create_engine(f"sqlite:///system.db", echo=True)
-                        SystemBase.metadata.create_all(bind=engine)
-                        session = sessionmaker(bind=engine)()
+                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
                         session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                contractName=parsed_data['contractName'],
@@ -754,7 +751,6 @@ def processTransaction(transaction_data, parsed_data):
                                                                blockchainReference=blockchainReference,
                                                                jsonData=json.dumps(transaction_data),
                                                                rejectComment=f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}",
-
                                                                parsedFloData=json.dumps(parsed_data)))
                         session.commit()
                         session.close()
@@ -775,17 +771,11 @@ def processTransaction(transaction_data, parsed_data):
                 contractList = []
 
                 if contractStatus == 'closed':
-                    logger.info(
-                        f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
+                    logger.info(f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='participation',
+                    session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                            contractName=parsed_data['contractName'],
                                                            contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
@@ -809,11 +799,7 @@ def processTransaction(transaction_data, parsed_data):
                                       headers=headers)'''
                     return 0
                 else:
-                    engine = create_engine(
-                        'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
-                        echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
                     result = session.query(ContractStructure).filter_by(attribute='expiryTime').all()
                     session.close()
                     if result:
@@ -830,11 +816,7 @@ def processTransaction(transaction_data, parsed_data):
                             logger.info(
                                 f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
                             # Store transfer as part of RejectedContractTransactionHistory
-                            engine = create_engine(
-                                f"sqlite:///system.db",
-                                echo=True)
-                            SystemBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                    contractName=parsed_data['contractName'],
@@ -879,11 +861,7 @@ def processTransaction(transaction_data, parsed_data):
                     logger.info(
                         f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='participation',
@@ -913,11 +891,7 @@ def processTransaction(transaction_data, parsed_data):
                     logger.info(
                         f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='participation',
@@ -950,11 +924,7 @@ def processTransaction(transaction_data, parsed_data):
                             logger.info(
                                 f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
-                            engine = create_engine(
-                                f"sqlite:///system.db",
-                                echo=True)
-                            SystemBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
@@ -984,11 +954,7 @@ def processTransaction(transaction_data, parsed_data):
                     if 'maximumsubscriptionamount' in contractStructure:
                         # now parse the expiry time in python
                         maximumsubscriptionamount = float(contractStructure['maximumsubscriptionamount'])
-                        engine = create_engine(
-                            'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
-                            echo=True)
-                        ContractBase.metadata.create_all(bind=engine)
-                        session = sessionmaker(bind=engine)()
+                        session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
                         amountDeposited = session.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
                         session.close()
 
@@ -999,11 +965,7 @@ def processTransaction(transaction_data, parsed_data):
                             logger.info(
                                 f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
-                            engine = create_engine(
-                                f"sqlite:///system.db",
-                                echo=True)
-                            SystemBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
@@ -1032,11 +994,7 @@ def processTransaction(transaction_data, parsed_data):
                             logger.info(
                                 f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
-                            engine = create_engine(
-                                f"sqlite:///system.db",
-                                echo=True)
-                            SystemBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='participation',
@@ -1105,9 +1063,7 @@ def processTransaction(transaction_data, parsed_data):
                                     session.close()
 
                                     # Store a mapping of participant address -> Contract participated in
-                                    engine = create_engine('sqlite:///system.db', echo=True)
-                                    SystemBase.metadata.create_all(bind=engine)
-                                    session = sessionmaker(bind=engine)()
+                                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                                     session.add(ContractAddressMapping(address=inputadd, addressType='participant',
                                                                        tokenAmount=parsed_data['tokenAmount'],
                                                                        contractName=parsed_data['contractName'],
@@ -1152,9 +1108,7 @@ def processTransaction(transaction_data, parsed_data):
                                     session.close()
 
                                     # Store a mapping of participant address -> Contract participated in
-                                    engine = create_engine('sqlite:///system.db', echo=True)
-                                    SystemBase.metadata.create_all(bind=engine)
-                                    session = sessionmaker(bind=engine)()
+                                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                                     session.add(ContractAddressMapping(address=inputadd, addressType='participant',
                                                                        tokenAmount=maximumsubscriptionamount - amountDeposited,
                                                                        contractName=parsed_data['contractName'],
@@ -1172,14 +1126,9 @@ def processTransaction(transaction_data, parsed_data):
                                     return 0
 
                         else:
-                            logger.info(
-                                f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            logger.info(f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
-                            engine = create_engine(
-                                f"sqlite:///system.db",
-                                echo=True)
-                            SystemBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                    contractName=parsed_data['contractName'],
@@ -1239,9 +1188,7 @@ def processTransaction(transaction_data, parsed_data):
                                 session.close()
 
                                 # Store a mapping of participant address -> Contract participated in
-                                engine = create_engine('sqlite:///system.db', echo=True)
-                                SystemBase.metadata.create_all(bind=engine)
-                                session = sessionmaker(bind=engine)()
+                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                                 session.add(ContractAddressMapping(address=inputadd, addressType='participant',
                                                                    tokenAmount=parsed_data['tokenAmount'],
                                                                    contractName=parsed_data['contractName'],
@@ -1274,9 +1221,7 @@ def processTransaction(transaction_data, parsed_data):
                                 session.close()
 
                                 # Store a mapping of participant address -> Contract participated in
-                                engine = create_engine('sqlite:///system.db', echo=True)
-                                SystemBase.metadata.create_all(bind=engine)
-                                session = sessionmaker(bind=engine)()
+                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                                 session.add(ContractAddressMapping(address=inputadd, addressType='participant',
                                                                    tokenAmount=maximumsubscriptionamount - amountDeposited,
                                                                    contractName=parsed_data['contractName'],
@@ -1297,11 +1242,7 @@ def processTransaction(transaction_data, parsed_data):
                     logger.info(
                         f"Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='participation',
@@ -1330,11 +1271,7 @@ def processTransaction(transaction_data, parsed_data):
             else:
                 logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist")
                 # Store transfer as part of RejectedContractTransactionHistory
-                engine = create_engine(
-                    f"sqlite:///system.db",
-                    echo=True)
-                SystemBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
+                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                        contractName=parsed_data['contractName'],
@@ -1372,9 +1309,7 @@ def processTransaction(transaction_data, parsed_data):
                     if parsed_data['contractAddress'] != outputlist[0]:
                         logger.info(f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}")
                         # Store transfer as part of RejectedContractTransactionHistory
-                        engine = create_engine(f"sqlite:///system.db", echo=True)
-                        SystemBase.metadata.create_all(bind=engine)
-                        session = sessionmaker(bind=engine)()
+                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
                         session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                contractName=parsed_data['contractName'],
@@ -1457,9 +1392,7 @@ def processTransaction(transaction_data, parsed_data):
                 connection.close()
 
                 # Push the Swap Participation transaction into contract database 
-                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-                ContinuosContractBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
+                session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContinuosContractBase)
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
 
                 session.add(ContractParticipants1(participantAddress = inputadd,
@@ -1496,9 +1429,7 @@ def processTransaction(transaction_data, parsed_data):
             else:
                 logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist")
                 # Store transfer as part of RejectedContractTransactionHistory
-                engine = create_engine(f"sqlite:///system.db", echo=True)
-                SystemBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
+                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                        contractName=parsed_data['contractName'],
@@ -1529,9 +1460,7 @@ def processTransaction(transaction_data, parsed_data):
     #  if it has been taken then reject the incorporation. Else incorporate it
     elif parsed_data['type'] == 'tokenIncorporation':
         if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
-            engine = create_engine(f"sqlite:///tokens/{parsed_data['tokenIdentification']}.db", echo=True)
-            Base.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
+            session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
             session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount']))
             session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                      transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
@@ -1562,9 +1491,7 @@ def processTransaction(transaction_data, parsed_data):
             return 1
         else:
             logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
-            engine = create_engine(f"sqlite:///system.db", echo=True)
-            SystemBase.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                    sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -1596,9 +1523,7 @@ def processTransaction(transaction_data, parsed_data):
                 if 'userchoices' not in parsed_data['contractConditions'] and 'payeeAddress' not in parsed_data['contractConditions']:
                     logger.info(f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(f"sqlite:///system.db", echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='incorporation',
@@ -1623,17 +1548,11 @@ def processTransaction(transaction_data, parsed_data):
 
                 # userchoice and payeeAddress conditions cannot come together. Check for it
                 if 'userchoices' in parsed_data['contractConditions'] and 'payeeAddress' in parsed_data['contractConditions']:
-                    logger.info(
-                        f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    logger.info(f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
+                    # Store transfer as part of RejectedContractTransactionHistory 
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='incorporation',
+                    session.add(RejectedContractTransactionHistory(transactionType='incorporation',
                                                            contractName=parsed_data['contractName'],
                                                            contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
@@ -1657,10 +1576,7 @@ def processTransaction(transaction_data, parsed_data):
                 #    henceforth we will not consider any flo private key initiated comment as valid from this address
                 #    Unlocking can only be done through smart contract system address
                 if parsed_data['contractAddress'] == inputadd:
-                    dbName = '{}-{}'.format(parsed_data['contractName'], parsed_data['contractAddress'])
-                    engine = create_engine('sqlite:///smartContracts/{}.db'.format(dbName), echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContractBase)
                     session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
                     session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
                     session.add(
@@ -1717,9 +1633,7 @@ def processTransaction(transaction_data, parsed_data):
                     session.close()
 
                     # add Smart Contract name in token contract association
-                    engine = create_engine(f"sqlite:///tokens/{parsed_data['tokenIdentification']}.db", echo=True)
-                    Base.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
                     session.add(TokenContractAssociation(tokenIdentification=parsed_data['tokenIdentification'],
                                                          contractName=parsed_data['contractName'],
                                                          contractAddress=parsed_data['contractAddress'],
@@ -1735,9 +1649,7 @@ def processTransaction(transaction_data, parsed_data):
                     session.close()
 
                     # Store smart contract address in system's db, to be ignored during future transfers
-                    engine = create_engine('sqlite:///system.db', echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     session.add(ActiveContracts(contractName=parsed_data['contractName'],
                                                 contractAddress=parsed_data['contractAddress'], status='active',
                                                 tokenIdentification=parsed_data['tokenIdentification'],
@@ -1768,11 +1680,7 @@ def processTransaction(transaction_data, parsed_data):
                     logger.info(
                         f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='incorporation',
@@ -1802,10 +1710,7 @@ def processTransaction(transaction_data, parsed_data):
                 logger.debug("Smart contract is of the type continuous-event")
                 # Add checks to reject the creation of contract
                 if parsed_data['contractAddress'] == inputadd:
-                    dbName = '{}-{}'.format(parsed_data['contractName'], parsed_data['contractAddress'])
-                    engine = create_engine('sqlite:///smartContracts/{}.db'.format(dbName), echo=True)
-                    ContinuosContractBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContinuosContractBase)
                     session.add(ContractStructure1(attribute='contractType', index=0, value=parsed_data['contractType']))
                     session.add(ContractStructure1(attribute='contractName', index=0, value=parsed_data['contractName']))
                     session.add(ContractStructure1(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
@@ -1845,9 +1750,7 @@ def processTransaction(transaction_data, parsed_data):
                                 accepting_sending_tokenlist = [parsed_data['contractConditions']['accepting_token'], parsed_data['contractConditions']['selling_token']]
                                 for token_name in accepting_sending_tokenlist:
                                     token_name = token_name.split('#')[0]
-                                    engine = create_engine(f"sqlite:///tokens/{token_name}.db", echo=True)
-                                    Base.metadata.create_all(bind=engine)
-                                    session = sessionmaker(bind=engine)()
+                                    session = create_database_session_orm('token', {'token_name': f"{token_name}"}, Base)
                                     session.add(TokenContractAssociation(tokenIdentification=token_name,
                                                                             contractName=parsed_data['contractName'],
                                                                             contractAddress=parsed_data['contractAddress'],
@@ -1863,9 +1766,7 @@ def processTransaction(transaction_data, parsed_data):
                                     session.close()
 
                                 # Store smart contract address in system's db, to be ignored during future transfers
-                                engine = create_engine('sqlite:///system.db', echo=True)
-                                SystemBase.metadata.create_all(bind=engine)
-                                session = sessionmaker(bind=engine)()
+                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                                 session.add(ActiveContracts(contractName=parsed_data['contractName'],
                                                             contractAddress=parsed_data['contractAddress'], status='active',
                                                             tokenIdentification=str(accepting_sending_tokenlist),
@@ -1899,9 +1800,7 @@ def processTransaction(transaction_data, parsed_data):
                             else:
                                 logger.info(f"priceType is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
                                 # Store transfer as part of RejectedContractTransactionHistory
-                                engine = create_engine(f"sqlite:///system.db", echo=True)
-                                SystemBase.metadata.create_all(bind=engine)
-                                session = sessionmaker(bind=engine)()
+                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                                 session.add(RejectedContractTransactionHistory(transactionType='incorporation',
                                                                                 contractName=parsed_data['contractName'],
@@ -1927,9 +1826,7 @@ def processTransaction(transaction_data, parsed_data):
                     else:
                         logger.info(f"No subtype provided || mentioned tokens do not exist for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
                         # Store transfer as part of RejectedContractTransactionHistory
-                        engine = create_engine(f"sqlite:///system.db", echo=True)
-                        SystemBase.metadata.create_all(bind=engine)
-                        session = sessionmaker(bind=engine)()
+                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
                         session.add(RejectedContractTransactionHistory(transactionType='incorporation',
                                                                         contractName=parsed_data['contractName'],
@@ -1958,9 +1855,7 @@ def processTransaction(transaction_data, parsed_data):
         else:
             logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists")
             # Store transfer as part of RejectedContractTransactionHistory
-            engine = create_engine(f"sqlite:///system.db", echo=True)
-            SystemBase.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(RejectedContractTransactionHistory(transactionType='incorporation',
                                                            contractName=parsed_data['contractName'],
@@ -2031,11 +1926,7 @@ def processTransaction(transaction_data, parsed_data):
                         logger.warning(
                             f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet")
                         # Store transfer as part of RejectedContractTransactionHistory
-                        engine = create_engine(
-                            f"sqlite:///system.db",
-                            echo=True)
-                        SystemBase.metadata.create_all(bind=engine)
-                        session = sessionmaker(bind=engine)()
+                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
                         session.add(
                             RejectedContractTransactionHistory(transactionType='trigger',
@@ -2065,11 +1956,7 @@ def processTransaction(transaction_data, parsed_data):
                     logger.warning(
                         f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='trigger',
@@ -2107,11 +1994,7 @@ def processTransaction(transaction_data, parsed_data):
                     logger.info(
                         f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='trigger',
@@ -2139,11 +2022,7 @@ def processTransaction(transaction_data, parsed_data):
                                       headers=headers)'''
                     return 0
                 else:
-                    engine = create_engine(
-                        'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
-                        echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
                     result = session.query(ContractStructure).filter_by(attribute='expiryTime').all()
                     session.close()
                     if result:
@@ -2161,11 +2040,7 @@ def processTransaction(transaction_data, parsed_data):
                             logger.info(
                                 f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger")
                             # Store transfer as part of RejectedContractTransactionHistory
-                            engine = create_engine(
-                                f"sqlite:///system.db",
-                                echo=True)
-                            SystemBase.metadata.create_all(bind=engine)
-                            session = sessionmaker(bind=engine)()
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(
                                 RejectedContractTransactionHistory(transactionType='trigger',
@@ -2199,11 +2074,7 @@ def processTransaction(transaction_data, parsed_data):
                     logger.info(
                         f"Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(
-                        f"sqlite:///system.db",
-                        echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(
                         RejectedContractTransactionHistory(transactionType='trigger',
@@ -2232,11 +2103,7 @@ def processTransaction(transaction_data, parsed_data):
                 if 'minimumsubscriptionamount' in contractStructure:
                     # if it has not been reached, close the contract and return money
                     minimumsubscriptionamount = float(contractStructure['minimumsubscriptionamount'])
-                    engine = create_engine(
-                        'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
-                        echo=True)
-                    ContractBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
                     amountDeposited = session.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
                     session.close()
 
@@ -2275,11 +2142,7 @@ def processTransaction(transaction_data, parsed_data):
 
                         # add transaction to ContractTransactionHistory
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        engine = create_engine(
-                            'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]),
-                            echo=True)
-                        ContractBase.metadata.create_all(bind=engine)
-                        session = sessionmaker(bind=engine)()
+                        session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
                         session.add(ContractTransactionHistory(transactionType='trigger',
                                                                transactionSubType='minimumsubscriptionamount-payback',
                                                                sourceFloAddress=inputadd,
@@ -2381,11 +2244,7 @@ def processTransaction(transaction_data, parsed_data):
                 logger.info(
                     f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist")
                 # Store transfer as part of RejectedContractTransactionHistory
-                engine = create_engine(
-                    f"sqlite:///system.db",
-                    echo=True)
-                SystemBase.metadata.create_all(bind=engine)
-                session = sessionmaker(bind=engine)()
+                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(
                     RejectedContractTransactionHistory(transactionType='trigger',
@@ -2414,11 +2273,7 @@ def processTransaction(transaction_data, parsed_data):
             logger.info(
                 f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list")
             # Store transfer as part of RejectedContractTransactionHistory
-            engine = create_engine(
-                f"sqlite:///system.db",
-                echo=True)
-            SystemBase.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(RejectedContractTransactionHistory(transactionType='trigger',
                                                            contractName=parsed_data['contractName'],
@@ -2460,9 +2315,7 @@ def processTransaction(transaction_data, parsed_data):
                 if parsed_data['contractAddress'] != outputlist[0]:
                     logger.info(f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}")
                     # Store transfer as part of RejectedContractTransactionHistory
-                    engine = create_engine(f"sqlite:///system.db", echo=True)
-                    SystemBase.metadata.create_all(bind=engine)
-                    session = sessionmaker(bind=engine)()
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                             contractName=parsed_data['contractName'],
@@ -2507,9 +2360,7 @@ def processTransaction(transaction_data, parsed_data):
 
 
             # Push the deposit transaction into deposit database contract database 
-            engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
-            ContinuosContractBase.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
+            session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContinuosContractBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(ContractDeposits1(depositorAddress = inputadd,
                                             depositAmount = parsed_data['depositAmount'],
@@ -2539,9 +2390,7 @@ def processTransaction(transaction_data, parsed_data):
         else:
             logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist")
             # Store transfer as part of RejectedContractTransactionHistory
-            engine = create_engine(f"sqlite:///system.db",echo=True)
-            SystemBase.metadata.create_all(bind=engine)
-            session = sessionmaker(bind=engine)()
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(RejectedContractTransactionHistory(transactionType='smartContractDeposit',
                                                     contractName=parsed_data['contractName'],
@@ -2571,9 +2420,7 @@ def processTransaction(transaction_data, parsed_data):
 
 def scanBlockchain():
     # Read start block no
-    engine = create_engine('sqlite:///system.db', echo=True)
-    SystemBase.metadata.create_all(bind=engine)
-    session = sessionmaker(bind=engine)()
+    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
     startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned').all()[0].value) + 1
     session.commit()
     session.close()
@@ -2708,16 +2555,13 @@ if args.reset == 1:
 
     # Read start block no
     startblock = int(config['DEFAULT']['START_BLOCK'])
-    engine = create_engine('sqlite:///system.db', echo=True)
-    SystemBase.metadata.create_all(bind=engine)
-    session = sessionmaker(bind=engine)()
+    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
     session.add(SystemData(attribute='lastblockscanned', value=startblock - 1))
     session.commit()
     session.close()
 
     # Initialize latest cache DB
-    engine = create_engine('sqlite:///latestCache.db', echo=True)
-    LatestCacheBase.metadata.create_all(bind=engine)
+    session = create_database_session_orm('system_dbs', {'db_name': "latestCache"}, LatestCacheBase)
     session.commit()
     session.close()
 
