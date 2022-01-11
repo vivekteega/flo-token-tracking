@@ -136,8 +136,7 @@ def updateLatestTransaction(transactionData, parsed_data):
 def updateLatestBlock(blockData):
     # connect to latest block db
     conn = sqlite3.connect('latestCache.db')
-    conn.execute('INSERT INTO latestBlocks(blockNumber, blockHash, jsonData) VALUES (?,?,?)',
-                 (blockData['height'], blockData['hash'], json.dumps(blockData)))
+    conn.execute('INSERT INTO latestBlocks(blockNumber, blockHash, jsonData) VALUES (?,?,?)', (blockData['height'], blockData['hash'], json.dumps(blockData)))
     conn.commit()
     conn.close()
 
@@ -560,9 +559,9 @@ def checkReturnDeposits(blockinfo):
 def check_database_existence(type, parameters):
     if type == 'token':
         return os.path.isfile(f"./tokens/{parameters['token_name']}.db")
-        
+
     if type == 'smart_contract':
-        pass
+        return os.path.isfile(f"./smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db")
 
 
 def create_database_connection(type, parameters):
@@ -695,8 +694,7 @@ def processTransaction(transaction_data, parsed_data):
                 # r = requests.post(tokenapi_sse_url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
                 return 1
             else:
-                logger.info(
-                    f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
+                logger.info(f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
                 engine = create_engine(f"sqlite:///system.db", echo=True)
                 SystemBase.metadata.create_all(bind=engine)
                 session = sessionmaker(bind=engine)()
@@ -722,7 +720,7 @@ def processTransaction(transaction_data, parsed_data):
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
-            if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db"):
+            if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
                 engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
                 connection = engine.connect()
@@ -1362,7 +1360,7 @@ def processTransaction(transaction_data, parsed_data):
                 return 0
 
         elif parsed_data['transferType'] == 'swapParticipaton':
-            if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db"):
+            if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
                 engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
                 connection = engine.connect()
@@ -1530,7 +1528,7 @@ def processTransaction(transaction_data, parsed_data):
     # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
     #  if it has been taken then reject the incorporation. Else incorporate it
     elif parsed_data['type'] == 'tokenIncorporation':
-        if not os.path.isfile(f"./tokens/{parsed_data['tokenIdentification']}.db"):
+        if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
             engine = create_engine(f"sqlite:///tokens/{parsed_data['tokenIdentification']}.db", echo=True)
             Base.metadata.create_all(bind=engine)
             session = sessionmaker(bind=engine)()
@@ -1589,7 +1587,7 @@ def processTransaction(transaction_data, parsed_data):
     # todo Rule 48 - If the parsed data type if smart contract incorporation, then check if the name hasn't been taken already
     #      if it has been taken then reject the incorporation.
     elif parsed_data['type'] == 'smartContractIncorporation':
-        if not os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{parsed_data['contractAddress']}.db"):
+        if not check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{parsed_data['contractAddress']}"}):
             # todo Rule 49 - If the contract name hasn't been taken before, check if the contract type is an authorized type by the system
             if parsed_data['contractType'] == 'one-time-event':
                 logger.info("Smart contract is of the type one-time-event")
@@ -1814,7 +1812,7 @@ def processTransaction(transaction_data, parsed_data):
                     session.add(ContractStructure1(attribute='flodata', index=0, value=parsed_data['flodata']))
                     if 'subtype' in parsed_data['contractConditions']:
                         # todo: Check if the both the tokens mentioned exist if its a token swap
-                        if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (os.path.isfile(f"./tokens/{parsed_data['contractConditions']['accepting_token'].split('#')[0]}.db")) and (os.path.isfile(f"./tokens/{parsed_data['contractConditions']['selling_token'].split('#')[0]}.db")):
+                        if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})):
                             #if (parsed_data['contractConditions']['subtype'] == 'tokenswap'):
                             if parsed_data['contractConditions']['priceType'] in ['predetermined','determined']:
                                 session.add(ContractStructure1(attribute='subtype', index=0, value=parsed_data['contractConditions']['subtype'])) 
@@ -1993,10 +1991,9 @@ def processTransaction(transaction_data, parsed_data):
         # Check if input address is a committee address
         if inputlist[0] in committeeAddressList:
             # check if the contract exists
-            if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db"):
+            if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
-                engine = create_engine(
-                    'sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
+                engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
                 connection = engine.connect()
                 participantAdd_txhash = connection.execute(
                     f"select sourceFloAddress, transactionHash from contractTransactionHistory where transactionType != 'incorporation'").fetchall()
@@ -2446,7 +2443,7 @@ def processTransaction(transaction_data, parsed_data):
             return 0
 
     elif parsed_data['type'] == 'smartContractDeposit':
-        if os.path.isfile(f"./smartContracts/{parsed_data['contractName']}-{outputlist[0]}.db"):
+        if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
             # Check if the transaction hash already exists in the contract db (Safety check)
             engine = create_engine('sqlite:///smartContracts/{}-{}.db'.format(parsed_data['contractName'], outputlist[0]), echo=True)
             connection = engine.connect()

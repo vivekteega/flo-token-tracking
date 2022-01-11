@@ -14,10 +14,9 @@ def create_database_connection(type, parameters):
 def check_database_existence(type, parameters):
     if type == 'token':
         return os.path.isfile(f"./tokens/{parameters['token_name']}.db")
-        
+
     if type == 'smart_contract':
-        pass
+        return os.path.isfile(f"./smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db")
 
 
-connection = create_database_connection('token', {'token_name':"rupee"})
-print(check_database_existence('token', {'token_name':"rupee"}))
+print(check_database_existence('smart_contract', {'contract_name': f"india-elections-2019", 'contract_address': f"F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1"}))
