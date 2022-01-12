@@ -272,7 +272,32 @@ def outputreturn(*argv):
             'contractAddress': argv[5]
             }
         return remove_empty_from_dict(parsed_data)
-
+    elif argv[0] == 'nft_create':
+        parsed_data = {
+            'type': 'nftIncorporation',
+            'flodata': argv[1], #string 
+            'tokenIdentification': argv[2], #hashList[0][:-1] 
+            'tokenAmount': argv[3], #initTokens,
+            'nftHash': argv[4] #nftHash
+            }
+        return parsed_data
+    elif argv[0] == 'nft_transfer':
+        parsed_data = {
+            'type': 'transfer',
+            'transferType': 'nft',
+            'flodata': argv[1], #string 
+            'tokenIdentification': argv[2], #hashList[0][:-1] 
+            'tokenAmount': argv[3], #initTokens,
+            }
+        return parsed_data
+    elif argv[0] == 'infinite_token_create':
+        parsed_data = {
+            'type': 'infiniteTokenIncorporation',
+            'flodata': argv[1], #string 
+            'tokenIdentification': argv[2], #hashList[0][:-1] 
+            }
+        return parsed_data
+        
 
 def extract_specialcharacter_words(rawstring, special_characters):
     wordList = []
@@ -542,6 +567,14 @@ def extract_special_character_word(special_character_list, special_character):
     return False
 
 
+def extract_NFT_hash(clean_text):
+    nft_hash = re.search(r"(?:0[xX])?[0-9a-fA-F]{64}",clean_text)
+    if nft_hash is None:
+        return False
+    else:
+        return nft_hash.group(0)
+
+
 def find_original_case(contract_address, original_text):
     dollar_word = extract_specialcharacter_words(original_text,["$"])
     if len(dollar_word)==1 and dollar_word[0][:-1].lower()==contract_address:
@@ -713,6 +746,13 @@ def check_existence_of_keyword(inputlist, keywordlist):
     return True
 
 
+def check_word_existence_instring(word, text):
+    word_exists = re.search(fr"\b{word}\b",text)
+    if word_exists is None:
+        return False
+    else:
+        return word_exists.group(0)
+
 send_category = ['transfer', 'send', 'give']  # keep everything lowercase
 create_category = ['incorporate', 'create', 'start']  # keep everything lowercase
 deposit_category = ['submit','deposit']
@@ -836,7 +876,15 @@ text_list = [
 ]
 
 text_list1 = [
-    '''Create Smart Contract with the name India-elections-2019@ of the type one-time-event* using the asset rmt# at the address F7osBpjDDV1mSSnMNrLudEQQ3cwDJ2dPR1$ with contract-conditions: (1) contractAmount=0.001rmt (2) userChoices=Narendra Modi wins| Narendra Modi loses (3) expiryTime= Wed May 22 2019 21:00:00 GMT+0530'''
+
+    'create usd# as infinite-token',
+    'transfer 10 usd#',
+
+    'Create 100 albumname# as NFT with 2CF24DBA5FB0A30E26E83B2AC5B9E29E1B161E5C1FA7425E73043362938B9824 as asset hash',
+    'Transfer 10 albumname# nft',
+
+    'Create 400 rmt#',
+    'Transfer 20 rmt#'
 ]
 
 logger = logging.getLogger(__name__)
@@ -873,15 +921,40 @@ def parse_flodata(text, blockinfo, net):
         if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", tokenname):
             return outputreturn('noise')
 
-        tokenamount = apply_rule1(extractAmount_rule_new, processed_text)
-        if not tokenamount:
-            return outputreturn('noise')
+        isNFT = check_word_existence_instring('nft', processed_text)            
+        
+        isInfinite = check_word_existence_instring('infinite-token', processed_text)
 
+        tokenamount = apply_rule1(extractAmount_rule_new, processed_text)
+ 
+        ## Cannot be NFT and normal token and infinite token. Find what are the conflicts 
+        # if its an NFT then tokenamount has to be integer and infinite keyword should not be present 
+        # if its a normal token then isNFT and isInfinite should be None/False and token amount has to be present 
+        # if its an infinite token then tokenamount should be None and isNFT should be None/False
+
+        ##################################################
+        
+        if (not tokenamount and not isInfinite) or (isNFT and not tokenamount.is_integer() and not isInfinite) or (isInfinite and tokenamount is not False and isNFT is not False):
+            return outputreturn('noise')
         operation = apply_rule1(selectCategory, processed_text, send_category, create_category)
         if operation == 'category1' and tokenamount is not None:
-            return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", tokenamount)
-        elif operation == 'category2' and tokenamount is not None:
-            return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", tokenamount)
+            if isNFT:
+                return outputreturn('nft_transfer',f"{processed_text}", f"{tokenname}", tokenamount)
+            else:
+                return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", tokenamount)
+        elif operation == 'category2':
+            if isInfinite:
+                return outputreturn('infinite_token_create',f"{processed_text}", f"{tokenname}")
+            else:
+                if tokenamount is None:
+                    return outputreturn('noise')
+                if isNFT:
+                    nft_hash = extract_NFT_hash(clean_text)
+                    if nft_hash is False:
+                        return outputreturn('noise')
+                    return outputreturn('nft_create',f"{processed_text}", f"{tokenname}", tokenamount, f"{nft_hash}")
+                else:
+                    return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", tokenamount)
         else:
             return outputreturn('noise')
 
@@ -1051,3 +1124,7 @@ def parse_flodata(text, blockinfo, net):
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}")
     
     return outputreturn('noise')
+
+for text in text_list1:
+    return_data = parse_flodata(text, {}, 'mainnet')
+    print(return_data)

@@ -1437,6 +1437,8 @@ def processTransaction(transaction_data, parsed_data):
                                   headers=headers)'''
                 return 0
 
+        elif parsed_data['transferType'] == 'nft':
+            pass
 
     # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
     #  if it has been taken then reject the incorporation. Else incorporate it
@@ -1463,6 +1465,7 @@ def processTransaction(transaction_data, parsed_data):
 
             # add it to token address to token mapping db table
             connection = create_database_connection('system_dbs', {'db_name':'system'})
+            connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
             connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
             connection.close()
 
@@ -2381,6 +2384,69 @@ def processTransaction(transaction_data, parsed_data):
             '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "}, headers=headers)'''
             return 0
     
+    elif parsed_data['type'] == 'nftIncorporation':
+        '''
+            DIFFERENT BETWEEN TOKEN AND NFT
+            System.db will have a different entry
+            in creation nft word will be extra
+            NFT Hash must be  present
+            Creation and transfer amount .. only integer parts will be taken
+            Keyword nft must be present in both creation and transfer
+        '''
+        if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
+            session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
+            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount']))
+            session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                                     transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
+                                     blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
+                                     transactionHash=transaction_data['txid']))
+            blockchainReference = neturl + 'tx/' + transaction_data['txid']
+            session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                                           transferAmount=parsed_data['tokenAmount'],
+                                           blockNumber=transaction_data['blockheight'],
+                                           blockHash=transaction_data['blockhash'],
+                                           time=transaction_data['blocktime'],
+                                           transactionHash=transaction_data['txid'],
+                                           blockchainReference=blockchainReference,
+                                           jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'],
+                                           parsedFloData=json.dumps(parsed_data)))
+            session.commit()
+            session.close()
+
+            # add it to token address to token mapping db table
+            connection = create_database_connection('system_dbs', {'db_name':'system'})
+            connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
+            nft_data = {'sha256_hash': f"{parsed_data['nftHash']}"}
+            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'nft', '', '{nft_data}'")
+            connection.close()
+
+            updateLatestTransaction(transaction_data, parsed_data)
+
+            pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
+            return 1
+        else:
+            logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+            blockchainReference = neturl + 'tx/' + transaction_data['txid']
+            session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
+                                                   sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                                                   transferAmount=parsed_data['tokenAmount'],
+                                                   blockNumber=transaction_data['blockheight'],
+                                                   blockHash=transaction_data['blockhash'],
+                                                   time=transaction_data['blocktime'],
+                                                   transactionHash=transaction_data['txid'],
+                                                   blockchainReference=blockchainReference,
+                                                   jsonData=json.dumps(transaction_data),
+                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated",
+                                                   transactionType=parsed_data['type'],
+                                                   parsedFloData=json.dumps(parsed_data)
+                                                   ))
+            session.commit()
+            session.close()
+            pushData_SSEapi(f"Error | Token incorporation rejected at transaction {transaction_data['txid']} as token {parsed_data['tokenIdentification']} already exists")
+            return 0
+
+
     ''' {'type': 'smartContractDeposit', 'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1], 'flodata': string, 'depositConditions': deposit_conditions} '''
 
 

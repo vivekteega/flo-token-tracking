@@ -207,6 +207,15 @@ class TokenAddressMapping(SystemBase):
     blockHash = Column('blockHash', String)
 
 
+class DatabaseAddressMapping(SystemBase):
+    __tablename__ = "databaseAddressMapping"
+
+    id = Column('id', Integer, primary_key=True)
+    db_name = Column('db_name', String)
+    db_type = Column('db_type', String)
+    keyword = Column('keyword', String)
+    object_format = Column ('object_format', String)
+
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
     id = Column('id', Integer, primary_key=True)

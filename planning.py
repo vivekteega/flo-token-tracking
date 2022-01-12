@@ -105,7 +105,7 @@ f"{tokenamount}" = find_number_function
     ['@','*','#','$',':']      -  Smart contract creation - ote-timebased
     ['@','*','#','$',':','#']
 
-    ['#','@']                  -  Smart contract particiation - ote-timebased      
+    ['#','@']                  -  Smart contract particiation - ote-timebased 
     ['#','@','$']
 
 
@@ -191,4 +191,49 @@ Write checks for conditions inside contract conditions
 Serious error handling for contract-conditions
 * 2222:00 gives error 
 * contractAmount = 0.022rt gives error | check if space is allowed between 0.022 rt
+'''
+
+
+'''
+
+    What we need for NFT contract code 
+
+    1. NFT-address mapping table in system.db 
+    2. New main transaction category class 
+    3. New sub-category for transfer category class ie. NFT transfer 
+
+
+    NFT Smart Contract end cases 
+    1. NFT against an address 
+    2. NFT against another NFT 
+    3. 
+
+    flodata format for NFT 
+    Create 1000 NFT with bioscope# with nft-details: (1) name = 'bioscope' (2) hash = 
+
+    Create 100 albumname# as NFT with 2CF24DBA5FB0A30E26E83B2AC5B9E29E1B161E5C1FA7425E73043362938B9824 as asset hash 
+    [#]
+
+    Rules
+    -----
+    DIFFERENT BETWEEN TOKEN AND NFT
+    System.db will have a differnent entry
+    in creation nft word will be extra
+    NFT Hash must be  present
+    Creation and transfer amount .. only integer parts will be taken
+    Keyword nft must be present in both creation and transfer
+
+'''
+
+'''
+
+Need infinite tokens to create stable coins, so they can be created without worrying about the upper limit of the coins 
+
+'''
+
+'''
+Create another table in system.db, it simply writes what is every database in one place 
+
+Database_name               Database type
+
 '''
