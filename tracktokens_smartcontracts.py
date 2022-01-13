@@ -1495,7 +1495,7 @@ def processTransaction(transaction_data, parsed_data):
             # add it to token address to token mapping db table
             connection = create_database_connection('system_dbs', {'db_name':'system'})
             connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
-            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'token', '', ''")
+            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'token', '', '')")
             connection.close()
 
             updateLatestTransaction(transaction_data, parsed_data)
