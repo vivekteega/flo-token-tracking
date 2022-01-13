@@ -178,142 +178,159 @@ def updateLatestBlock(blockData):
     conn.close()
 
 
-def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress, transaction_data=None, parsed_data=None):
+def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress, transaction_data=None, parsed_data=None, isInfiniteToken=None):
     session = create_database_session_orm('token', {'token_name': f"{tokenIdentification}"}, Base)
 
-    availableTokens = session.query(func.sum(ActiveTable.transferBalance)).filter_by(address=inputAddress).all()[0][0]
-    commentTransferAmount = float(tokenAmount)
-    if availableTokens is None:
-        logger.info(f"The sender address {inputAddress} doesn't own any {tokenIdentification.upper()} tokens")
-        session.close()
-        return 0
-
-    elif availableTokens < commentTransferAmount:
-        logger.info("The transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
-        session.close()
-        return 0
-
-    elif availableTokens >= commentTransferAmount:
-        table = session.query(ActiveTable).filter(ActiveTable.address == inputAddress).all()
-        block_data = newMultiRequest('block/{}'.format(transaction_data['blockhash']))
-
-        pidlst = []
-        checksum = 0
-        for row in table:
-            if checksum >= commentTransferAmount:
-                break
-            pidlst.append([row.id, row.transferBalance])
-            checksum = checksum + row.transferBalance
-
-        if checksum == commentTransferAmount:
-            consumedpid_string = ''
-
-            # Update all pids in pidlist's transferBalance to 0
-            lastid = session.query(ActiveTable)[-1].id
-            for piditem in pidlst:
-                entry = session.query(ActiveTable).filter(ActiveTable.id == piditem[0]).all()
-                consumedpid_string = consumedpid_string + '{},'.format(piditem[0])
-                session.add(TransferLogs(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
-                                         transferAmount=entry[0].transferBalance, sourceId=piditem[0],
-                                         destinationId=lastid + 1,
-                                         blockNumber=block_data['height'], time=block_data['time'],
-                                         transactionHash=transaction_data['txid']))
-                entry[0].transferBalance = 0
-
-            if len(consumedpid_string) > 1:
-                consumedpid_string = consumedpid_string[:-1]
-
-            # Make new entry
-            session.add(ActiveTable(address=outputAddress, consumedpid=consumedpid_string,
-                                    transferBalance=commentTransferAmount))
-
-            # Migration
-            # shift pid of used utxos from active to consumed
-            for piditem in pidlst:
-                # move the parentids consumed to consumedpid column in both activeTable and consumedTable
-                entries = session.query(ActiveTable).filter(ActiveTable.parentid == piditem[0]).all()
-                for entry in entries:
-                    entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
-                    entry.parentid = None
-
-                entries = session.query(ConsumedTable).filter(ConsumedTable.parentid == piditem[0]).all()
-                for entry in entries:
-                    entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
-                    entry.parentid = None
-
-                # move the pids consumed in the transaction to consumedTable and delete them from activeTable
-                session.execute(
-                    'INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance) SELECT id, address, parentid, consumedpid, transferBalance FROM activeTable WHERE id={}'.format(
-                        piditem[0]))
-                session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
-                session.commit()
-            session.commit()
-
-        elif checksum > commentTransferAmount:
-            consumedpid_string = ''
-            # Update all pids in pidlist's transferBalance
-            lastid = session.query(ActiveTable)[-1].id
-            for idx, piditem in enumerate(pidlst):
-                entry = session.query(ActiveTable).filter(ActiveTable.id == piditem[0]).all()
-                if idx != len(pidlst) - 1:
-                    session.add(TransferLogs(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
-                                             transferAmount=entry[0].transferBalance, sourceId=piditem[0],
-                                             destinationId=lastid + 1,
-                                             blockNumber=block_data['height'], time=block_data['time'],
-                                             transactionHash=transaction_data['txid']))
-                    entry[0].transferBalance = 0
-                    consumedpid_string = consumedpid_string + '{},'.format(piditem[0])
-                else:
-                    session.add(TransferLogs(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
-                                             transferAmount=piditem[1] - (checksum - commentTransferAmount),
-                                             sourceId=piditem[0],
-                                             destinationId=lastid + 1,
-                                             blockNumber=block_data['height'], time=block_data['time'],
-                                             transactionHash=transaction_data['txid']))
-                    entry[0].transferBalance = checksum - commentTransferAmount
-
-            if len(consumedpid_string) > 1:
-                consumedpid_string = consumedpid_string[:-1]
-
-            # Make new entry
-            session.add(ActiveTable(address=outputAddress, parentid=pidlst[-1][0], consumedpid=consumedpid_string,
-                                    transferBalance=commentTransferAmount))
-
-            # Migration
-            # shift pid of used utxos from active to consumed
-            for piditem in pidlst[:-1]:
-                # move the parentids consumed to consumedpid column in both activeTable and consumedTable
-                entries = session.query(ActiveTable).filter(ActiveTable.parentid == piditem[0]).all()
-                for entry in entries:
-                    entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
-                    entry.parentid = None
-
-                entries = session.query(ConsumedTable).filter(ConsumedTable.parentid == piditem[0]).all()
-                for entry in entries:
-                    entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
-                    entry.parentid = None
-
-                # move the pids consumed in the transaction to consumedTable and delete them from activeTable
-                session.execute(
-                    'INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance) SELECT id, address, parentid, consumedpid, transferBalance FROM activeTable WHERE id={}'.format(
-                        piditem[0]))
-                session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
-                session.commit()
-            session.commit()
+    if isInfiniteToken == True:
+        # Make new entry
+        session.add(ActiveTable(address=outputAddress, consumedpid='1', transferBalance=float(tokenAmount)))
 
         block_data = newMultiRequest('block/{}'.format(transaction_data['blockhash']))
-
         blockchainReference = neturl + 'tx/' + transaction_data['txid']
         session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
-                                       transferAmount=tokenAmount, blockNumber=block_data['height'],
-                                       blockHash=block_data['hash'], time=block_data['time'],
-                                       transactionHash=transaction_data['txid'],
-                                       blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data),
-                                       transactionType=parsed_data['type'],
-                                       parsedFloData=json.dumps(parsed_data)))
+                                    transferAmount=tokenAmount, blockNumber=block_data['height'],
+                                    blockHash=block_data['hash'], time=block_data['time'],
+                                    transactionHash=transaction_data['txid'],
+                                    blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data),
+                                    transactionType=parsed_data['type'],
+                                    parsedFloData=json.dumps(parsed_data)))
         session.commit()
         session.close()
         return 1
+
+    else:
+        availableTokens = session.query(func.sum(ActiveTable.transferBalance)).filter_by(address=inputAddress).all()[0][0]
+        commentTransferAmount = float(tokenAmount)
+        if availableTokens is None:
+            logger.info(f"The sender address {inputAddress} doesn't own any {tokenIdentification.upper()} tokens")
+            session.close()
+            return 0
+
+        elif availableTokens < commentTransferAmount:
+            logger.info("The transfer amount passed in the comments is more than the user owns\nThis transaction will be discarded\n")
+            session.close()
+            return 0
+
+        elif availableTokens >= commentTransferAmount:
+            table = session.query(ActiveTable).filter(ActiveTable.address == inputAddress).all()
+            block_data = newMultiRequest('block/{}'.format(transaction_data['blockhash']))
+
+            pidlst = []
+            checksum = 0
+            for row in table:
+                if checksum >= commentTransferAmount:
+                    break
+                pidlst.append([row.id, row.transferBalance])
+                checksum = checksum + row.transferBalance
+
+            if checksum == commentTransferAmount:
+                consumedpid_string = ''
+
+                # Update all pids in pidlist's transferBalance to 0
+                lastid = session.query(ActiveTable)[-1].id
+                for piditem in pidlst:
+                    entry = session.query(ActiveTable).filter(ActiveTable.id == piditem[0]).all()
+                    consumedpid_string = consumedpid_string + '{},'.format(piditem[0])
+                    session.add(TransferLogs(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
+                                            transferAmount=entry[0].transferBalance, sourceId=piditem[0],
+                                            destinationId=lastid + 1,
+                                            blockNumber=block_data['height'], time=block_data['time'],
+                                            transactionHash=transaction_data['txid']))
+                    entry[0].transferBalance = 0
+
+                if len(consumedpid_string) > 1:
+                    consumedpid_string = consumedpid_string[:-1]
+
+                # Make new entry
+                session.add(ActiveTable(address=outputAddress, consumedpid=consumedpid_string,
+                                        transferBalance=commentTransferAmount))
+
+                # Migration
+                # shift pid of used utxos from active to consumed
+                for piditem in pidlst:
+                    # move the parentids consumed to consumedpid column in both activeTable and consumedTable
+                    entries = session.query(ActiveTable).filter(ActiveTable.parentid == piditem[0]).all()
+                    for entry in entries:
+                        entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
+                        entry.parentid = None
+
+                    entries = session.query(ConsumedTable).filter(ConsumedTable.parentid == piditem[0]).all()
+                    for entry in entries:
+                        entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
+                        entry.parentid = None
+
+                    # move the pids consumed in the transaction to consumedTable and delete them from activeTable
+                    session.execute(
+                        'INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance) SELECT id, address, parentid, consumedpid, transferBalance FROM activeTable WHERE id={}'.format(
+                            piditem[0]))
+                    session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
+                    session.commit()
+                session.commit()
+
+            elif checksum > commentTransferAmount:
+                consumedpid_string = ''
+                # Update all pids in pidlist's transferBalance
+                lastid = session.query(ActiveTable)[-1].id
+                for idx, piditem in enumerate(pidlst):
+                    entry = session.query(ActiveTable).filter(ActiveTable.id == piditem[0]).all()
+                    if idx != len(pidlst) - 1:
+                        session.add(TransferLogs(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
+                                                transferAmount=entry[0].transferBalance, sourceId=piditem[0],
+                                                destinationId=lastid + 1,
+                                                blockNumber=block_data['height'], time=block_data['time'],
+                                                transactionHash=transaction_data['txid']))
+                        entry[0].transferBalance = 0
+                        consumedpid_string = consumedpid_string + '{},'.format(piditem[0])
+                    else:
+                        session.add(TransferLogs(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
+                                                transferAmount=piditem[1] - (checksum - commentTransferAmount),
+                                                sourceId=piditem[0],
+                                                destinationId=lastid + 1,
+                                                blockNumber=block_data['height'], time=block_data['time'],
+                                                transactionHash=transaction_data['txid']))
+                        entry[0].transferBalance = checksum - commentTransferAmount
+
+                if len(consumedpid_string) > 1:
+                    consumedpid_string = consumedpid_string[:-1]
+
+                # Make new entry
+                session.add(ActiveTable(address=outputAddress, parentid=pidlst[-1][0], consumedpid=consumedpid_string, transferBalance=commentTransferAmount))
+
+                # Migration
+                # shift pid of used utxos from active to consumed
+                for piditem in pidlst[:-1]:
+                    # move the parentids consumed to consumedpid column in both activeTable and consumedTable
+                    entries = session.query(ActiveTable).filter(ActiveTable.parentid == piditem[0]).all()
+                    for entry in entries:
+                        entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
+                        entry.parentid = None
+
+                    entries = session.query(ConsumedTable).filter(ConsumedTable.parentid == piditem[0]).all()
+                    for entry in entries:
+                        entry.consumedpid = entry.consumedpid + ',{}'.format(piditem[0])
+                        entry.parentid = None
+
+                    # move the pids consumed in the transaction to consumedTable and delete them from activeTable
+                    session.execute(
+                        'INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance) SELECT id, address, parentid, consumedpid, transferBalance FROM activeTable WHERE id={}'.format(
+                            piditem[0]))
+                    session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
+                    session.commit()
+                session.commit()
+
+            block_data = newMultiRequest('block/{}'.format(transaction_data['blockhash']))
+
+            blockchainReference = neturl + 'tx/' + transaction_data['txid']
+            session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
+                                        transferAmount=tokenAmount, blockNumber=block_data['height'],
+                                        blockHash=block_data['hash'], time=block_data['time'],
+                                        transactionHash=transaction_data['txid'],
+                                        blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data),
+                                        transactionType=parsed_data['type'],
+                                        parsedFloData=json.dumps(parsed_data)))
+            session.commit()
+            session.close()
+            return 1
 
 
 def checkLocaltriggerContracts(blockinfo):
@@ -652,6 +669,19 @@ def processTransaction(transaction_data, parsed_data):
         if parsed_data['transferType'] == 'token':
             # check if the token exists in the database
             if check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
+                # Pull details of the token type from system.db database 
+                connection = create_database_connection('system_dbs', {'db_name':'system'})
+                db_details = connection.execute("select db_name, db_type, keyword, object_format from databaseAddressMapping where db_name='{}'".format(parsed_data['tokenIdentification']))
+                db_details = list(zip(*db_details))
+                if db_details[1] == 'infinite-token':
+                    db_object = json.loads(db_details[3])
+                    if db_object['root_address'] == inputlist[0]:
+                        isInfiniteToken = True
+                    else:
+                        isInfiniteToken = False
+                else:
+                    isInfiniteToken = False
+
                 # Check if the transaction hash already exists in the token db
                 connection = create_database_connection('token', {'token_name':f"{create_database_connection}"})
                 blockno_txhash = connection.execute('select blockNumber, transactionHash from transactionHistory').fetchall()
@@ -663,7 +693,7 @@ def processTransaction(transaction_data, parsed_data):
                     pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} already exists in the token db. This is unusual, please check your code")
                     return 0
 
-                returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0],outputlist[0], transaction_data, parsed_data)
+                returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0],outputlist[0], transaction_data, parsed_data, isInfiniteToken=isInfiniteToken)
                 if returnval is None:
                     logger.info("Something went wrong in the token transfer method")
                     pushData_SSEapi(f"Error | Something went wrong while doing the internal db transactions for {transaction_data['txid']}")
@@ -687,7 +717,6 @@ def processTransaction(transaction_data, parsed_data):
             else:
                 logger.info(f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
                 session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
-                
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                        sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -1466,11 +1495,10 @@ def processTransaction(transaction_data, parsed_data):
             # add it to token address to token mapping db table
             connection = create_database_connection('system_dbs', {'db_name':'system'})
             connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
-            connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
+            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'token', '', ''")
             connection.close()
 
             updateLatestTransaction(transaction_data, parsed_data)
-
             pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
             return 1
         else:
@@ -1563,17 +1591,10 @@ def processTransaction(transaction_data, parsed_data):
                     session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContractBase)
                     session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
                     session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
-                    session.add(
-                        ContractStructure(attribute='tokenIdentification', index=0,
-                                          value=parsed_data['tokenIdentification']))
-                    session.add(
-                        ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
-                    session.add(
-                        ContractStructure(attribute='flodata', index=0,
-                                          value=parsed_data['flodata']))
-                    session.add(
-                        ContractStructure(attribute='expiryTime', index=0,
-                                          value=parsed_data['contractConditions']['expiryTime']))
+                    session.add(ContractStructure(attribute='tokenIdentification', index=0, value=parsed_data['tokenIdentification']))
+                    session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
+                    session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
+                    session.add(ContractStructure(attribute='expiryTime', index=0, value=parsed_data['contractConditions']['expiryTime']))
                     if 'contractAmount' in parsed_data['contractConditions']:
                         session.add(
                             ContractStructure(attribute='contractAmount', index=0,
@@ -1610,7 +1631,6 @@ def processTransaction(transaction_data, parsed_data):
                                                            transactionHash=transaction_data['txid'],
                                                            blockchainReference=blockchainReference,
                                                            jsonData=json.dumps(transaction_data),
-
                                                            parsedFloData=json.dumps(parsed_data)
                                                            ))
                     session.commit()
@@ -1651,6 +1671,10 @@ def processTransaction(transaction_data, parsed_data):
                                                        transactionHash=transaction_data['txid'],
                                                        blockNumber=transaction_data['blockheight'],
                                                        blockHash=transaction_data['blockhash']))
+                    session.add(DatabaseAddressMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
+                                                                    db_type='smartcontract',
+                                                                    keyword='',
+                                                                    object_format=''))
                     session.commit()
 
                     session.close()
@@ -1769,6 +1793,10 @@ def processTransaction(transaction_data, parsed_data):
                                                                     transactionHash=transaction_data['txid'],
                                                                     blockNumber=transaction_data['blockheight'],
                                                                     blockHash=transaction_data['blockhash']))
+                                session.add(DatabaseAddressMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
+                                                                    db_type='smartcontract',
+                                                                    keyword='',
+                                                                    object_format=''))
                                 session.commit()
                                 session.close()
 
@@ -2446,6 +2474,60 @@ def processTransaction(transaction_data, parsed_data):
             pushData_SSEapi(f"Error | Token incorporation rejected at transaction {transaction_data['txid']} as token {parsed_data['tokenIdentification']} already exists")
             return 0
 
+    elif parsed_data['type'] == 'infiniteTokenIncorporation':
+        if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
+            parsed_data['tokenAmount'] = 0
+            session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
+            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount']))
+            session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                                     transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
+                                     blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
+                                     transactionHash=transaction_data['txid']))
+            blockchainReference = neturl + 'tx/' + transaction_data['txid']
+            session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                                           transferAmount=parsed_data['tokenAmount'],
+                                           blockNumber=transaction_data['blockheight'],
+                                           blockHash=transaction_data['blockhash'],
+                                           time=transaction_data['blocktime'],
+                                           transactionHash=transaction_data['txid'],
+                                           blockchainReference=blockchainReference,
+                                           jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'],
+                                           parsedFloData=json.dumps(parsed_data)))
+            session.commit()
+            session.close()
+
+            # add it to token address to token mapping db table
+            connection = create_database_connection('system_dbs', {'db_name':'system'})
+            connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
+            info_object = {'root_address': inputadd}
+            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'infinite-token', '', '{info_object}'")
+            connection.close()
+
+            updateLatestTransaction(transaction_data, parsed_data)
+            pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
+            return 1
+        else:
+            logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+            blockchainReference = neturl + 'tx/' + transaction_data['txid']
+            session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
+                                                   sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                                                   transferAmount=parsed_data['tokenAmount'],
+                                                   blockNumber=transaction_data['blockheight'],
+                                                   blockHash=transaction_data['blockhash'],
+                                                   time=transaction_data['blocktime'],
+                                                   transactionHash=transaction_data['txid'],
+                                                   blockchainReference=blockchainReference,
+                                                   jsonData=json.dumps(transaction_data),
+                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated",
+                                                   transactionType=parsed_data['type'],
+                                                   parsedFloData=json.dumps(parsed_data)
+                                                   ))
+            session.commit()
+            session.close()
+            pushData_SSEapi(f"Error | Token incorporation rejected at transaction {transaction_data['txid']} as token {parsed_data['tokenIdentification']} already exists")
+            return 0
+        
 
     ''' {'type': 'smartContractDeposit', 'tokenIdentification': hashList[0][:-1], 'contractName': atList[0][:-1], 'flodata': string, 'depositConditions': deposit_conditions} '''
 
