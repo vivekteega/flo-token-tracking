@@ -115,7 +115,6 @@ def processBlock(blockindex=None, blockhash=None):
             try:
                 text = transaction_data["floData"]
                 text = text.replace("\n", " \n ")
-                text = "create 1000 rmt#"
                 current_index = 2
             except:
                 logger.info("The API has passed the Block height test but failed transaction_data['floData'] test")
