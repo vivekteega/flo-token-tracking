@@ -978,7 +978,7 @@ def parse_flodata(text, blockinfo, net):
 
         contract_address = extract_special_character_word(first_classification['wordlist'],'$')
         contract_address = find_original_case(contract_address, clean_text)
-        if not check_flo_address(contract_address):
+        if not check_flo_address(contract_address, is_testnet):
             return outputreturn('noise') 
 
         contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token, blocktime=blockinfo['time'])
@@ -1004,7 +1004,7 @@ def parse_flodata(text, blockinfo, net):
                 return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
             elif 'payeeAddress' in contract_conditions.keys():
                 contract_conditions['payeeAddress'] = find_word_index_fromstring(clean_text,contract_conditions['payeeAddress'])
-                if not check_flo_address(contract_conditions['payeeAddress']):
+                if not check_flo_address(contract_conditions['payeeAddress'], is_testnet):
                     return outputreturn('noise')
                 else:
                     return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
@@ -1028,7 +1028,7 @@ def parse_flodata(text, blockinfo, net):
                 contract_address = '' 
             else:
                 contract_address = find_original_case(contract_address, clean_text)
-                if not check_flo_address(contract_address):
+                if not check_flo_address(contract_address, is_testnet):
                     return outputreturn('noise') 
 
             if operation == 'category1':
@@ -1072,7 +1072,7 @@ def parse_flodata(text, blockinfo, net):
             contract_address = '' 
         else:
             contract_address = find_original_case(contract_address, clean_text)
-            if not check_flo_address(contract_address):
+            if not check_flo_address(contract_address, is_testnet):
                 return outputreturn('noise') 
 
         return outputreturn('smart-contract-one-time-event-continuos-event-participation', f"{clean_text}", f"{tokenname}", tokenamount, f"{contract_name}", f"{contract_address}")
@@ -1106,7 +1106,7 @@ def parse_flodata(text, blockinfo, net):
 
         contract_address = extract_special_character_word(first_classification['wordlist'],'$')
         contract_address = find_original_case(contract_address, clean_text)
-        if not check_flo_address(contract_address):
+        if not check_flo_address(contract_address, is_testnet):
             return outputreturn('noise') 
 
         contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token, blocktime=blockinfo['time'])
@@ -1117,7 +1117,7 @@ def parse_flodata(text, blockinfo, net):
             assert contract_conditions['subtype'] == 'tokenswap'
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
-            assert contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined" or check_flo_address(find_original_case(contract_conditions['priceType'], clean_text))
+            assert contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined" or check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
             assert float(contract_conditions['price'])
         except AssertionError:
             return outputreturn('noise')

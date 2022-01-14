@@ -225,7 +225,6 @@ class LatestTransactions(LatestCacheBase):
     transactionType = Column('transactionType', String)
     parsedFloData = Column('parsedFloData', String)
 
-
 class LatestBlocks(LatestCacheBase):
     __tablename__ = "latestBlocks"
     id = Column('id', Integer, primary_key=True)
