@@ -728,7 +728,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         elif parsed_data['transferType'] == 'smartContract':
             if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
-                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}, echo=True)
+                connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                 participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
                 participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
@@ -2664,6 +2664,9 @@ if args.reset == 1:
     session = create_database_session_orm('system_dbs', {'db_name': "latestCache"}, LatestCacheBase)
     session.commit()
     session.close()
+
+# Determine API source for block and transaction information
+
 
 
 if "__name__" == "__main__":
