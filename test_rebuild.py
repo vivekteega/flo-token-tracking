@@ -176,7 +176,6 @@ old_latest_cache.execute("ATTACH DATABASE 'latestCache.db' AS new_db")
 old_latest_cache.execute("INSERT INTO new_db.latestBlocks SELECT * FROM latestBlocks")
 old_latest_cache.close()
 
-
 # delete 
 # system.db , latestCache.db, smartContracts, tokens 
 if os.path.isfile('./system1.db'):
@@ -187,3 +186,8 @@ if os.path.isfile('./smartContracts1'):
     shutil.rmtree('smartContracts1')
 if os.path.isfile('./tokens1'):
     shutil.rmtree('tokens1')
+
+# Update system.db's last scanned block 
+connection = create_database_connection('system_dbs', {'db_name': "system"})
+connection.execute(f"UPDATE systemData SET value = {int(list(lblocks_dict.keys())[-1])} WHERE attribute = 'lastblockscanned';")
+connection.close()
