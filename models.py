@@ -16,6 +16,7 @@ class ActiveTable(Base):
     parentid = Column('parentid', Integer)
     consumedpid = Column('consumedpid', String)
     transferBalance = Column('transferBalance', Float)
+    addressBalance = Column('addressBalance', Float)
 
 
 class ConsumedTable(Base):
@@ -27,6 +28,7 @@ class ConsumedTable(Base):
     parentid = Column('parentid', Integer)
     consumedpid = Column('consumedpid', String)
     transferBalance = Column('transferBalance', Float)
+    addressBalance = Column('addressBalance', Float)
 
 
 class TransferLogs(Base):
