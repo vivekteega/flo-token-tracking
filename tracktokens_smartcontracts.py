@@ -251,16 +251,16 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     consumedpid_string = consumedpid_string[:-1]
 
                 # Make new entry
-                receiverAddress_details = session.query(ActiveTable).filter_by(address=outputAddress).order_by(ActiveTable.id.desc()).first()
-                senderAddress_details = session.query(ActiveTable).filter_by(address=inputAddress).order_by(ActiveTable.id.desc()).first()
+                receiverAddress_details = session.query(ActiveTable).filter(ActiveTable.address==outputAddress, ActiveTable.addressBalance!=None).order_by(ActiveTable.id.desc()).first()
                 if receiverAddress_details is None:
                     addressBalance = commentTransferAmount
                 else:
                     addressBalance = receiverAddress_details.addressBalance + commentTransferAmount
                     receiverAddress_details.addressBalance = None
-                
                 session.add(ActiveTable(address=outputAddress, consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance = addressBalance))
-                senderAddress_details.addressBalance = senderAddress_details.addressBalance - commentTransferAmount
+
+                senderAddress_details = session.query(ActiveTable).filter_by(address=inputAddress).order_by(ActiveTable.id.desc()).first()
+                senderAddress_details.addressBalance = senderAddress_details.addressBalance - commentTransferAmount 
 
                 # Migration
                 # shift pid of used utxos from active to consumed
@@ -307,15 +307,15 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     consumedpid_string = consumedpid_string[:-1]
 
                 # Make new entry
-                receiverAddress_details = session.query(ActiveTable).filter_by(address=outputAddress).order_by(ActiveTable.id.desc()).first()
-                senderAddress_details = session.query(ActiveTable).filter_by(address=inputAddress).order_by(ActiveTable.id.desc()).first()
+                receiverAddress_details = session.query(ActiveTable).filter(ActiveTable.address==outputAddress, ActiveTable.addressBalance!=None).order_by(ActiveTable.id.desc()).first()
                 if receiverAddress_details is None:
                     addressBalance = commentTransferAmount
                 else:
-                    addressBalance = receiverAddress_details.addressBalance + commentTransferAmount
+                    addressBalance =  receiverAddress_details.addressBalance + commentTransferAmount
                     receiverAddress_details.addressBalance = None
-                
                 session.add(ActiveTable(address=outputAddress, consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance = addressBalance))
+
+                senderAddress_details = session.query(ActiveTable).filter_by(address=inputAddress).order_by(ActiveTable.id.desc()).first()
                 senderAddress_details.addressBalance = senderAddress_details.addressBalance - commentTransferAmount
 
                 # Migration 
