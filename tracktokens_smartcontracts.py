@@ -8,10 +8,10 @@ import sqlite3
 import sys
 import pybtc
 import requests
-import socketio
-from sqlalchemy import create_engine, func
-from sqlalchemy.orm import sessionmaker
-import time
+import socketio 
+from sqlalchemy import create_engine, func 
+from sqlalchemy.orm import sessionmaker 
+import time 
 import parsing 
 from config import * 
 from datetime import datetime 
@@ -2672,7 +2672,7 @@ if args.reset == 1:
 # Determine API source for block and transaction information
 
 
-if "__name__" == "__main__":
+if __name__ == "__main__":
     # MAIN LOGIC STARTS
     # scan from the latest block saved locally to latest network block
     scanBlockchain()
