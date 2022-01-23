@@ -17,6 +17,7 @@ class ActiveTable(Base):
     consumedpid = Column('consumedpid', String)
     transferBalance = Column('transferBalance', Float)
     addressBalance = Column('addressBalance', Float)
+    orphaned_parentid = Column('orphaned_parentid', Integer)
 
 
 class ConsumedTable(Base):
@@ -209,14 +210,15 @@ class TokenAddressMapping(SystemBase):
     blockHash = Column('blockHash', String)
 
 
-class DatabaseAddressMapping(SystemBase):
-    __tablename__ = "databaseAddressMapping"
+class DatabaseTypeMapping(SystemBase):
+    __tablename__ = "databaseTypeMapping"
 
     id = Column('id', Integer, primary_key=True)
     db_name = Column('db_name', String)
     db_type = Column('db_type', String)
     keyword = Column('keyword', String)
     object_format = Column ('object_format', String)
+    blockNumber = Column('blockNumber', Integer)
 
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"

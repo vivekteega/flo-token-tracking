@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, func 
 from sqlalchemy.orm import sessionmaker 
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseAddressMapping
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping
 import json 
 from tracktokens_smartcontracts import processTransaction 
 import os 
@@ -168,8 +168,6 @@ for transaction in ltransactions:
     transaction_data = json.loads(transaction_dict['jsonData'])
     parsed_flodata = json.loads(transaction_dict['parsedFloData'])
     block_info = json.loads(lblocks_dict[transaction_dict['blockNumber']]['jsonData'])
-    #if transaction_data['txid'] == 'b57cf412c8cb16e473d04bae44214705c64d2c25146be22695bf1ac36e166ee0':
-    #    pdb.set_trace()
     processTransaction(transaction_data, parsed_flodata, block_info)
 
 # copy the old block data 

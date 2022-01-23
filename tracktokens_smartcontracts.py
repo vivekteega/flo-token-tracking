@@ -1,13 +1,13 @@
-import argparse
-import configparser
-import json
-import logging
-import os
-import shutil
-import sqlite3
-import sys
-import pybtc
-import requests
+import argparse 
+import configparser 
+import json 
+import logging 
+import os 
+import shutil 
+import sqlite3 
+import sys 
+import pybtc 
+import requests 
 import socketio 
 from sqlalchemy import create_engine, func 
 from sqlalchemy.orm import sessionmaker 
@@ -15,9 +15,9 @@ import time
 import parsing 
 from config import * 
 from datetime import datetime 
-from ast import literal_eval
+from ast import literal_eval 
 import pdb 
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, DatabaseAddressMapping
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, DatabaseTypeMapping
 
 
 goodblockset = {}
@@ -179,12 +179,13 @@ def updateLatestBlock(blockData):
 
 def process_pids(entries, session, piditem):
     for entry in entries:
-        consumedpid_dict = literal_eval(entry.consumedpid)
+        '''consumedpid_dict = literal_eval(entry.consumedpid)
         total_consumedpid_amount = 0
         for key in consumedpid_dict.keys():
             total_consumedpid_amount = total_consumedpid_amount + float(consumedpid_dict[key])
         consumedpid_dict[piditem[0]] = total_consumedpid_amount
-        entry.consumedpid = str(consumedpid_dict)
+        entry.consumedpid = str(consumedpid_dict)'''
+        entry.orphaned_parentid = entry.parentid
         entry.parentid = None
     #session.commit()
     return 1
@@ -198,12 +199,13 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
         session.add(ActiveTable(address=outputAddress, consumedpid='1', transferBalance=float(tokenAmount)))
         blockchainReference = neturl + 'tx/' + transaction_data['txid']
         session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
-                                    transferAmount=tokenAmount, blockNumber=blockinfo['height'],
-                                    blockHash=blockinfo['hash'], time=blockinfo['time'],
-                                    transactionHash=transaction_data['txid'],
-                                    blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data),
-                                    transactionType=parsed_data['type'],
-                                    parsedFloData=json.dumps(parsed_data)))
+                                        transferAmount=tokenAmount, blockNumber=blockinfo['height'],
+                                        blockHash=blockinfo['hash'], time=blockinfo['time'],
+                                        transactionHash=transaction_data['txid'],
+                                        blockchainReference=blockchainReference, 
+                                        jsonData=json.dumps(transaction_data),
+                                        transactionType=parsed_data['type'],
+                                        parsedFloData=json.dumps(parsed_data)))
         session.commit()
         session.close()
         return 1
@@ -251,7 +253,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     consumedpid_string = consumedpid_string[:-1]
 
                 # Make new entry
-                receiverAddress_details = session.query(ActiveTable).filter(ActiveTable.address==outputAddress, ActiveTable.addressBalance!=None).order_by(ActiveTable.id.desc()).first()
+                receiverAddress_details = session.query(ActiveTable).filter(ActiveTable.address==outputAddress, ActiveTable.addressBalance!=None).first()
                 if receiverAddress_details is None:
                     addressBalance = commentTransferAmount
                 else:
@@ -307,13 +309,13 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     consumedpid_string = consumedpid_string[:-1]
 
                 # Make new entry
-                receiverAddress_details = session.query(ActiveTable).filter(ActiveTable.address==outputAddress, ActiveTable.addressBalance!=None).order_by(ActiveTable.id.desc()).first()
+                receiverAddress_details = session.query(ActiveTable).filter(ActiveTable.address==outputAddress, ActiveTable.addressBalance!=None).first()
                 if receiverAddress_details is None:
                     addressBalance = commentTransferAmount
                 else:
                     addressBalance =  receiverAddress_details.addressBalance + commentTransferAmount
                     receiverAddress_details.addressBalance = None
-                session.add(ActiveTable(address=outputAddress, consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance = addressBalance))
+                session.add(ActiveTable(address=outputAddress, parentid=pidlst[-1][0], consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance = addressBalance))
 
                 senderAddress_details = session.query(ActiveTable).filter_by(address=inputAddress).order_by(ActiveTable.id.desc()).first()
                 senderAddress_details.addressBalance = senderAddress_details.addressBalance - commentTransferAmount
@@ -678,7 +680,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             if check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 # Pull details of the token type from system.db database 
                 connection = create_database_connection('system_dbs', {'db_name':'system'})
-                db_details = connection.execute("select db_name, db_type, keyword, object_format from databaseAddressMapping where db_name='{}'".format(parsed_data['tokenIdentification']))
+                db_details = connection.execute("select db_name, db_type, keyword, object_format from databaseTypeMapping where db_name='{}'".format(parsed_data['tokenIdentification']))
                 db_details = list(zip(*db_details))
                 if db_details[1] == 'infinite-token':
                     db_object = json.loads(db_details[3])
@@ -1502,11 +1504,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             # add it to token address to token mapping db table
             connection = create_database_connection('system_dbs', {'db_name':'system'})
             connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
-            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'token', '', '')")
+            connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'token', '', '', '{transaction_data['blockheight']}')")
             connection.close()
 
             updateLatestTransaction(transaction_data, parsed_data)
-            pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
+            pushData_SSEapi(f"Token | Successfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
             return 1
         else:
             logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
@@ -1678,10 +1680,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                        transactionHash=transaction_data['txid'],
                                                        blockNumber=transaction_data['blockheight'],
                                                        blockHash=transaction_data['blockhash']))
-                    session.add(DatabaseAddressMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
+                    session.add(DatabaseTypeMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
                                                                     db_type='smartcontract',
                                                                     keyword='',
-                                                                    object_format=''))
+                                                                    object_format='',
+                                                                    blockNumber=transaction_data['blockheight']))
                     session.commit()
 
                     session.close()
@@ -1800,10 +1803,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                     transactionHash=transaction_data['txid'],
                                                                     blockNumber=transaction_data['blockheight'],
                                                                     blockHash=transaction_data['blockhash']))
-                                session.add(DatabaseAddressMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
+                                session.add(DatabaseTypeMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
                                                                     db_type='smartcontract',
                                                                     keyword='',
-                                                                    object_format=''))
+                                                                    object_format='',
+                                                                    blockNumber=transaction_data['blockheight']))
                                 session.commit()
                                 session.close()
 
@@ -1953,7 +1957,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                blockchainReference=blockchainReference,
                                                                jsonData=json.dumps(transaction_data),
                                                                rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet",
-
                                                                parsedFloData=json.dumps(parsed_data)
                                                                ))
                         session.commit()
@@ -1964,8 +1967,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                 # check the type of smart contract ie. external trigger or internal trigger
                 if 'payeeAddress' in contractStructure:
-                    logger.warning(
-                        f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger")
+                    logger.warning(f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger")
                     # Store transfer as part of RejectedContractTransactionHistory
                     session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
@@ -2434,11 +2436,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             connection = create_database_connection('system_dbs', {'db_name':'system'})
             connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
             nft_data = {'sha256_hash': f"{parsed_data['nftHash']}"}
-            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'nft', '', '{nft_data}'")
+            connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'nft', '', '{nft_data}', '{transaction_data['blockheight']}'")
             connection.close()
 
             updateLatestTransaction(transaction_data, parsed_data)
-
             pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
             return 1
         else:
@@ -2489,7 +2490,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             connection = create_database_connection('system_dbs', {'db_name':'system'})
             connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
             info_object = {'root_address': inputadd}
-            connection.execute(f"INSERT INTO databaseAddressMapping (db_name, db_type, keyword, object_format) VALUES ('{parsed_data['tokenIdentification']}', 'infinite-token', '', '{info_object}'")
+            connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'infinite-token', '', '{info_object}', '{transaction_data['blockheight']}'")
             connection.close()
 
             updateLatestTransaction(transaction_data, parsed_data)
@@ -2670,7 +2671,6 @@ if args.reset == 1:
     session.close()
 
 # Determine API source for block and transaction information
-
 
 if __name__ == "__main__":
     # MAIN LOGIC STARTS
