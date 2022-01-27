@@ -196,7 +196,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
 
     if isInfiniteToken == True:
         # Make new entry 
-        session.add(ActiveTable(address=outputAddress, consumedpid='1', transferBalance=float(tokenAmount)))
+        session.add(ActiveTable(address=outputAddress, consumedpid='1', transferBalance=float(tokenAmount), blockNumber=blockinfo['height']))
         blockchainReference = neturl + 'tx/' + transaction_data['txid']
         session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
                                         transferAmount=tokenAmount, blockNumber=blockinfo['height'],
@@ -259,7 +259,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                 else:
                     addressBalance = receiverAddress_details.addressBalance + commentTransferAmount
                     receiverAddress_details.addressBalance = None
-                session.add(ActiveTable(address=outputAddress, consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance = addressBalance))
+                session.add(ActiveTable(address=outputAddress, consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance=addressBalance, blockNumber=blockinfo['height']))
 
                 senderAddress_details = session.query(ActiveTable).filter_by(address=inputAddress).order_by(ActiveTable.id.desc()).first()
                 senderAddress_details.addressBalance = senderAddress_details.addressBalance - commentTransferAmount 
@@ -275,7 +275,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     process_pids(entries, session, piditem)
 
                     # move the pids consumed in the transaction to consumedTable and delete them from activeTable
-                    session.execute('INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance, addressBalance) SELECT id, address, parentid, consumedpid, transferBalance, addressBalance FROM activeTable WHERE id={}'.format(piditem[0]))
+                    session.execute('INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber) SELECT id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber FROM activeTable WHERE id={}'.format(piditem[0]))
                     session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
                     session.commit()
                 session.commit()
@@ -315,7 +315,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                 else:
                     addressBalance =  receiverAddress_details.addressBalance + commentTransferAmount
                     receiverAddress_details.addressBalance = None
-                session.add(ActiveTable(address=outputAddress, parentid=pidlst[-1][0], consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance = addressBalance))
+                session.add(ActiveTable(address=outputAddress, parentid=pidlst[-1][0], consumedpid=str(piddict), transferBalance=commentTransferAmount, addressBalance=addressBalance, blockNumber=blockinfo['height']))
 
                 senderAddress_details = session.query(ActiveTable).filter_by(address=inputAddress).order_by(ActiveTable.id.desc()).first()
                 senderAddress_details.addressBalance = senderAddress_details.addressBalance - commentTransferAmount
@@ -331,7 +331,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     process_pids(entries, session, piditem)
 
                     # move the pids consumed in the transaction to consumedTable and delete them from activeTable
-                    session.execute('INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance, addressBalance) SELECT id, address, parentid, consumedpid, transferBalance, addressBalance FROM activeTable WHERE id={}'.format(piditem[0]))
+                    session.execute('INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber) SELECT id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber FROM activeTable WHERE id={}'.format(piditem[0]))
                     session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
                     session.commit()
                 session.commit()
@@ -1483,7 +1483,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     elif parsed_data['type'] == 'tokenIncorporation':
         if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
             session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
-            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], addressBalance=parsed_data['tokenAmount']))
+            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], addressBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
             session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                      transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
                                      blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
@@ -2414,7 +2414,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         '''
         if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
             session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
-            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount']))
+            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
             session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                      transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
                                      blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
@@ -2468,7 +2468,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
             parsed_data['tokenAmount'] = 0
             session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
-            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount']))
+            session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
             session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                      transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
                                      blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
@@ -2671,7 +2671,6 @@ if args.reset == 1:
     session.close()
 
 # Determine API source for block and transaction information
-
 if __name__ == "__main__":
     # MAIN LOGIC STARTS
     # scan from the latest block saved locally to latest network block

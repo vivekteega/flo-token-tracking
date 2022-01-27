@@ -1,10 +1,10 @@
 '''
-TEMPLATE FOR SECOND STAGE AFTER INPUT CLASSIFIER
+TEMPLATE FOR SECOND STAGE AFTER INPUT CLASSIFIER 
 
 IF BLOCK If the output of input classifier is tokensystem-C, 
-JUST LINEARLY START BUILDING IT
+JUST LINEARLY START BUILDING IT 
 
-then first start building the known outputs
+then first start building the known outputs 
 
 // outputreturn('token_incorporation',f"{flodata}", f"{tokenname}", f"{tokenamount}") 
 
@@ -159,7 +159,7 @@ Conflicts -
 
 1. Token creation | Token participation 
 2. Smart contract CREATION of the type one-time-event-userchoice | one-time-event-timebased 
-3. Smart contract PARTICIPATION user-choice | Smart contract DEPOSIT continuos-event token-swap
+3. Smart contract PARTICIPATION user-choice | Smart contract DEPOSIT continuos-event token-swap 
 4. Smart contract PARTICIPATION one-time-event-timebased | Smart contract participation - continuos event - tokenswap 
 
 '''
@@ -188,9 +188,9 @@ Allowed formats of Smart Contract and token names
 Check for FLO Address 
 
 Write checks for conditions inside contract conditions 
-Serious error handling for contract-conditions
+Serious error handling for contract-conditions 
 * 2222:00 gives error 
-* contractAmount = 0.022rt gives error | check if space is allowed between 0.022 rt
+* contractAmount = 0.022rt gives error | check if space is allowed between 0.022 rt 
 '''
 
 
@@ -235,5 +235,62 @@ Need infinite tokens to create stable coins, so they can be created without worr
 Create another table in system.db, it simply writes what is every database in one place 
 
 Database_name               Database type
+
+'''
+
+'''
+IDEA FOR NEW ROLLBACK SYSTEM - 24 Jan 2022 
+-------------------------------------------
+
+245436
+[
+    tx1 - rmt - 245436 - send 10 rmt# 
+    tx2 - rmt - 245436 - send 4 rmt# 
+    tx3 - rmt - 245436 - send 1 rmt# 
+    tx4 - rmt - 245436 - send 100 rmt# 
+    tx5 - rmt trigger(5) - 245436 - trigger 
+]
+
+banana - txhash 
+orange - entries in activepid table 
+mangoes - entries in transaction history table 
+
+CURRENT SYSTEM 
+given a block , find out all the oranges in the block 
+given a block, find out all the bananas in the block and 
+for each banana, find corresponding databases( found through parsing of banana flodata and banana txdata)
+    -  if token database then rollback, if contractDatabase then delete entry 
+
+
+NEW SYSTEM 
+give a block , find out all the oranges in the block 
+given a block, find out all the bananas in the block and their corresponding databases( found through parsing of banana flodata and banana txdata)
+    - start opening all those databases one by one | if token database then rollback, if contractDatabase then delete entry 
+
+send transaction -> receive the databases associated with it 
+        
+'''
+
+'''
+Step 1 
+The block that we are rolling back into is earlier than the database creation blockNumber, then delete the whole database without rolling back. Do this for both token databases and smart contract databases 
+
+Step 2 
+If the rolling back block is later than database creation blockNumber, then invoke rollback a database function( rollback_database ) 
+
+Step 3 
+Create a list of databases to be opened, and creation date (creation date is block number). This will exclude the token and smart contract databases which are already deleted 
+
+Step 4
+For each of the database to be opened, rollback the database to rollback point 
+rollback_database will take 2 inputs, a block number to which it has to rollback to and the name of the database 
+
+Step 5 
+Create a delete function, which will delete from transactionHistory, latestCache and contractDatabase 
+
+To-do 
+------
+* Integrate all the functions in the following order: 
+    1 , 2 , 3 , 4 , 5 | That will finish the operation of taking the block number as input and the roll back function will rollback upto the block number specified for all kinds of databases and all kinds of transactions 
 
 '''

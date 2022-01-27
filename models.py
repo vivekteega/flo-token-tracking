@@ -18,6 +18,7 @@ class ActiveTable(Base):
     transferBalance = Column('transferBalance', Float)
     addressBalance = Column('addressBalance', Float)
     orphaned_parentid = Column('orphaned_parentid', Integer)
+    blockNumber = Column('blockNumber', Integer)
 
 
 class ConsumedTable(Base):
@@ -30,6 +31,8 @@ class ConsumedTable(Base):
     consumedpid = Column('consumedpid', String)
     transferBalance = Column('transferBalance', Float)
     addressBalance = Column('addressBalance', Float)
+    orphaned_parentid = Column('orphaned_parentid', Integer)
+    blockNumber = Column('blockNumber', Integer)
 
 
 class TransferLogs(Base):
