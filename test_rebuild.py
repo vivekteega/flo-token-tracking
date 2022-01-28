@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, func 
+from sqlalchemy import create_engine, desc, func 
 from sqlalchemy.orm import sessionmaker 
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping
 import json 
@@ -52,18 +52,6 @@ def create_database_session_orm(type, parameters, base):
     return session
 
 
-# rename all the old databases 
-# system.db , latestCache.db, smartContracts, tokens 
-if os.path.isfile('./system.db'):
-    os.rename('system.db', 'system1.db')
-if os.path.isfile('./latestCache.db'):
-    os.rename('latestCache.db', 'latestCache1.db')
-if os.path.isfile('./smartContracts'):
-    os.rename('smartContracts', 'smartContracts1')
-if os.path.isfile('./tokens'):
-    os.rename('tokens', 'tokens1')
-
-
 # MAIN EXECUTION STARTS
 # Configuration of required variables 
 logger = logging.getLogger(__name__)
@@ -91,8 +79,22 @@ logger.addHandler(stream_handler)
 
 # Read command line arguments
 parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash')
-parser.add_argument('-r', '--reset', nargs='?', const=1, type=int, help='Purge existing db and rebuild it from scratch')
-parser.add_argument('-rb', '--rebuild', nargs='?', const=1, type=int, help='Rebuild it')
+parser.add_argument('-b', '--toblocknumer', nargs='?', type=int, help='Forward to the specified block number')
+parser.add_argument('-n', '--blockcount', nargs='?', type=int, help='Forward to the specified block count') 
+args = parser.parse_args() 
+
+if (args.blockcount and args.toblocknumber):
+    print("You can only specify one of the options -b or -c")
+    sys.exit(0)
+elif args.blockcount:
+    forward_block = lastscannedblock + args.blockcount
+elif args.toblocknumer:
+    forward_block = args.toblocknumer
+else:
+    latestCache_session = create_database_session_orm('system_dbs', {'db_name':'latestCache'}, LatestCacheBase)
+    forward_block = int(latestCache_session.query(LatestBlocks.blockNumber).order_by(LatestBlocks.blockNumber.desc()).first())
+    latestCache_session.close()
+    
 args = parser.parse_args()
 
 apppath = os.path.dirname(os.path.realpath(__file__))
@@ -102,6 +104,17 @@ if not os.path.isdir(dirpath):
 dirpath = os.path.join(apppath, 'smartContracts')
 if not os.path.isdir(dirpath):
     os.mkdir(dirpath)
+
+# rename all the old databases 
+# system.db , latestCache.db, smartContracts, tokens 
+if os.path.isfile('./system.db'):
+    os.rename('system.db', 'system1.db')
+if os.path.isfile('./latestCache.db'):
+    os.rename('latestCache.db', 'latestCache1.db')
+if os.path.isfile('./smartContracts'):
+    os.rename('smartContracts', 'smartContracts1')
+if os.path.isfile('./tokens'):
+    os.rename('tokens', 'tokens1')
 
 # Read configuration
 config = configparser.ConfigParser()

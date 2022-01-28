@@ -281,20 +281,32 @@ def perform_rollback(transaction):
 
 
 # Take input from user reg how many blocks to go back in the blockchain
-'''
-parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash') 
-parser.add_argument('-rbk', '--rollback', nargs='?', const=1, type=int, help='Rollback the script') 
-args = parser.parse_args() 
-'''
 
-number_blocks_to_rollback = 1754000
+parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash') 
+parser.add_argument('-b', '--toblocknumer', nargs='?', type=int, help='Rollback the script to the specified block number') 
+parser.add_argument('-n', '--blockcount', nargs='?', type=int, help='Rollback the script to the number of blocks specified') 
+args = parser.parse_args() 
+
 
 # Get all the transaction and blockdetails from latestCache reg the transactions in the block
 systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase) 
 lastscannedblock = systemdb_session.query(SystemData.value).filter(SystemData.attribute=='lastblockscanned').first() 
 systemdb_session.close() 
 lastscannedblock = int(lastscannedblock.value) 
-rollback_block = lastscannedblock - number_blocks_to_rollback 
+
+
+#number_blocks_to_rollback = 1754000
+if (args.blockcount and args.toblocknumber):
+    print("You can only specify one of the options -b or -c")
+    sys.exit(0)
+elif args.blockcount:
+    rollback_block = lastscannedblock - args.blockcount
+elif args.toblocknumer:
+    rollback_block = args.toblocknumer
+else:
+    print("Please specify the number of blocks to rollback")
+    sys.exit(0)
+    
 
 latestcache_session = create_database_session_orm('system_dbs', {'db_name': 'latestCache'}, LatestCacheBase) 
 latestBlocks = latestcache_session.query(LatestBlocks).filter(LatestBlocks.blockNumber >= rollback_block).all() 
@@ -368,13 +380,3 @@ for blockindex in blocknumber_list:
     systemdb_session.commit()
     latestcache_session.close()
     systemdb_session.close()
-    
-
-'''
-latestcache_session = create_database_session_orm('system_dbs', {'db_name': 'latestCache'}, LatestCacheBase) 
-latestTransactions = latestcache_session.query(LatestTransactions).filter(LatestTransactions.blockNumber >= rollback_block).order_by(LatestTransactions.id.desc()).all() 
-latestBlocks = latestcache_session.query(LatestBlocks).filter(LatestBlocks.blockNumber >= rollback_block).all() 
-
-#for transaction in latestTransactions: 
-perform_rollback(latestTransactions[0])
-'''

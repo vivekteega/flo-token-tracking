@@ -79,10 +79,21 @@ logger.addHandler(stream_handler)
 
 # Read command line arguments
 parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash')
-parser.add_argument('-r', '--reset', nargs='?', const=1, type=int, help='Purge existing db and rebuild it from scratch')
-parser.add_argument('-rb', '--rebuild', nargs='?', const=1, type=int, help='Rebuild it')
-parser.add_argument('-f', '--forwardblock', nargs='?', type=int, help='Forward block number')
-args = parser.parse_args()
+parser.add_argument('-b', '--toblocknumer', nargs='?', type=int, help='Forward to the specified block number')
+parser.add_argument('-n', '--blockcount', nargs='?', type=int, help='Forward to the specified block count') 
+args = parser.parse_args() 
+
+if (args.blockcount and args.toblocknumber):
+    print("You can only specify one of the options -b or -c")
+    sys.exit(0)
+elif args.blockcount:
+    forward_block = lastscannedblock + args.blockcount
+elif args.toblocknumer:
+    forward_block = args.toblocknumer
+else:
+    print("Please specify the number of blocks to rollback")
+    sys.exit(0)
+    
 
 apppath = os.path.dirname(os.path.realpath(__file__))
 dirpath = os.path.join(apppath, 'tokens')
@@ -177,9 +188,8 @@ startblock = int(session.query(SystemData).filter_by(attribute='lastblockscanned
 session.commit()
 session.close()
 
-for blockindex in range(startblock, args.forwardblock):
+for blockindex in range(startblock, forward_block):
     processBlock(blockindex=blockindex) 
-
     # Update system.db's last scanned block 
     connection = create_database_connection('system_dbs', {'db_name': "system"})
     connection.execute(f"UPDATE systemData SET value = {blockindex} WHERE attribute = 'lastblockscanned';")
