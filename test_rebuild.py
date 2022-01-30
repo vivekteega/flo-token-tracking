@@ -9,7 +9,7 @@ import argparse
 import configparser 
 import pdb 
 import shutil 
-import sys
+import sys 
 
 
 # helper functions
@@ -79,8 +79,8 @@ logger.addHandler(stream_handler)
 
 # Read command line arguments
 parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash')
-parser.add_argument('-b', '--toblocknumer', nargs='?', type=int, help='Forward to the specified block number')
-parser.add_argument('-n', '--blockcount', nargs='?', type=int, help='Forward to the specified block count') 
+parser.add_argument('-rb', '--toblocknumer', nargs='?', type=int, help='Forward to the specified block number')
+parser.add_argument('-r', '--blockcount', nargs='?', type=int, help='Forward to the specified block count') 
 args = parser.parse_args() 
 
 if (args.blockcount and args.toblocknumber):
@@ -92,7 +92,7 @@ elif args.toblocknumer:
     forward_block = args.toblocknumer
 else:
     latestCache_session = create_database_session_orm('system_dbs', {'db_name':'latestCache'}, LatestCacheBase)
-    forward_block = int(latestCache_session.query(LatestBlocks.blockNumber).order_by(LatestBlocks.blockNumber.desc()).first())
+    forward_block = int(latestCache_session.query(LatestBlocks.blockNumber).order_by(LatestBlocks.blockNumber.desc()).first()[0])
     latestCache_session.close()
     
 args = parser.parse_args()
@@ -166,8 +166,12 @@ session.close()
 
 # get all blocks and transaction data 
 latestCache_session = create_database_session_orm('system_dbs', {'db_name':'latestCache1'}, LatestCacheBase)
-lblocks = latestCache_session.query(LatestBlocks).all()
-ltransactions = latestCache_session.query(LatestTransactions).all()
+if forward_block:
+    lblocks = latestCache_session.query(LatestBlocks).filter(LatestBlocks.blockNumber <= forward_block).all()
+    ltransactions = latestCache_session.query(LatestTransactions).filter(LatestTransactions.blockNumber <= forward_block).all()
+else:
+    lblocks = latestCache_session.query(LatestBlocks).all()
+    ltransactions = latestCache_session.query(LatestTransactions).all()
 latestCache_session.close()
 
 lblocks_dict = {}

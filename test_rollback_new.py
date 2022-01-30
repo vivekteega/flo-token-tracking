@@ -34,7 +34,6 @@ def create_database_connection(type, parameters):
 
 def create_database_session_orm(type, parameters, base):
     if type == 'token':
-        pdb.set_trace()
         engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
         base.metadata.create_all(bind=engine)
         session = sessionmaker(bind=engine)()
@@ -137,13 +136,13 @@ def rollback_address_balance_processing(db_session, senderAddress, receiverAddre
     # either query out will not come or the last occurence will have address
     # for sender, in all cases we will update the addressBalance of last occurences of senderfloaddress
     # for receiver, if the currentaddressbalance is 0 then do nothing .. and if the currentaddressbalance is not 0 then update the last occurence of receiver address 
-
-    sender_query = db_session.query(ActiveTable).filter(ActiveTable.address==senderAddress).order_by(ActiveTable.id.desc()).first()
-    sender_query.addressBalance = new_senderBalance
+    sender_query = db_session.query(ActiveTable).filter(ActiveTable.address==senderAddress).order_by(ActiveTable.id.desc()).first() 
+    sender_query.addressBalance = new_senderBalance 
 
     if new_receiverBalance != 0 and new_receiverBalance > 0:
-        receiver_query = db_session.query(ActiveTable).filter(ActiveTable.address==receiverAddress).order_by(ActiveTable.id.desc()).limit(2)
-        receiver_query[1].addressBalance = new_receiverBalance
+        receiver_query = db_session.query(ActiveTable).filter(ActiveTable.address==receiverAddress).order_by(ActiveTable.id.desc()).limit(2).all()
+        if len(receiver_query) == 2:
+            receiver_query[1].addressBalance = new_receiverBalance
 
 
 def undo_smartContractPays(tokenIdentification, inputAddress, outputAddress, transaction_data):
@@ -156,7 +155,6 @@ def undo_smartContractPays(tokenIdentification, inputAddress, outputAddress, tra
     transaction_history_entry = tokendb_session.query(TransactionHistory).filter(TransactionHistory.transactionHash == transaction_data.transactionHash).order_by(TransactionHistory.blockNumber.desc()).all()
 
     active_table_last_entries = tokendb_session.query(ActiveTable).order_by(ActiveTable.id.desc()).limit(len(transaction_history_entry))
-    pdb.set_trace()
 
     # Smart Contract database
     '''
@@ -307,6 +305,10 @@ def rollback_database(blockNumber, dbtype, dbname):
         transaction_history_entry = db_session.query(TransactionHistory).filter(TransactionHistory.blockNumber > blockNumber).order_by(TransactionHistory.blockNumber.desc()).all()
 
         for idx, activeTable_entry in enumerate(active_table_last_entries):
+
+            transaction_data = json.loads(transaction_history_entry[idx].jsonData) 
+            inputAddress, outputAddress = find_input_output_addresses(transaction_data) 
+
             # Find out consumedpid and partially consumed pids 
             parentid = None 
             orphaned_parentid = None 
@@ -317,6 +319,8 @@ def rollback_database(blockNumber, dbtype, dbname):
                 orphaned_parentid = activeTable_entry.orphaned_parentid
             if activeTable_entry.consumedpid is not None:
                 consumedpid = literal_eval(activeTable_entry.consumedpid)
+
+            # todo - Find out the input and output address over here, not from the transaction table 
 
             # filter out based on consumped pid and partially consumed pids 
             if parentid is not None:
@@ -389,7 +393,6 @@ def system_database_deletions(blockNumber):
     rejectedContractTransactionHistory_queries = systemdb_session.query(RejectedContractTransactionHistory).filter(RejectedContractTransactionHistory.blockNumber > blockNumber).delete()
     rejectedTransactionHistory_queries = systemdb_session.query(RejectedTransactionHistory).filter(RejectedTransactionHistory.blockNumber > blockNumber).delete()
     tokenAddressMapping_queries = systemdb_session.query(TokenAddressMapping).filter(TokenAddressMapping.blockNumber > blockNumber).delete()
-    
     systemdb_session.query(SystemData).filter(SystemData.attribute=='lastblockscanned').update({SystemData.value:str(blockNumber)})
 
     latestcache_session.commit()
@@ -399,25 +402,31 @@ def system_database_deletions(blockNumber):
 
 
 # Take input from user reg how many blocks to go back in the blockchain
-'''
-    parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash') 
-    parser.add_argument('-rbk', '--rollback', nargs='?', const=1, type=int, help='Rollback the script') 
-    args = parser.parse_args() 
-'''
-
-number_blocks_to_rollback = 1754000
+parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash') 
+parser.add_argument('-rb', '--toblocknumer', nargs='?', type=int, help='Rollback the script to the specified block number') 
+parser.add_argument('-r', '--blockcount', nargs='?', type=int, help='Rollback the script to the number of blocks specified') 
+args = parser.parse_args() 
 
 # Get all the transaction and blockdetails from latestCache reg the transactions in the block
 systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase) 
 lastscannedblock = systemdb_session.query(SystemData.value).filter(SystemData.attribute=='lastblockscanned').first() 
 systemdb_session.close() 
 lastscannedblock = int(lastscannedblock.value) 
-rollback_block = lastscannedblock - number_blocks_to_rollback 
+if (args.blockcount and args.toblocknumber):
+    print("You can only specify one of the options -b or -c")
+    sys.exit(0)
+elif args.blockcount:
+    rollback_block = lastscannedblock - args.blockcount
+elif args.toblocknumer:
+    rollback_block = args.toblocknumer
+else:
+    print("Please specify the number of blocks to rollback")
+    sys.exit(0)
 
 
 def return_token_contract_set(rollback_block):
     latestcache_session = create_database_session_orm('system_dbs', {'db_name': 'latestCache'}, LatestCacheBase) 
-    latestBlocks = latestcache_session.query(LatestBlocks).filter(LatestBlocks.blockNumber >= rollback_block).all() 
+    latestBlocks = latestcache_session.query(LatestBlocks).filter(LatestBlocks.blockNumber > rollback_block).all() 
     lblocks_dict = {}
     blocknumber_list = [] 
     for block in latestBlocks:
@@ -478,6 +487,16 @@ def initiate_rollback_process():
         contract_session.close()
     
     system_database_deletions(rollback_block)
-    
+
+    # update lastblockscanned in system_dbs
+    latestCache_session = create_database_session_orm('system_dbs', {'db_name': 'latestCache'}, LatestCacheBase)
+    lastblockscanned = latestCache_session.query(LatestBlocks.blockNumber).order_by(LatestBlocks.id.desc()).first()[0]
+    latestCache_session.close()
+
+    systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase)
+    lastblockscanned_query = systemdb_session.query(SystemData).filter(SystemData.attribute=='lastblockscanned').first()
+    lastblockscanned_query.value = lastblockscanned
+    systemdb_session.commit()
+    systemdb_session.close()
 
 initiate_rollback_process()

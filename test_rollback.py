@@ -184,7 +184,6 @@ def undo_transferToken(tokenIdentification, tokenAmount, inputAddress, outputAdd
                     orphan_entry.parentid = orphan_entry.orphaned_parentid
                     orphan_entry.orphaned_parentid = None
 
-        
         # update addressBalance 
         rollback_address_balance_processing(db_session, inputAddress, outputAddress, transaction_history_entry[idx].transferAmount)
 
@@ -281,7 +280,6 @@ def perform_rollback(transaction):
 
 
 # Take input from user reg how many blocks to go back in the blockchain
-
 parser = argparse.ArgumentParser(description='Script tracks RMT using FLO data on the FLO blockchain - https://flo.cash') 
 parser.add_argument('-b', '--toblocknumer', nargs='?', type=int, help='Rollback the script to the specified block number') 
 parser.add_argument('-n', '--blockcount', nargs='?', type=int, help='Rollback the script to the number of blocks specified') 

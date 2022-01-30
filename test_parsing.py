@@ -32,6 +32,3 @@ def test_conflict_smart_contract_participation_deposit():
     for test_case in conflict_smart_contract_participation_deposit_test_cases:
         parsed_data = super_main_function(test_case[0])
         expected_parsed_data = test_case[1]
-        
-
-
