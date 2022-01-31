@@ -132,7 +132,7 @@ def rollback_address_balance_processing(db_session, senderAddress, receiverAddre
     # Insertion phase 
     # if new receiver balance is 0, then only insert sender address balance 
     # if receiver balance is not 0, then update previous occurence of the receiver address and sender balance 
-    # for sender, find out weather the last occurence of senderfloid has an addressBalance 
+    # for sender, find out weather 
     # either query out will not come or the last occurence will have address
     # for sender, in all cases we will update the addressBalance of last occurences of senderfloaddress
     # for receiver, if the currentaddressbalance is 0 then do nothing .. and if the currentaddressbalance is not 0 then update the last occurence of receiver address 
@@ -301,13 +301,14 @@ def rollback_database(blockNumber, dbtype, dbname):
     if dbtype == 'token':
         # Connect to database
         db_session = create_database_session_orm('token', {'token_name':dbname}, Base)
-        active_table_last_entries = db_session.query(ActiveTable).filter(ActiveTable.blockNumber > blockNumber).order_by(ActiveTable.id.desc())
-        transaction_history_entry = db_session.query(TransactionHistory).filter(TransactionHistory.blockNumber > blockNumber).order_by(TransactionHistory.blockNumber.desc()).all()
-
-        for idx, activeTable_entry in enumerate(active_table_last_entries):
-
-            transaction_data = json.loads(transaction_history_entry[idx].jsonData) 
-            inputAddress, outputAddress = find_input_output_addresses(transaction_data) 
+        while(True):
+            subqry = db_session.query(func.max(ActiveTable.id))
+            activeTable_entry = db_session.query(ActiveTable).filter(ActiveTable.id == subqry).first()            
+            if activeTable_entry.blockNumber <= blockNumber:
+                break
+            outputAddress = activeTable_entry.address
+            transferAmount = activeTable_entry.transferBalance
+            inputAddress = None
 
             # Find out consumedpid and partially consumed pids 
             parentid = None 
@@ -320,7 +321,6 @@ def rollback_database(blockNumber, dbtype, dbname):
             if activeTable_entry.consumedpid is not None:
                 consumedpid = literal_eval(activeTable_entry.consumedpid)
 
-            # todo - Find out the input and output address over here, not from the transaction table 
 
             # filter out based on consumped pid and partially consumed pids 
             if parentid is not None:
@@ -328,6 +328,7 @@ def rollback_database(blockNumber, dbtype, dbname):
                 activeTable_pid_entry = db_session.query(ActiveTable).filter(ActiveTable.id == parentid).all()[0]
                 # calculate the amount taken from parentid 
                 activeTable_pid_entry.transferBalance = activeTable_pid_entry.transferBalance + calc_pid_amount(activeTable_entry.transferBalance, consumedpid)
+                inputAddress = activeTable_pid_entry.address
 
             if consumedpid != {}:
                 # each key of the pid is totally consumed and with its corresponding value written in the end 
@@ -336,7 +337,8 @@ def rollback_database(blockNumber, dbtype, dbname):
                 for key in list(consumedpid.keys()):
                     consumedpid_entry = db_session.query(ConsumedTable).filter(ConsumedTable.id == key).all()[0]
                     newTransferBalance = consumedpid_entry.transferBalance + consumedpid[key]
-                    db_session.add(ActiveTable(id=consumedpid_entry.id, address=consumedpid_entry.address, parentid=consumedpid_entry.parentid ,consumedpid=consumedpid_entry.consumedpid, transferBalance=newTransferBalance, addressBalance = None))
+                    db_session.add(ActiveTable(id=consumedpid_entry.id, address=consumedpid_entry.address, parentid=consumedpid_entry.parentid ,consumedpid=consumedpid_entry.consumedpid, transferBalance=newTransferBalance, addressBalance = None, blockNumber=consumedpid_entry.blockNumber))
+                    inputAddress = consumedpid_entry.address
                     db_session.delete(consumedpid_entry)
 
                     orphaned_parentid_entries = db_session.query(ActiveTable).filter(ActiveTable.orphaned_parentid == key).all()
@@ -344,13 +346,14 @@ def rollback_database(blockNumber, dbtype, dbname):
                         orphan_entry.parentid = orphan_entry.orphaned_parentid
                         orphan_entry.orphaned_parentid = None
 
-            # update addressBalance 
-            rollback_address_balance_processing(db_session, inputAddress, outputAddress, transaction_history_entry[idx].transferAmount)
+            # update addressBalance
+            rollback_address_balance_processing(db_session, inputAddress, outputAddress, transferAmount)
 
             # delete operations 
             # delete the last row in activeTable and transactionTable 
             db_session.delete(activeTable_entry)
-            db_session.delete(transaction_history_entry[idx])
+        
+        db_session.query(TransactionHistory).filter(TransactionHistory.blockNumber > blockNumber).delete()
         db_session.commit()
 
     elif dbtype == 'smartcontract':
@@ -427,7 +430,7 @@ else:
 def return_token_contract_set(rollback_block):
     latestcache_session = create_database_session_orm('system_dbs', {'db_name': 'latestCache'}, LatestCacheBase) 
     latestBlocks = latestcache_session.query(LatestBlocks).filter(LatestBlocks.blockNumber > rollback_block).all() 
-    lblocks_dict = {}
+    lblocks_dict = {} 
     blocknumber_list = [] 
     for block in latestBlocks:
         block_dict = block.__dict__
@@ -480,12 +483,11 @@ def initiate_rollback_process():
     for contract_db in smartcontractdb_set:
         contract_session = create_database_session_orm('smartcontract', {'db_name': contract_db}, ContractBase) 
         if contract_session.query(TransactionHistory.blockNumber).first()[0] > rollback_block:
-            delete_database(rollback_block, contract_db)
-            contract_session.commit()  
+            delete_database(rollback_block, contract_db) 
+            contract_session.commit() 
         else:
             rollback_database(rollback_block, 'smartcontract', contract_db)
         contract_session.close()
-    
     system_database_deletions(rollback_block)
 
     # update lastblockscanned in system_dbs
@@ -499,4 +501,5 @@ def initiate_rollback_process():
     systemdb_session.commit()
     systemdb_session.close()
 
-initiate_rollback_process()
+if __name__ == "__main__":
+    initiate_rollback_process()
