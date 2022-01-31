@@ -174,6 +174,7 @@ else:
     ltransactions = latestCache_session.query(LatestTransactions).all()
 latestCache_session.close()
 
+
 lblocks_dict = {}
 for block in lblocks:
     block_dict = block.__dict__
@@ -190,7 +191,7 @@ for transaction in ltransactions:
 # copy the old block data 
 old_latest_cache = create_database_connection('system_dbs', {'db_name':'latestCache1'})
 old_latest_cache.execute("ATTACH DATABASE 'latestCache.db' AS new_db")
-old_latest_cache.execute("INSERT INTO new_db.latestBlocks SELECT * FROM latestBlocks")
+old_latest_cache.execute("INSERT INTO new_db.latestBlocks SELECT * FROM latestBlocks WHERE blockNumber <= ?", (forward_block,))
 old_latest_cache.close()
 
 # delete 
