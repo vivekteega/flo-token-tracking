@@ -163,59 +163,6 @@ def undo_smartContractPays(tokenIdentification, inputAddress, outputAddress, tra
     print('')
 
 
-def undo_transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress, transaction_data):
-    # Connect to database
-    db_session = create_database_session_orm('token', {'token_name':tokenIdentification}, Base)
-    transaction_history_entry = db_session.query(TransactionHistory).filter(TransactionHistory.transactionHash == transaction_data.transactionHash).order_by(TransactionHistory.blockNumber.desc()).all()
-
-    active_table_last_entries = db_session.query(ActiveTable).order_by(ActiveTable.id.desc()).limit(len(transaction_history_entry))
-    
-    for idx, activeTable_entry in enumerate(active_table_last_entries):
-        # Find out consumedpid and partially consumed pids 
-        parentid = None 
-        orphaned_parentid = None 
-        consumedpid = None 
-        if activeTable_entry.parentid is not None:
-            parentid = activeTable_entry.parentid
-        if activeTable_entry.orphaned_parentid is not None:
-            orphaned_parentid = activeTable_entry.orphaned_parentid
-        if activeTable_entry.consumedpid is not None:
-            consumedpid = literal_eval(activeTable_entry.consumedpid)
-
-        # filter out based on consumped pid and partially consumed pids 
-        if parentid is not None:
-            # find query in activeTable with the parentid
-            activeTable_pid_entry = db_session.query(ActiveTable).filter(ActiveTable.id == parentid).all()[0]
-            # calculate the amount taken from parentid 
-            activeTable_pid_entry.transferBalance = activeTable_pid_entry.transferBalance + calc_pid_amount(activeTable_entry.transferBalance, consumedpid)
-
-        if consumedpid != {}:
-            # each key of the pid is totally consumed and with its corresponding value written in the end 
-            # how can we maintain the order of pid consumption? The bigger pid number will be towards the end 
-            # 1. pull the pid number and its details from the consumedpid table 
-            for key in list(consumedpid.keys()):
-                consumedpid_entry = db_session.query(ConsumedTable).filter(ConsumedTable.id == key).all()[0]
-                newTransferBalance = consumedpid_entry.transferBalance + consumedpid[key]
-                db_session.add(ActiveTable(id=consumedpid_entry.id, address=consumedpid_entry.address, parentid=consumedpid_entry.parentid ,consumedpid=consumedpid_entry.consumedpid, transferBalance=newTransferBalance, addressBalance = None))
-                db_session.delete(consumedpid_entry)
-
-                orphaned_parentid_entries = db_session.query(ActiveTable).filter(ActiveTable.orphaned_parentid == key).all()
-                for orphan_entry in orphaned_parentid_entries:
-                    orphan_entry.parentid = orphan_entry.orphaned_parentid
-                    orphan_entry.orphaned_parentid = None
-
-        
-        # update addressBalance 
-        rollback_address_balance_processing(db_session, inputAddress, outputAddress, transaction_history_entry[idx].transferAmount)
-
-        # delete operations 
-        # delete the last row in activeTable and transactionTable 
-        db_session.delete(activeTable_entry)
-        db_session.delete(transaction_history_entry[idx])
-
-    db_session.commit()
-
-
 def find_input_output_addresses(transaction_data):
     # Create vinlist and outputlist
     vinlist = []
@@ -275,28 +222,6 @@ def delete_token_database(token_name):
         os.remove(dirpath)
 
 
-def perform_rollback(transaction):
-    latestCache = create_database_session_orm('system_dbs', {'db_name': 'latestCache'}, LatestCacheBase)
-    # categorize transaction and find out the databases it will affect 
-    transaction_data = json.loads(transaction.jsonData) 
-    inputAddress, outputAddress = find_input_output_addresses(transaction_data) 
-    parsed_flodata = literal_eval(transaction.parsedFloData) 
-    inspected_flodata = inspect_parsed_flodata(parsed_flodata, inputAddress, outputAddress) 
-    
-    if inspected_flodata['type'] == 'tokentransfer':
-        # undo the transaction in token database
-        undo_transferToken(inspected_flodata['token_db'], inspected_flodata['token_amount'], inputAddress, outputAddress, transaction) 
-    elif inspected_flodata['type'] == 'tokenIncorporation':
-        # note - if you want you can do checks to make sure the database has only 1 entry 
-        # delete the token database
-        delete_token_database(inspected_flodata['token_db'])
-    elif inspected_flodata['type'] == 'smartContractPays':
-        undo_smartContractPays(inspected_flodata[''], inputAddress, outputAddress, transaction_data)
-    else:
-        print("Transaction not in any inspected_flodata category until now.. Exiting")
-        sys.exit(0)
-
-
 def rollback_database(blockNumber, dbtype, dbname):
     if dbtype == 'token':
         # Connect to database
@@ -329,6 +254,13 @@ def rollback_database(blockNumber, dbtype, dbname):
                 # calculate the amount taken from parentid 
                 activeTable_pid_entry.transferBalance = activeTable_pid_entry.transferBalance + calc_pid_amount(activeTable_entry.transferBalance, consumedpid)
                 inputAddress = activeTable_pid_entry.address
+            
+            if orphaned_parentid is not None:
+                try:
+                    orphaned_parentid_entry = db_session.query(ConsumedTable).filter(ConsumedTable.id == orphaned_parentid).all()[0]
+                    inputAddress = orphaned_parentid_entry.address
+                except:
+                    pdb.set_trace()
 
             if consumedpid != {}:
                 # each key of the pid is totally consumed and with its corresponding value written in the end 
@@ -337,16 +269,20 @@ def rollback_database(blockNumber, dbtype, dbname):
                 for key in list(consumedpid.keys()):
                     consumedpid_entry = db_session.query(ConsumedTable).filter(ConsumedTable.id == key).all()[0]
                     newTransferBalance = consumedpid_entry.transferBalance + consumedpid[key]
-                    db_session.add(ActiveTable(id=consumedpid_entry.id, address=consumedpid_entry.address, parentid=consumedpid_entry.parentid ,consumedpid=consumedpid_entry.consumedpid, transferBalance=newTransferBalance, addressBalance = None, blockNumber=consumedpid_entry.blockNumber))
+                    db_session.add(ActiveTable(id=consumedpid_entry.id, address=consumedpid_entry.address, parentid=consumedpid_entry.parentid ,consumedpid=consumedpid_entry.consumedpid, transferBalance=newTransferBalance, addressBalance = None, orphaned_parentid=consumedpid_entry.orphaned_parentid ,blockNumber=consumedpid_entry.blockNumber))
                     inputAddress = consumedpid_entry.address
                     db_session.delete(consumedpid_entry)
 
                     orphaned_parentid_entries = db_session.query(ActiveTable).filter(ActiveTable.orphaned_parentid == key).all()
-                    for orphan_entry in orphaned_parentid_entries:
-                        orphan_entry.parentid = orphan_entry.orphaned_parentid
-                        orphan_entry.orphaned_parentid = None
+                    if len(orphaned_parentid_entries) != 0:
+                        for orphan_entry in orphaned_parentid_entries:
+                            orphan_entry.parentid = orphan_entry.orphaned_parentid
+                            orphan_entry.orphaned_parentid = None
+            
 
             # update addressBalance
+            if inputAddress is None:
+                pdb.set_trace()
             rollback_address_balance_processing(db_session, inputAddress, outputAddress, transferAmount)
 
             # delete operations 
@@ -500,6 +436,7 @@ def initiate_rollback_process():
     lastblockscanned_query.value = lastblockscanned
     systemdb_session.commit()
     systemdb_session.close()
+
 
 if __name__ == "__main__":
     initiate_rollback_process()
