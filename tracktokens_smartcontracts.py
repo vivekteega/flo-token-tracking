@@ -271,6 +271,9 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     entries = session.query(ActiveTable).filter(ActiveTable.parentid == piditem[0]).all()
                     process_pids(entries, session, piditem)
 
+                    entries = session.query(ConsumedTable).filter(ConsumedTable.parentid == piditem[0]).all()
+                    process_pids(entries, session, piditem)
+
                     # move the pids consumed in the transaction to consumedTable and delete them from activeTable
                     session.execute('INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber) SELECT id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber FROM activeTable WHERE id={}'.format(piditem[0]))
                     session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
@@ -322,6 +325,9 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                 for piditem in pidlst[:-1]:
                     # move the parentids consumed to consumedpid column in both activeTable and consumedTable
                     entries = session.query(ActiveTable).filter(ActiveTable.parentid == piditem[0]).all()
+                    process_pids(entries, session, piditem)
+
+                    entries = session.query(ConsumedTable).filter(ConsumedTable.parentid == piditem[0]).all()
                     process_pids(entries, session, piditem)
 
                     # move the pids consumed in the transaction to consumedTable and delete them from activeTable
