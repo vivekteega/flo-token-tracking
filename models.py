@@ -225,6 +225,7 @@ class DatabaseTypeMapping(SystemBase):
 
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
+    
     id = Column('id', Integer, primary_key=True)
     transactionHash = Column('transactionHash', String)
     blockNumber = Column('blockNumber', String)
@@ -234,6 +235,7 @@ class LatestTransactions(LatestCacheBase):
 
 class LatestBlocks(LatestCacheBase):
     __tablename__ = "latestBlocks"
+
     id = Column('id', Integer, primary_key=True)
     blockNumber = Column('blockNumber', String)
     blockHash = Column('blockHash', String)

@@ -75,33 +75,39 @@ def inspect_parsed_flodata(parsed_flodata, inputAddress, outputAddress):
 
 
 def getDatabase_from_parsedFloData(parsed_flodata, inputAddress, outputAddress):
+    tokenlist = []
+    contractlist = []
     if parsed_flodata['type'] == 'transfer':
         if parsed_flodata['transferType'] == 'token':
-            return {'type':'token_db', 'token_db':f"{parsed_flodata['tokenIdentification']}"}
+            #return {'type':'token_db', 'token_db':f"{parsed_flodata['tokenIdentification']}"}
+            tokenlist.append(parsed_flodata['tokenIdentification'])
         elif parsed_flodata['transferType'] == 'smartContract':
-            return {'type':'smartcontract_db', 'contract_db': f"{parsed_flodata['contractName']}-{outputAddress}" ,'token_db':f"{parsed_flodata['tokenIdentification']}"}
+            #return {'type':'smartcontract_db', 'contract_db': f"{parsed_flodata['contractName']}-{outputAddress}" ,'token_db':f"{parsed_flodata['tokenIdentification']}"}
+            tokenlist.append(parsed_flodata['tokenIdentification'])
+            contractlist.append(f"{parsed_flodata['contractName']}-{outputAddress}")
         elif parsed_flodata['transferType'] == 'swapParticipation':
-            return {'type':'swapcontract_db', 'contract_db': f"{parsed_flodata['contractName']}-{outputAddress}" ,'accepting_token_db':f"{parsed_flodata['contract-conditions']['accepting_token']}", 'selling_token_db':f"{parsed_flodata['contract-conditions']['selling_token']}"}
+            #return {'type':'swapcontract_db', 'contract_db': f"{parsed_flodata['contractName']}-{outputAddress}" ,'accepting_token_db':f"{parsed_flodata['contract-conditions']['accepting_token']}", 'selling_token_db':f"{parsed_flodata['contract-conditions']['selling_token']}"}
+            tokenlist.append(parsed_flodata['contract-conditions']['accepting_token'])
+            tokenlist.append(parsed_flodata['contract-conditions']['selling_token'])
+            contractlist.append(f"{parsed_flodata['contractName']}-{outputAddress}")
         elif parsed_flodata['transferType'] == 'nft':
-            return {'type':'nft_db', 'token_db':f"{parsed_flodata['tokenIdentification']}"}
+            #return {'type':'nft_db', 'token_db':f"{parsed_flodata['tokenIdentification']}"}
+            tokenlist.append(parsed_flodata['tokenIdentification'])
     elif parsed_flodata['type'] == 'smartContractPays':
         # contract address, token | both of them come from 
         sc_session = create_database_session_orm('smart_contract', {'contract_name':f"{parsed_flodata['contractName']}", 'contract_address':f"{outputAddress}"}, ContractBase)
         token_db = sc_session.query(ContractStructure.value).filter(ContractStructure.attribute=='tokenIdentification').first()[0]
-        return {'type':'smartcontract_db', 'contract_db':f"{parsed_flodata['contractName']}-{outputAddress}", 'token_db':f"{token_db}"}
-    '''
-    if parsed_flodata['type'] == 'smartContractIncorporation':
-        return {'type':'smartcontract_db', 'contract_db':f"{parsed_flodata['contractName']}-{outputAddress}"}
-    if parsed_flodata['type'] == 'tokenIncorporation':
-        return {'type':'token_db', 'token_db':f"{parsed_flodata['tokenIdentification']}"}
-    '''
+        #return {'type':'smartcontract_db', 'contract_db':f"{parsed_flodata['contractName']}-{outputAddress}", 'token_db':f"{token_db}"}
+        tokenlist.append(token_db)
+        contractlist.append(f"{parsed_flodata['contractName']}-{outputAddress}")
+    elif parsed_flodata['type'] == 'smartContractIncorporation':
+        #return {'type':'smartcontract_db', 'contract_db':f"{parsed_flodata['contractName']}-{outputAddress}"}
+        contractlist.append(f"{parsed_flodata['contractName']}-{outputAddress}")
+    elif parsed_flodata['type'] == 'tokenIncorporation':
+        #return {'type':'token_db', 'token_db':f"{parsed_flodata['tokenIdentification']}"}
+        tokenlist.append(parsed_flodata['tokenIdentification'])
 
-
-def undo_last_single_transaction():
-    consumedpid_entry = db_session.query(ConsumedTable).filter(ConsumedTable.id == key).all()
-    newTransferBalance = consumedpid_entry[0].transferBalance + consumedpid[key]
-    db_session.add(ActiveTable(id=consumedpid_entry[0].id, address=consumedpid_entry[0].address, consumedpid=consumedpid_entry[0].consumedpid, transferBalance=newTransferBalance, addressBalance = consumedpid_entry[0].addressBalance))
-    db_session.commit()
+    return tokenlist, contractlist
 
 
 def calc_pid_amount(transferBalance, consumedpid):
@@ -143,24 +149,6 @@ def rollback_address_balance_processing(db_session, senderAddress, receiverAddre
         receiver_query = db_session.query(ActiveTable).filter(ActiveTable.address==receiverAddress).order_by(ActiveTable.id.desc()).limit(2).all()
         if len(receiver_query) == 2:
             receiver_query[1].addressBalance = new_receiverBalance
-
-
-def undo_smartContractPays(tokenIdentification, inputAddress, outputAddress, transaction_data):
-    # Token database 
-    '''
-        * rollback each pid transaction 
-        * the addressBalance will have to be calculated after each loop, NOT at the end of the loop 
-    '''
-    tokendb_session = create_database_session_orm('token', {'token_name':tokenIdentification}, Base)
-    transaction_history_entry = tokendb_session.query(TransactionHistory).filter(TransactionHistory.transactionHash == transaction_data.transactionHash).order_by(TransactionHistory.blockNumber.desc()).all()
-
-    active_table_last_entries = tokendb_session.query(ActiveTable).order_by(ActiveTable.id.desc()).limit(len(transaction_history_entry))
-
-    # Smart Contract database
-    '''
-        * 
-    '''
-    print('')
 
 
 def find_input_output_addresses(transaction_data):
@@ -216,13 +204,8 @@ def find_input_output_addresses(transaction_data):
     return inputlist[0], outputlist[0]
 
 
-def delete_token_database(token_name):
-    dirpath = os.path.join(apppath, 'tokens', f"{token_name}.db")
-    if os.path.exists(dirpath):
-        os.remove(dirpath)
-
-
 def rollback_database(blockNumber, dbtype, dbname):
+    pdb.set_trace()
     if dbtype == 'token':
         # Connect to database
         db_session = create_database_session_orm('token', {'token_name':dbname}, Base)
@@ -245,7 +228,6 @@ def rollback_database(blockNumber, dbtype, dbname):
                 orphaned_parentid = activeTable_entry.orphaned_parentid
             if activeTable_entry.consumedpid is not None:
                 consumedpid = literal_eval(activeTable_entry.consumedpid)
-
 
             # filter out based on consumped pid and partially consumed pids 
             if parentid is not None:
@@ -285,10 +267,7 @@ def rollback_database(blockNumber, dbtype, dbname):
                             orphan_entry.parentid = orphan_entry.orphaned_parentid
                             orphan_entry.orphaned_parentid = None
             
-
             # update addressBalance
-            if inputAddress is None:
-                pdb.set_trace()
             rollback_address_balance_processing(db_session, inputAddress, outputAddress, transferAmount)
 
             # delete operations 
@@ -305,9 +284,27 @@ def rollback_database(blockNumber, dbtype, dbname):
         db_session.query(ContractParticipants).filter(ContractParticipants.blockNumber > blockNumber).delete()
 
 
-def delete_database(blockNumber, dbname):
+def delete_database_old(blockNumber, dbname):
     db_session = create_database_session_orm('system_dbs', {'db_name':'system'}, SystemBase)
     databases_to_delete = db_session.query(DatabaseTypeMapping.db_name, DatabaseTypeMapping.db_type).filter(DatabaseTypeMapping.blockNumber>blockNumber).all()
+
+    db_names, db_type = zip(*databases_to_delete)
+
+    for database in databases_to_delete:
+        if database[1] in ['token','infinite-token']:
+            dirpath = os.path.join(apppath, 'tokens', f"{dbname}.db")
+            if os.path.exists(dirpath):
+                os.remove(dirpath)
+        elif database[1] in ['smartcontract']:
+            dirpath = os.path.join(apppath, 'smartcontracts', f"{dbname}.db")
+            if os.path.exists(dirpath):
+                os.remove(dirpath)
+    return db_names
+
+
+def delete_database(blockNumber, dbname):
+    db_session = create_database_session_orm('system_dbs', {'db_name':'system'}, SystemBase)
+    databases_to_delete = db_session.query(DatabaseTypeMapping.db_name, DatabaseTypeMapping.db_type).filter(DatabaseTypeMapping.db_name == dbname).all()
 
     db_names, db_type = zip(*databases_to_delete)
 
@@ -380,6 +377,9 @@ def return_token_contract_set(rollback_block):
         lblocks_dict[block_dict['blockNumber']] = {'blockHash':f"{block_dict['blockHash']}", 'jsonData':f"{block_dict['jsonData']}"}
         blocknumber_list.insert(0,block_dict['blockNumber'])
 
+    tokendb_set = set()
+    smartcontractdb_set = set()
+
     for blockindex in blocknumber_list:
         # Find the all the transactions that happened in this block 
         try:
@@ -387,9 +387,6 @@ def return_token_contract_set(rollback_block):
         except:
             print(f"Block {blockindex} is not found in latestCache. Skipping this block")
             continue
-        
-        tokendb_set = set()
-        smartcontractdb_set = set()
 
         for txhash in block_tx_hashes:
             # Get the transaction details 
@@ -397,23 +394,39 @@ def return_token_contract_set(rollback_block):
             transaction_data = json.loads(transaction.jsonData) 
             inputAddress, outputAddress = find_input_output_addresses(transaction_data) 
             parsed_flodata = literal_eval(transaction.parsedFloData) 
-            database_information = getDatabase_from_parsedFloData(parsed_flodata, inputAddress, outputAddress) 
+            tokenlist, contractlist = getDatabase_from_parsedFloData(parsed_flodata, inputAddress, outputAddress) 
+            
+            for token in tokenlist:
+                tokendb_set.add(token)
+            
+            for contract in contractlist:
+                smartcontractdb_set.add(contract)
 
-            if database_information['token_db']:
-                tokendb_set.add(database_information['token_db'])
-            elif database_information['smartcontract_db']:
-                tokendb_set.add(database_information['token_db'])
-                smartcontractdb_set.add(database_information['contract_db'])
-            elif database_information['swapcontract_db']:
-                tokendb_set.add(database_information['accepting_token_db'])
-                tokendb_set.add(database_information['selling_token_db'])
-                smartcontractdb_set.add(database_information['contract_db'])
-
-        return tokendb_set, smartcontractdb_set
+    return tokendb_set, smartcontractdb_set
 
 
 def initiate_rollback_process():
+    '''
     tokendb_set, smartcontractdb_set = return_token_contract_set(rollback_block)
+    pdb.set_trace()
+    '''
+    # Connect to system.db 
+    systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase)
+    db_names = systemdb_session.query(DatabaseTypeMapping).all()
+
+    for db in db_names: 
+        if db.db_type in ['token', 'nft', 'infinite-token']:
+            if db.blockNumber > rollback_block:
+                delete_database(rollback_block, f"{db.db_name}") 
+            else: 
+                rollback_database(rollback_block, 'token', f"{db.db_name}") 
+        elif db.db_type in ['smartcontract']:
+            if db.blockNumber > rollback_block:
+                delete_database(rollback_block, f"{db.db_name}") 
+            else:
+                rollback_database(rollback_block, 'smartcontract', f"{db.db_name}") 
+    
+    '''
     for token_db in tokendb_set:
         token_session = create_database_session_orm('token', {'token_name': token_db}, Base) 
         if token_session.query(TransactionHistory.blockNumber).first()[0] > rollback_block:
@@ -431,6 +444,8 @@ def initiate_rollback_process():
         else:
             rollback_database(rollback_block, 'smartcontract', contract_db)
         contract_session.close()
+    '''
+    
     system_database_deletions(rollback_block)
 
     # update lastblockscanned in system_dbs
