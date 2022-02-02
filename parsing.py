@@ -1116,9 +1116,11 @@ def parse_flodata(text, blockinfo, net):
         try:
             assert contract_conditions['subtype'] == 'tokenswap'
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
-            assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
-            assert contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined" or check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
-            assert float(contract_conditions['price'])
+            assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['selling_token'])
+            if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined":
+                assert float(contract_conditions['price'])
+            else:
+                assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
         except AssertionError:
             return outputreturn('noise')
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}")

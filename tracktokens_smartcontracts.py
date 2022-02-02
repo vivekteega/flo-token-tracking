@@ -93,6 +93,11 @@ def create_database_session_orm(type, parameters, base):
 
 
 def processBlock(blockindex=None, blockhash=None):
+    # Check smartContracts which will be triggered locally, and not by the contract committee
+    checkLocaltriggerContracts(blockinfo)
+    # Check if any deposits have to be returned 
+    checkReturnDeposits(blockinfo)
+
     if blockindex is not None and blockhash is None:
         logger.info(f'Processing block {blockindex}')
         # Get block details
@@ -111,6 +116,7 @@ def processBlock(blockindex=None, blockhash=None):
         counter = counter + 1
         logger.info(f"Transaction {counter} {transaction}")
         current_index = -1
+
         while(current_index == -1):
             transaction_data = newMultiRequest(f"tx/{transaction}")
             try:
@@ -123,7 +129,7 @@ def processBlock(blockindex=None, blockhash=None):
                 logger.info(f"Transaction {transaction} data : ")
                 logger.info(transaction_data)
                 logger.info('Program will wait for 1 seconds and try to reconnect')
-                time.sleep(1)  
+                time.sleep(1) 
             
         # todo Rule 9 - Reject all noise transactions. Further rules are in parsing.py
         returnval = None
@@ -151,11 +157,6 @@ def processBlock(blockindex=None, blockhash=None):
     entry.value = str(blockinfo['height'])
     session.commit()
     session.close()
-
-    # Check smartContracts which will be triggered locally, and not by the contract committee
-    checkLocaltriggerContracts(blockinfo)
-    # Check if any deposits have to be returned 
-    checkReturnDeposits(blockinfo)
 
 
 def updateLatestTransaction(transactionData, parsed_data):
@@ -1368,9 +1369,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 counter = 0
                 del counter, conditionDict
 
-                if contractStructure['priceType'] == 'predetermined':
+                if contractStructure['pricetype'] in ['predetermined','determined']:
                     swapPrice = contractStructure['price']
-                elif contractStructure['priceType'] == 'dynamic':
+                elif contractStructure['pricetype'] == 'dynamic':
                     pass
                                 
                 returnval = transferToken(contractStructure['accepting_token'], swapPrice, inputlist[0],outputlist[0], transaction_data, parsed_data, blockinfo = blockinfo)
@@ -1724,7 +1725,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             transaction_data['txid']))
                     return 0
         
-            if parsed_data['contractType'] == 'continuous-event':
+            if parsed_data['contractType'] == 'continuous-event' or parsed_data['contractType'] == 'continuos-event':
                 logger.debug("Smart contract is of the type continuous-event")
                 # Add checks to reject the creation of contract
                 if parsed_data['contractAddress'] == inputadd:
@@ -1737,14 +1738,13 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         # todo: Check if the both the tokens mentioned exist if its a token swap
                         if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})):
                             #if (parsed_data['contractConditions']['subtype'] == 'tokenswap'):
-                            if parsed_data['contractConditions']['priceType'] in ['predetermined','determined']:
+                            if parsed_data['contractConditions']['pricetype'] in ['predetermined','determined']:
                                 session.add(ContractStructure1(attribute='subtype', index=0, value=parsed_data['contractConditions']['subtype'])) 
                                 session.add(ContractStructure1(attribute='accepting_token', index=0, value=parsed_data['contractConditions']['accepting_token']))
                                 session.add(ContractStructure1(attribute='selling_token', index=0, value=parsed_data['contractConditions']['selling_token']))
                                 # determine price
-                                session.add(ContractStructure1(attribute='priceType', index=0, value=parsed_data['contractConditions']['priceType']))
+                                session.add(ContractStructure1(attribute='pricetype', index=0, value=parsed_data['contractConditions']['pricetype']))
                                 session.add(ContractStructure1(attribute='price', index=0, value=parsed_data['contractConditions']['price']))
-
                                 
                                 # Store transfer as part of ContractTransactionHistory
                                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
@@ -1812,6 +1812,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 session.close()
 
                                 updateLatestTransaction(transaction_data, parsed_data)
+                                pdb.set_trace()
 
                                 pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
                                 return 1
@@ -1821,7 +1822,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     pass                        
                                     '''
                             else:
-                                logger.info(f"priceType is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
+                                logger.info(f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
                                 # Store transfer as part of RejectedContractTransactionHistory
                                 session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
@@ -1838,7 +1839,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                                 blockchainReference=blockchainReference,
                                                                                 jsonData=json.dumps(
                                                                                     transaction_data),
-                                                                                rejectComment=f"priceType is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected",
+                                                                                rejectComment=f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected",
                                                                                 parsedFloData=json.dumps(
                                                                                     parsed_data)
                                                                                 ))
