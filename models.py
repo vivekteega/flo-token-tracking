@@ -123,6 +123,30 @@ class ContractTransactionHistory(ContractBase):
     parsedFloData = Column('parsedFloData', String)
 
 
+class ContractDeposits(ContractBase):
+    __tablename__ = "contractdeposits"
+
+    id = Column('id', Integer, primary_key=True)
+    depositorAddress = Column('depositorAddress', String)
+    depositAmount = Column('depositAmount', Float)
+    depositBalance = Column('depositBalance', Float)
+    expiryTime = Column('expiryTime', String)
+    unix_expiryTime = Column('unix_expiryTime', Integer)
+    status = Column('status', String)
+    transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+
+
+class ConsumedInfo(ContractBase):
+    __tablename__ = "consumedinfo"
+    
+    id = Column('id', Integer, primary_key=True)
+    id_activetable = Column('id_activetable', Integer)
+    transactionHash = Column('transactionHash', String)
+    blocknumber = Column('blockNumber', Integer)
+
+
 class RejectedContractTransactionHistory(SystemBase):
     __tablename__ = "rejectedContractTransactionHistory"
 
@@ -223,21 +247,39 @@ class DatabaseTypeMapping(SystemBase):
     object_format = Column ('object_format', String)
     blockNumber = Column('blockNumber', Integer)
 
+
+class TimeActions(SystemBase):
+    __tablename__ = "time_actions"
+
+    id = Column('id', Integer, primary_key=True)
+    time = Column('time', String)
+    activity = Column('activity', String)
+    status = Column('status', String)
+    contractName = Column('contractName', String)
+    contractAddress = Column('contractAddress', String)
+    contractType = Column('contractType', String)
+    tokens_db = Column('tokens_db', String)
+    parsed_data = Column('parsed_data', String)
+    transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+
+
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
     
     id = Column('id', Integer, primary_key=True)
     transactionHash = Column('transactionHash', String)
-    blockNumber = Column('blockNumber', String)
+    blockNumber = Column('blockNumber', Integer)
     jsonData = Column('jsonData', String)
     transactionType = Column('transactionType', String)
     parsedFloData = Column('parsedFloData', String)
+
 
 class LatestBlocks(LatestCacheBase):
     __tablename__ = "latestBlocks"
 
     id = Column('id', Integer, primary_key=True)
-    blockNumber = Column('blockNumber', String)
+    blockNumber = Column('blockNumber', Integer)
     blockHash = Column('blockHash', String)
     jsonData = Column('jsonData', String)
 
@@ -269,6 +311,7 @@ class ContractDeposits1(ContinuosContractBase):
     depositorAddress = Column('depositorAddress', String)
     depositAmount = Column('depositAmount', Float)
     expiryTime = Column('expiryTime', String)
+    status = Column('status', String)
     transactionHash = Column('transactionHash', String)
     blockNumber = Column('blockNumber', Integer)
     blockHash = Column('blockHash', String)
