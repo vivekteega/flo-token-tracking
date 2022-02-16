@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, desc, func 
 from sqlalchemy.orm import sessionmaker 
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping
 import json 
 from tracktokens_smartcontracts import processTransaction 
 import os 
@@ -94,7 +94,8 @@ else:
     latestCache_session = create_database_session_orm('system_dbs', {'db_name':'latestCache'}, LatestCacheBase)
     forward_block = int(latestCache_session.query(LatestBlocks.blockNumber).order_by(LatestBlocks.blockNumber.desc()).first()[0])
     latestCache_session.close()
-    
+
+
 args = parser.parse_args()
 
 apppath = os.path.dirname(os.path.realpath(__file__))
@@ -178,6 +179,7 @@ latestCache_session.close()
 lblocks_dict = {}
 for block in lblocks:
     block_dict = block.__dict__
+    print(block_dict['blockNumber'])
     lblocks_dict[block_dict['blockNumber']] = {'blockHash':f"{block_dict['blockHash']}", 'jsonData':f"{block_dict['jsonData']}"}
 
 # process and rebuild all transactions 
@@ -185,8 +187,11 @@ for transaction in ltransactions:
     transaction_dict = transaction.__dict__
     transaction_data = json.loads(transaction_dict['jsonData'])
     parsed_flodata = json.loads(transaction_dict['parsedFloData'])
-    block_info = json.loads(lblocks_dict[transaction_dict['blockNumber']]['jsonData'])
-    processTransaction(transaction_data, parsed_flodata, block_info)
+    try:
+        block_info = json.loads(lblocks_dict[transaction_dict['blockNumber']]['jsonData'])
+        processTransaction(transaction_data, parsed_flodata, block_info)
+    except:
+        continue
 
 # copy the old block data 
 old_latest_cache = create_database_connection('system_dbs', {'db_name':'latestCache1'})
