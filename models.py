@@ -142,9 +142,9 @@ class ConsumedInfo(ContractBase):
     __tablename__ = "consumedinfo"
     
     id = Column('id', Integer, primary_key=True)
-    id_activetable = Column('id_activetable', Integer)
+    id_deposittable = Column('id_deposittable', Integer)
     transactionHash = Column('transactionHash', String)
-    blocknumber = Column('blockNumber', Integer)
+    blockNumber = Column('blockNumber', Integer)
 
 
 class RejectedContractTransactionHistory(SystemBase):

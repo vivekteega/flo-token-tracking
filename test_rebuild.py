@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, desc, func 
 from sqlalchemy.orm import sessionmaker 
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping, ConsumedInfo
 import json 
 from tracktokens_smartcontracts import processTransaction 
 import os 

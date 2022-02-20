@@ -1,13 +1,14 @@
 import argparse 
 from sqlalchemy import create_engine, func 
 from sqlalchemy.orm import sessionmaker 
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping, TokenAddressMapping 
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping, TokenAddressMapping, TimeActions, ConsumedInfo
 from ast import literal_eval 
 import os 
 import json 
 import logging 
 import pdb 
 import sys 
+
 
 apppath = os.path.dirname(os.path.realpath(__file__)) 
 
@@ -281,6 +282,9 @@ def rollback_database(blockNumber, dbtype, dbname):
         db_session = create_database_session_orm('smart_contract', {'contract_name':f"{dbname['contract_name']}", 'contract_address':f"{dbname['contract_address']}"}, ContractBase)
         db_session.query(ContractTransactionHistory).filter(ContractTransactionHistory.blockNumber > blockNumber).delete()
         db_session.query(ContractParticipants).filter(ContractParticipants.blockNumber > blockNumber).delete()
+        db_session.query(ContractDeposits).filter(ContractDeposits.blockNumber > blockNumber).delete()
+        db_session.query(ConsumedInfo).filter(ConsumedInfo.blockNumber > blockNumber).delete()
+        db_session.commit()
 
 
 def delete_database_old(blockNumber, dbname):
@@ -335,6 +339,7 @@ def system_database_deletions(blockNumber):
     rejectedContractTransactionHistory_queries = systemdb_session.query(RejectedContractTransactionHistory).filter(RejectedContractTransactionHistory.blockNumber > blockNumber).delete()
     rejectedTransactionHistory_queries = systemdb_session.query(RejectedTransactionHistory).filter(RejectedTransactionHistory.blockNumber > blockNumber).delete()
     tokenAddressMapping_queries = systemdb_session.query(TokenAddressMapping).filter(TokenAddressMapping.blockNumber > blockNumber).delete()
+    timeAction_queries = systemdb_session.query(TimeActions).filter(TimeActions.blockNumber > blockNumber).delete()
     systemdb_session.query(SystemData).filter(SystemData.attribute=='lastblockscanned').update({SystemData.value:str(blockNumber)})
 
     latestcache_session.commit()
@@ -423,7 +428,9 @@ def initiate_rollback_process():
             if db.blockNumber > rollback_block:
                 delete_database(rollback_block, f"{db.db_name}") 
             else:
-                rollback_database(rollback_block, 'smartcontract', f"{db.db_name}") 
+                db_split = db.db_name.rsplit('-',1)
+                db_name = {'contract_name':db_split[0], 'contract_address':db_split[1]}
+                rollback_database(rollback_block, 'smartcontract', db_name) 
     
     '''
     for token_db in tokendb_set:
