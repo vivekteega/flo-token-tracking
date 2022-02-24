@@ -183,13 +183,14 @@ def processBlock(blockindex=None, blockhash=None):
     session.close()
 
 
-def updateLatestTransaction(transactionData, parsed_data):
+def updateLatestTransaction(transactionData, parsed_data, db_reference, transaction_type=None ):
     # connect to latest transaction db
     conn = sqlite3.connect('latestCache.db')
+    if transaction_type is None:
+        transaction_type = parsed_data['type']
     conn.execute(
-        "INSERT INTO latestTransactions(transactionHash, blockNumber, jsonData, transactionType, parsedFloData) VALUES (?,?,?,?,?)",
-        (transactionData['txid'], transactionData['blockheight'], json.dumps(transactionData), parsed_data['type'],
-         json.dumps(parsed_data)))
+        "INSERT INTO latestTransactions(transactionHash, blockNumber, jsonData, transactionType, parsedFloData, db_reference) VALUES (?,?,?,?,?,?)",
+        (transactionData['txid'], transactionData['blockheight'], json.dumps(transactionData), transaction_type, json.dumps(parsed_data), db_reference))
     conn.commit()
     conn.close()
 
@@ -637,7 +638,8 @@ def checkReturnDeposits(blockinfo):
                     parsed_data = {}
                     parsed_data['type'] = 'expired_deposit'
                     transaction_data = {}
-                    transaction_data['txid'] = pybtc.sha256(tx_block_string).hex()
+                    #transaction_data['txid'] = pybtc.sha256(tx_block_string).hex()
+                    transaction_data['txid'] = query.transactionHash
                     transaction_data['blockheight'] = blockinfo['height']
                     returnval = transferToken(sellingToken, returnAmount, query.contractAddress, depositorAddress, transaction_data=transaction_data, parsed_data=parsed_data, blockinfo=blockinfo)
                     if returnval is None:
@@ -693,7 +695,7 @@ def checkReturnDeposits(blockinfo):
 
                         contract_db.commit()
                         systemdb_session.commit()
-                        updateLatestTransaction(transaction_data, parsed_data)
+                        updateLatestTransaction(transaction_data, parsed_data, f"{query.contractName}-{query.contractAddress}")
                 
                 elif query.activity == 'contract-time-trigger':
                     # Find out the status of the contract 
@@ -1012,7 +1014,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         pushData_SSEapi(f"Error | Something went wrong while doing the internal db transactions for {transaction_data['txid']}")
                         return 0
                     else:
-                        updateLatestTransaction(transaction_data, parsed_data)
+                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}")
 
                     # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
                     connection = create_database_connection('system_dbs', {'db_name':'system'})
@@ -1073,7 +1075,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
         elif parsed_data['transferType'] == 'smartContract':
-            pdb.set_trace()
             if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check type of contract and categorize between into ote-participation or continuous-event participation
                 # todo - replace all connection queries with session queries
@@ -1441,7 +1442,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                                         connection.close()
 
-                                        updateLatestTransaction(transaction_data, parsed_data)
+                                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}" )
                                         return 1
 
                                     else:
@@ -1474,7 +1475,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                             blockHash=transaction_data['blockhash']))
                                         session.commit()
                                         session.close()
-                                        updateLatestTransaction(transaction_data, parsed_data)
+                                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
                                         return 1
 
                                     else:
@@ -1554,7 +1555,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         blockHash=transaction_data['blockhash']))
                                     session.commit()
 
-                                    updateLatestTransaction(transaction_data, parsed_data)
+                                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
                                     return 1
 
                                 else:
@@ -1587,7 +1588,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         blockHash=transaction_data['blockhash']))
                                     session.commit()
                                     session.close()
-                                    updateLatestTransaction(transaction_data, parsed_data)
+                                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
                                     return 1
 
                                 else:
@@ -1700,7 +1701,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             else:
                                 available_deposit_sum = available_deposit_sum + entry.depositBalance 
                         
-                        pdb.set_trace()
                         if available_deposit_sum >= swapAmount:
                             # accepting token transfer from participant to smart contract address 
                             returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0], transaction_data=transaction_data, parsed_data=parsed_data, isInfiniteToken=None, blockinfo=blockinfo)
@@ -1708,7 +1708,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Particiaption")
                                 return 0
 
-                            pdb.set_trace()
 
                             # ContractDepositTable 
                             # For each unique deposit( address, expirydate, blocknumber) there will be 2 entries added to the table 
@@ -1801,6 +1800,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             contract_session.commit()
                             contract_session.close()
 
+                            updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='tokenswap-participation')
+                            pushData_SSEapi(f"Token swap successfully performed at contract {parsed_data['contractName']}-{outputlist[0]} with the transaction {transaction_data['txid']}")
+
                         else:
                             # Reject the participation saying not enough deposit tokens are available 
                             logger.info(f"Swap participation at transaction {transaction_data['txid']} rejected as requested swap amount is {swapAmount} but {available_deposit_sum} is available")
@@ -1884,7 +1886,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'token', '', '', '{transaction_data['blockheight']}')")
                 connection.close()
 
-                updateLatestTransaction(transaction_data, parsed_data)
+                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}")
                 pushData_SSEapi(f"Token | Successfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:
@@ -2097,7 +2099,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     session.commit()
                     session.close()
 
-                    updateLatestTransaction(transaction_data, parsed_data)
+                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
 
                     pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
                     return 1
@@ -2217,7 +2219,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 session.commit()
                                 session.close()
 
-                                updateLatestTransaction(transaction_data, parsed_data)
+                                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
 
                                 pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
                                 return 1
@@ -2576,7 +2578,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 parsed_data['contractName'], outputlist[0]))
                         connection.close()
 
-                        updateLatestTransaction(transaction_data, parsed_data)
+                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
 
                         pushData_SSEapi(
                             'Trigger | Minimum subscription amount not reached at contract {}-{} at transaction {}. Tokens will be refunded'.format(
@@ -2633,7 +2635,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         parsed_data['contractName'], outputlist[0]))
                 connection.close()
 
-                updateLatestTransaction(transaction_data, parsed_data)
+                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
 
                 pushData_SSEapi(
                     'Trigger | Contract triggered of the name {}-{} is active currently at transaction {}'.format(
@@ -2802,7 +2804,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     blockNumber=transaction_data['blockheight']))
             session.commit()
             pushData_SSEapi(f"Deposit Smart Contract Transaction {transaction_data['txid']} for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-            updateLatestTransaction(transaction_data, parsed_data)
+            updateLatestTransaction(transaction_data, parsed_data , f"{parsed_data['contractName']}-{outputlist[0]}")
             return 1
 
         else:
@@ -2869,7 +2871,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'nft', '', '{nft_data}', '{transaction_data['blockheight']}'")
                 connection.close()
 
-                updateLatestTransaction(transaction_data, parsed_data)
+                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}")
                 pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:
@@ -2945,7 +2947,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'infinite-token', '', '{info_object}', '{transaction_data['blockheight']}'")
                 connection.close()
 
-                updateLatestTransaction(transaction_data, parsed_data)
+                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}")
                 pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:

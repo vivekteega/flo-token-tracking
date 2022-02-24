@@ -1,4 +1,4 @@
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping, TokenAddressMapping 
+from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits1, ContractTransactionHistory1, LatestTransactions, LatestBlocks, DatabaseTypeMapping, TokenAddressMapping, LatestCacheBase1, LatestTransactions1, LatestBlocks1
 import pdb 
 from sqlalchemy import create_engine, func 
 from sqlalchemy.orm import sessionmaker 
@@ -24,9 +24,9 @@ def create_database_session_orm(type, parameters, base):
 
 
 # connect to the database convert_db 
-convert_db = create_database_session_orm('system_dbs', {'db_name': 'convertdb'}, LatestCacheBase)
-latest_blocks = convert_db.query(LatestBlocks).all()
-latest_txs = convert_db.query(LatestTransactions).all()
+convert_db = create_database_session_orm('system_dbs', {'db_name': 'convertdb'}, LatestCacheBase1)
+latest_blocks = convert_db.query(LatestBlocks1).all()
+latest_txs = convert_db.query(LatestTransactions1).all()
 
 
 # create a new database convert_db_new
