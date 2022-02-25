@@ -138,7 +138,7 @@ def processBlock(blockindex=None, blockhash=None):
         current_index = -1
         
         if transaction in ['77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8', '9110512d1696dae01701d8d156264a48ca1100f96c3551904ac3941b363138a1', 'b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551', '1e5d1cb60449f15b0e9d44db177605d7e86999ba149effcc1d276c2178ceac3d',
-        '1586711334961abea5c0b9769cbc626cbc016a59c9c8a423a03e401da834083a']:
+        '1586711334961abea5c0b9769cbc626cbc016a59c9c8a423a03e401da834083a', 'bb6cef5e9612363ed263291e8d3b39533661b3ba1b3ce8c2e9500158124266b8','511f16a69c5f62ad1cce70a2f9bfba133589e3ddc560d406c4fbf3920eae8469']:
             pdb.set_trace()
 
         while(current_index == -1):
@@ -1014,7 +1014,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         pushData_SSEapi(f"Error | Something went wrong while doing the internal db transactions for {transaction_data['txid']}")
                         return 0
                     else:
-                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}")
+                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}", transaction_type='token-transfer')
 
                     # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
                     connection = create_database_connection('system_dbs', {'db_name':'system'})
@@ -1442,7 +1442,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                                         connection.close()
 
-                                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}" )
+                                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-externaltrigger-participation')
                                         return 1
 
                                     else:
@@ -1475,7 +1475,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                             blockHash=transaction_data['blockhash']))
                                         session.commit()
                                         session.close()
-                                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
+                                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-externaltrigger-participation')
                                         return 1
 
                                     else:
@@ -1555,7 +1555,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         blockHash=transaction_data['blockhash']))
                                     session.commit()
 
-                                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
+                                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-internaltrigger-participation')
                                     return 1
 
                                 else:
@@ -1588,7 +1588,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         blockHash=transaction_data['blockhash']))
                                     session.commit()
                                     session.close()
-                                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
+                                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-internaltrigger-participation')
                                     return 1
 
                                 else:
