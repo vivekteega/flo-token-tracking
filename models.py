@@ -273,6 +273,7 @@ class LatestTransactions(LatestCacheBase):
     jsonData = Column('jsonData', String)
     transactionType = Column('transactionType', String)
     parsedFloData = Column('parsedFloData', String)
+    db_reference = Column('db_reference', String)
 
 
 class LatestBlocks(LatestCacheBase):
