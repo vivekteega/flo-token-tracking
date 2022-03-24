@@ -302,7 +302,7 @@ def outputreturn(*argv):
 def extract_specialcharacter_words(rawstring, special_characters):
     wordList = []
     for word in rawstring.split(' '):
-        if (len(word) != 1 or word==":") and word[-1] in special_characters:
+        if (len(word) not in [0,1] or word==":") and word[-1] in special_characters:
             wordList.append(word)
     return wordList
 
