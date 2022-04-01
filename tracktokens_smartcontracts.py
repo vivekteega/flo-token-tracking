@@ -137,7 +137,7 @@ def processBlock(blockindex=None, blockhash=None):
         logger.info(f"Transaction {counter} {transaction}")
         current_index = -1
         
-        if transaction in ['77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8', '9110512d1696dae01701d8d156264a48ca1100f96c3551904ac3941b363138a1', 'b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551', '1e5d1cb60449f15b0e9d44db177605d7e86999ba149effcc1d276c2178ceac3d',
+        if transaction in ['ac00adb1a1537d485b287b8a9d4aa135c9e99f30659e7355906f5e7a8ff0552a','066337542c568dd339a4b30f727e1466e07bf0c6a2823e5f5157e0c8cf4721b1','ebf3219efb29b783fa0d6ee5f1d1aaf1a9c55ffdae55c174c82faa2e49bcd74d','ec9a852aa8a27877ba79ae99cc1359c0e04f6e7f3097521279bcc68e3883d760','77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8', '9110512d1696dae01701d8d156264a48ca1100f96c3551904ac3941b363138a1', 'b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551', '1e5d1cb60449f15b0e9d44db177605d7e86999ba149effcc1d276c2178ceac3d',
         '1586711334961abea5c0b9769cbc626cbc016a59c9c8a423a03e401da834083a', 'bb6cef5e9612363ed263291e8d3b39533661b3ba1b3ce8c2e9500158124266b8','511f16a69c5f62ad1cce70a2f9bfba133589e3ddc560d406c4fbf3920eae8469']:
             pdb.set_trace()
 
@@ -188,9 +188,7 @@ def updateLatestTransaction(transactionData, parsed_data, db_reference, transact
     conn = sqlite3.connect('latestCache.db')
     if transaction_type is None:
         transaction_type = parsed_data['type']
-    conn.execute(
-        "INSERT INTO latestTransactions(transactionHash, blockNumber, jsonData, transactionType, parsedFloData, db_reference) VALUES (?,?,?,?,?,?)",
-        (transactionData['txid'], transactionData['blockheight'], json.dumps(transactionData), transaction_type, json.dumps(parsed_data), db_reference))
+    conn.execute("INSERT INTO latestTransactions(transactionHash, blockNumber, jsonData, transactionType, parsedFloData, db_reference) VALUES (?,?,?,?,?,?)", (transactionData['txid'], transactionData['blockheight'], json.dumps(transactionData), transaction_type, json.dumps(parsed_data), db_reference))
     conn.commit()
     conn.close()
 
@@ -988,8 +986,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     connection = create_database_connection('system_dbs', {'db_name':'system'})
                     db_details = connection.execute("select db_name, db_type, keyword, object_format from databaseTypeMapping where db_name='{}'".format(parsed_data['tokenIdentification']))
                     db_details = list(zip(*db_details))
-                    if db_details[1] == 'infinite-token':
-                        db_object = json.loads(db_details[3])
+                    if db_details[1][0] == 'infinite-token':
+                        db_object = json.loads(db_details[3][0])
                         if db_object['root_address'] == inputlist[0]:
                             isInfiniteToken = True
                         else:
@@ -2921,14 +2919,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         if not check_if_contract_address(inputlist[0]) and not check_if_contract_address(outputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 parsed_data['tokenAmount'] = 0
-                session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
-                session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
-                session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                tokendb_session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
+                tokendb_session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
+                tokendb_session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
                                         blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
                                         transactionHash=transaction_data['txid']))
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
+                tokendb_session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                             transferAmount=parsed_data['tokenAmount'],
                                             blockNumber=transaction_data['blockheight'],
                                             blockHash=transaction_data['blockhash'],
@@ -2937,17 +2935,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                             blockchainReference=blockchainReference,
                                             jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'],
                                             parsedFloData=json.dumps(parsed_data)))
-                session.commit()
-                session.close()
 
                 # add it to token address to token mapping db table
                 connection = create_database_connection('system_dbs', {'db_name':'system'})
                 connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
                 info_object = {'root_address': inputadd}
-                connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'infinite-token', '', '{info_object}', '{transaction_data['blockheight']}'")
-                connection.close()
-
+                connection.execute("""INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES (?, ?, ?, ?, ?)""", (parsed_data['tokenIdentification'], 'infinite-token', '', json.dumps(info_object), transaction_data['blockheight']))
                 updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}")
+                tokendb_session.commit()
+                connection.close()
+                tokendb_session.close()
                 pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:

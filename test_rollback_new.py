@@ -417,7 +417,6 @@ def initiate_rollback_process():
     # Connect to system.db 
     systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase)
     db_names = systemdb_session.query(DatabaseTypeMapping).all()
-
     for db in db_names: 
         if db.db_type in ['token', 'nft', 'infinite-token']:
             if db.blockNumber > rollback_block:
