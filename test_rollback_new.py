@@ -317,7 +317,7 @@ def delete_database(blockNumber, dbname):
             if os.path.exists(dirpath):
                 os.remove(dirpath)
         elif database[1] in ['smartcontract']:
-            dirpath = os.path.join(apppath, 'smartcontracts', f"{dbname}.db")
+            dirpath = os.path.join(apppath, 'smartContracts', f"{dbname}.db")
             if os.path.exists(dirpath):
                 os.remove(dirpath)
     return db_names
@@ -460,10 +460,16 @@ def initiate_rollback_process():
 
     systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase)
     lastblockscanned_query = systemdb_session.query(SystemData).filter(SystemData.attribute=='lastblockscanned').first()
-    lastblockscanned_query.value = lastblockscanned
+    lastblockscanned_query.value = rollback_block
     systemdb_session.commit()
     systemdb_session.close()
 
 
 if __name__ == "__main__":
-    initiate_rollback_process()
+    systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase)
+    lastblockscanned_query = systemdb_session.query(SystemData).filter(SystemData.attribute=='lastblockscanned').first()
+    if(rollback_block > int(lastblockscanned_query.value)):
+        print('Rollback block is greater than the last scanned block\n Exiting ....')
+        sys.exit(0)
+    else:
+        initiate_rollback_process()

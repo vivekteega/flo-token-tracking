@@ -187,10 +187,10 @@ def outputreturn(*argv):
             'contractAddress': argv[3], #contractaddress[:-1] 
             'flodata': argv[4], #string
             'contractConditions': {
-                'contractamount' : argv[5],
+                'contractAmount' : argv[5],
                 'minimumsubscriptionamount' : argv[6],
                 'maximumsubscriptionamount' : argv[7],
-                'userchoice' : argv[8],
+                'userchoices' : argv[8],
                 'expiryTime' : argv[9]
             }
         }
@@ -224,10 +224,10 @@ def outputreturn(*argv):
             'contractAddress': argv[3], #contractaddress[:-1] 
             'flodata': argv[4], #string
             'contractConditions': {
-                'contractamount' : argv[5],
+                'contractAmount' : argv[5],
                 'minimumsubscriptionamount' : argv[6],
                 'maximumsubscriptionamount' : argv[7],
-                'payeeaddress' : argv[8],
+                'payeeAddress' : argv[8],
                 'expiryTime' : argv[9]
             }
         }
@@ -820,7 +820,6 @@ def select_category_reject(rawstring, category1, category2, reject_list):
         if findWholeWord(word)(rawstring):
             rejectCategory = word
             break
-
         
     if ((foundCategory1 is not None) and (foundCategory2 is not None)) or ((foundCategory1 is None) and (foundCategory2 is None)) or (rejectCategory is not None):
         return False
