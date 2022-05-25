@@ -974,6 +974,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     # All FLO checks completed at this point.
     # Semantic rules for parsed data begins
 
+    pdb.set_trace() 
     # todo Rule 44 - Process as per the type of transaction
     if parsed_data['type'] == 'transfer':
         logger.info(f"Transaction {transaction_data['txid']} is of the type transfer")
@@ -2954,7 +2955,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                     sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                    transferAmount=parsed_data['tokenAmount'],
                                                     blockNumber=transaction_data['blockheight'],
                                                     blockHash=transaction_data['blockhash'],
                                                     time=transaction_data['blocktime'],
