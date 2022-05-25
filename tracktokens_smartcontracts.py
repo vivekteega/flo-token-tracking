@@ -974,7 +974,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     # All FLO checks completed at this point.
     # Semantic rules for parsed data begins
 
-    pdb.set_trace() 
     # todo Rule 44 - Process as per the type of transaction
     if parsed_data['type'] == 'transfer':
         logger.info(f"Transaction {transaction_data['txid']} is of the type transfer")
