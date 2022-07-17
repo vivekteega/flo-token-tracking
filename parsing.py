@@ -1,7 +1,7 @@
 import pdb
 import re
 import arrow
-import pybtc
+import pyflo
 import logging
 
 """ 
@@ -715,7 +715,7 @@ def findWholeWord(w):
 
 
 def check_flo_address(floaddress, is_testnet):
-    if pybtc.is_address_valid(floaddress, testnet=is_testnet):
+    if pyflo.is_address_valid(floaddress, testnet=is_testnet):
         return floaddress
     else:
         return False
