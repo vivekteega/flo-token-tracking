@@ -17,7 +17,6 @@ import parsing
 from config import * 
 from datetime import datetime 
 from ast import literal_eval 
-import pdb 
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits, ContractTransactionHistory1, DatabaseTypeMapping, TimeActions, ConsumedInfo 
 
 
@@ -56,19 +55,27 @@ def pushData_SSEapi(message):
 
 def check_database_existence(type, parameters):
     if type == 'token':
-        return os.path.isfile(f"./tokens/{parameters['token_name']}.db")
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens', f"{parameters['token_name']}.db")
+        return os.path.isfile(path)
     
     if type == 'smart_contract':
-        return os.path.isfile(f"./smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db")
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'smartContracts', f"{parameters['contract_name']}-{parameters['contract_address']}.db")
+        return os.path.isfile(path)
 
 
 def create_database_connection(type, parameters):
     if type == 'token':
-        engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens', f"{parameters['token_name']}.db")
+        engine = create_engine(f"sqlite:///{path}", echo=True)
     elif type == 'smart_contract':
-        engine = create_engine(f"sqlite:///smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db", echo=True)
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'smartContracts', f"{parameters['contract_name']}-{parameters['contract_address']}.db")
+        engine = create_engine(f"sqlite:///{path}", echo=True)
     elif type == 'system_dbs':
-        engine = create_engine(f"sqlite:///{parameters['db_name']}.db", echo=False)
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], f"system.db")
+        engine = create_engine(f"sqlite:///{path}", echo=False)
+    elif type == 'latest_cache':
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], f"latestCache.db")
+        engine = create_engine(f"sqlite:///{path}", echo=False)
 
     connection = engine.connect()
     return connection
@@ -76,17 +83,20 @@ def create_database_connection(type, parameters):
 
 def create_database_session_orm(type, parameters, base):
     if type == 'token':
-        engine = create_engine(f"sqlite:///tokens/{parameters['token_name']}.db", echo=True)
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens', f"{parameters['token_name']}.db")
+        engine = create_engine(f"sqlite:///{path}", echo=True)
         base.metadata.create_all(bind=engine)
         session = sessionmaker(bind=engine)()
 
     elif type == 'smart_contract':
-        engine = create_engine(f"sqlite:///smartContracts/{parameters['contract_name']}-{parameters['contract_address']}.db", echo=True)
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'smartContracts', f"{parameters['contract_name']}-{parameters['contract_address']}.db")
+        engine = create_engine(f"sqlite:///{path}", echo=True)
         base.metadata.create_all(bind=engine)
         session = sessionmaker(bind=engine)()
-    
+
     elif type == 'system_dbs':
-        engine = create_engine(f"sqlite:///{parameters['db_name']}.db", echo=False)
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], f"{parameters['db_name']}.db")
+        engine = create_engine(f"sqlite:///{path}", echo=False)
         base.metadata.create_all(bind=engine)
         session = sessionmaker(bind=engine)()
     
@@ -139,7 +149,6 @@ def processBlock(blockindex=None, blockhash=None):
         
         if transaction in ['adcbcf1781bb319645a1e115831dc0fa54b3391cec780db48e54dae3c58f4470','c6eb7adc731a60b2ffa0c48d0d72d33b2ec3a33e666156e729a63b25f6c5cd56','ac00adb1a1537d485b287b8a9d4aa135c9e99f30659e7355906f5e7a8ff0552a','066337542c568dd339a4b30f727e1466e07bf0c6a2823e5f5157e0c8cf4721b1','ebf3219efb29b783fa0d6ee5f1d1aaf1a9c55ffdae55c174c82faa2e49bcd74d','ec9a852aa8a27877ba79ae99cc1359c0e04f6e7f3097521279bcc68e3883d760','77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8', '9110512d1696dae01701d8d156264a48ca1100f96c3551904ac3941b363138a1', 'b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551', '1e5d1cb60449f15b0e9d44db177605d7e86999ba149effcc1d276c2178ceac3d',
         '1586711334961abea5c0b9769cbc626cbc016a59c9c8a423a03e401da834083a', 'bb6cef5e9612363ed263291e8d3b39533661b3ba1b3ce8c2e9500158124266b8','511f16a69c5f62ad1cce70a2f9bfba133589e3ddc560d406c4fbf3920eae8469']:
-            #pdb.set_trace()
             pass
 
         while(current_index == -1):
@@ -186,7 +195,7 @@ def processBlock(blockindex=None, blockhash=None):
 
 def updateLatestTransaction(transactionData, parsed_data, db_reference, transaction_type=None ):
     # connect to latest transaction db
-    conn = sqlite3.connect('latestCache.db')
+    conn = create_database_connection('latest_cache', {'db_name':"latestCache"})
     if transaction_type is None:
         transaction_type = parsed_data['type']
     conn.execute("INSERT INTO latestTransactions(transactionHash, blockNumber, jsonData, transactionType, parsedFloData, db_reference) VALUES (?,?,?,?,?,?)", (transactionData['txid'], transactionData['blockheight'], json.dumps(transactionData), transaction_type, json.dumps(parsed_data), db_reference))
@@ -196,7 +205,7 @@ def updateLatestTransaction(transactionData, parsed_data, db_reference, transact
 
 def updateLatestBlock(blockData):
     # connect to latest block db
-    conn = sqlite3.connect('latestCache.db')
+    conn = create_database_connection('latest_cache', {'db_name':"latestCache"})
     conn.execute('INSERT INTO latestBlocks(blockNumber, blockHash, jsonData) VALUES (?,?,?)', (blockData['height'], blockData['hash'], json.dumps(blockData)))
     conn.commit()
     conn.close()
@@ -3114,16 +3123,18 @@ tokenapi_sse_url = config['DEFAULT']['TOKENAPI_SSE_URL']
 if args.reset == 1:
     logger.info("Resetting the database. ")
     apppath = os.path.dirname(os.path.realpath(__file__))
-    dirpath = os.path.join(apppath, 'tokens')
-    shutil.rmtree(dirpath)
+    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'tokens')
+    if os.path.exists(dirpath):
+        shutil.rmtree(dirpath)
     os.mkdir(dirpath)
-    dirpath = os.path.join(apppath, 'smartContracts')
-    shutil.rmtree(dirpath)
+    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'smartContracts')
+    if os.path.exists(dirpath):
+        shutil.rmtree(dirpath)
     os.mkdir(dirpath)
-    dirpath = os.path.join(apppath, 'system.db')
+    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'system.db')
     if os.path.exists(dirpath):
         os.remove(dirpath)
-    dirpath = os.path.join(apppath, 'latestCache.db')
+    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'latestCache.db')
     if os.path.exists(dirpath):
         os.remove(dirpath)
 
