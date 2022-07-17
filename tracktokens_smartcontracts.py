@@ -6,7 +6,7 @@ import os
 import shutil 
 import sqlite3 
 import sys 
-import pybtc 
+import pyflo
 import requests 
 import socketio 
 from sqlalchemy import create_engine, func 
@@ -43,7 +43,7 @@ def newMultiRequest(apicall):
 
 
 def pushData_SSEapi(message):
-    signature = pybtc.sign_message(message.encode(), privKey)
+    signature = pyflo.sign_message(message.encode(), privKey)
     headers = {'Accept': 'application/json', 'Content-Type': 'application/json', 'Signature': signature}
 
     '''try:
@@ -646,7 +646,7 @@ def checkReturnDeposits(blockinfo):
                     parsed_data = {}
                     parsed_data['type'] = 'expired_deposit'
                     transaction_data = {}
-                    #transaction_data['txid'] = pybtc.sha256(tx_block_string).hex()
+                    #transaction_data['txid'] = pyflo.sha256(tx_block_string).hex()
                     transaction_data['txid'] = query.transactionHash
                     transaction_data['blockheight'] = blockinfo['height']
                     returnval = transferToken(sellingToken, returnAmount, query.contractAddress, depositorAddress, transaction_data=transaction_data, parsed_data=parsed_data, blockinfo=blockinfo)
