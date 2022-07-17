@@ -3063,12 +3063,14 @@ def reconnectWebsocket(socket_variable):
 
 # MAIN EXECUTION STARTS 
 # Configuration of required variables 
+config = configparser.ConfigParser()
+config.read('config.ini')
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 formatter = logging.Formatter('%(asctime)s:%(name)s:%(message)s')
-
-file_handler = logging.FileHandler('tracking.log')
+file_handler = logging.FileHandler(os.path.join(config['DEFAULT']['DATA_PATH'],'tracking.log'))
 file_handler.setLevel(logging.INFO)
 file_handler.setFormatter(formatter)
 
@@ -3092,17 +3094,14 @@ parser.add_argument('-r', '--reset', nargs='?', const=1, type=int, help='Purge e
 parser.add_argument('-rb', '--rebuild', nargs='?', const=1, type=int, help='Rebuild it')
 args = parser.parse_args()
 
-apppath = os.path.dirname(os.path.realpath(__file__))
-dirpath = os.path.join(apppath, 'tokens')
+dirpath = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens')
 if not os.path.isdir(dirpath):
     os.mkdir(dirpath)
-dirpath = os.path.join(apppath, 'smartContracts')
+dirpath = os.path.join(config['DEFAULT']['DATA_PATH'], 'smartContracts')
 if not os.path.isdir(dirpath):
     os.mkdir(dirpath)
 
 # Read configuration
-config = configparser.ConfigParser()
-config.read('config.ini')
 
 # todo - write all assertions to make sure default configs are right 
 if (config['DEFAULT']['NET'] != 'mainnet') and (config['DEFAULT']['NET'] != 'testnet'):
@@ -3122,19 +3121,18 @@ tokenapi_sse_url = config['DEFAULT']['TOKENAPI_SSE_URL']
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:
     logger.info("Resetting the database. ")
-    apppath = os.path.dirname(os.path.realpath(__file__))
-    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'tokens')
+    dirpath = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens')
     if os.path.exists(dirpath):
         shutil.rmtree(dirpath)
     os.mkdir(dirpath)
-    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'smartContracts')
+    dirpath = os.path.join(config['DEFAULT']['DATA_PATH'], 'smartContracts')
     if os.path.exists(dirpath):
         shutil.rmtree(dirpath)
     os.mkdir(dirpath)
-    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'system.db')
+    dirpath = os.path.join(config['DEFAULT']['DATA_PATH'], 'system.db')
     if os.path.exists(dirpath):
         os.remove(dirpath)
-    dirpath = os.path.join(apppath, config['DEFAULT']['DATA_PATH'], 'latestCache.db')
+    dirpath = os.path.join(config['DEFAULT']['DATA_PATH'], 'latestCache.db')
     if os.path.exists(dirpath):
         os.remove(dirpath)
 
