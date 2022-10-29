@@ -263,7 +263,6 @@ class TimeActions(SystemBase):
     transactionHash = Column('transactionHash', String)
     blockNumber = Column('blockNumber', Integer)
 
-
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
     

@@ -136,6 +136,33 @@ def apply_rule1(*argv):
         return a
 
 
+def extract_substing_between(test_str, sub1, sub2):
+    # getting index of substrings
+    idx1 = test_str.index(sub1)
+    idx2 = test_str.index(sub2)
+    
+    # length of substring 1 is added to
+    # get string from next character
+    res = test_str[idx1 + len(sub1) + 1: idx2]
+    
+    # return result
+    return res
+
+# StateF functions 
+def isStateF(text):
+    try:
+        statef_string = extract_substing_between(text, 'statef', 'end-statef').strip()
+        i=iter(statef_string.split(":"))
+        statef_list = [":".join(x) for x in zip(i,i)]
+        statef = {}
+        for keyval in statef_list:
+            keyval = keyval.split(':')
+            statef[keyval[0]] = keyval[1]
+        return statef
+    except:
+        return False
+
+
 # conflict_list = [['userchoice','payeeaddress'],['userchoice','xxx']]
 def resolve_incategory_conflict(input_dictionary , conflict_list):
     for conflict_pair in conflict_list:
@@ -166,7 +193,8 @@ def outputreturn(*argv):
             'type': 'tokenIncorporation',
             'flodata': argv[1], #string 
             'tokenIdentification': argv[2], #hashList[0][:-1] 
-            'tokenAmount': argv[3] #initTokens
+            'tokenAmount': argv[3], #initTokens
+            'stateF': argv[4]
             }
         return parsed_data
     elif argv[0] == 'token_transfer':
@@ -175,7 +203,8 @@ def outputreturn(*argv):
             'transferType': 'token', 
             'flodata': argv[1], #string
             'tokenIdentification': argv[2], #hashList[0][:-1]
-            'tokenAmount': argv[3] #amount
+            'tokenAmount': argv[3], #amount
+            'stateF': argv[4]
             }
         return parsed_data
     elif argv[0] == 'one-time-event-userchoice-smartcontract-incorporation':
@@ -192,7 +221,8 @@ def outputreturn(*argv):
                 'maximumsubscriptionamount' : argv[7],
                 'userchoices' : argv[8],
                 'expiryTime' : argv[9]
-            }
+            },
+            'stateF': argv[10]
         }
         return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'one-time-event-userchoice-smartcontract-participation':
@@ -205,14 +235,16 @@ def outputreturn(*argv):
             'tokenAmount': argv[3], #amount 
             'contractName': argv[4], #atList[0][:-1]
             'contractAddress': argv[5],
-            'userChoice': argv[6] #userChoice
+            'userChoice': argv[6], #userChoice
+            'stateF': argv[7]
             }
         return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'one-time-event-userchoice-smartcontract-trigger':
         parsed_data = {
             'type': 'smartContractPays', 
             'contractName': argv[1], #atList[0][:-1] 
-            'triggerCondition': argv[2] #triggerCondition.group().strip()[1:-1]
+            'triggerCondition': argv[2], #triggerCondition.group().strip()[1:-1]
+            'stateF': argv[3]
             }
         return parsed_data
     elif argv[0] == 'one-time-event-time-smartcontract-incorporation':
@@ -229,7 +261,8 @@ def outputreturn(*argv):
                 'maximumsubscriptionamount' : argv[7],
                 'payeeAddress' : argv[8],
                 'expiryTime' : argv[9]
-            }
+            },
+            'stateF': argv[10]
         }
         return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'continuos-event-token-swap-incorporation':
@@ -246,7 +279,8 @@ def outputreturn(*argv):
                 'selling_token' : argv[7],
                 'pricetype' : argv[8],
                 'price' : argv[9],
-            }
+            },
+            'stateF': argv[10]
         }
         return parsed_data
     elif argv[0] == 'continuos-event-token-swap-deposit':
@@ -258,7 +292,8 @@ def outputreturn(*argv):
             'flodata': argv[4], #string
             'depositConditions': {
                 'expiryTime' : argv[5]
-            }
+            },
+            'stateF': argv[6]
         }
         return parsed_data
     elif argv[0] == 'smart-contract-one-time-event-continuos-event-participation':
@@ -269,7 +304,8 @@ def outputreturn(*argv):
             'tokenIdentification': argv[2], #hashList[0][:-1] 
             'tokenAmount': argv[3], #amount 
             'contractName': argv[4], #atList[0][:-1] 
-            'contractAddress': argv[5]
+            'contractAddress': argv[5],
+            'stateF': argv[6]
             }
         return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'nft_create':
@@ -278,7 +314,8 @@ def outputreturn(*argv):
             'flodata': argv[1], #string 
             'tokenIdentification': argv[2], #hashList[0][:-1] 
             'tokenAmount': argv[3], #initTokens,
-            'nftHash': argv[4] #nftHash
+            'nftHash': argv[4], #nftHash
+            'stateF': argv[5]
             }
         return parsed_data
     elif argv[0] == 'nft_transfer':
@@ -288,6 +325,7 @@ def outputreturn(*argv):
             'flodata': argv[1], #string 
             'tokenIdentification': argv[2], #hashList[0][:-1] 
             'tokenAmount': argv[3], #initTokens,
+            'stateF': argv[4]
             }
         return parsed_data
     elif argv[0] == 'infinite_token_create':
@@ -295,9 +333,10 @@ def outputreturn(*argv):
             'type': 'infiniteTokenIncorporation',
             'flodata': argv[1], #string 
             'tokenIdentification': argv[2], #hashList[0][:-1] 
+            'stateF': argv[3]
             }
         return parsed_data
-        
+
 
 def extract_specialcharacter_words(rawstring, special_characters):
     wordList = []
@@ -308,7 +347,13 @@ def extract_specialcharacter_words(rawstring, special_characters):
 
 
 def extract_contract_conditions(text, contract_type, marker=None, blocktime=None):
-    rulestext = re.split('contract-conditions:\s*', text)[-1]
+    try:
+        rulestext = extract_substing_between(text, 'contract-conditions', 'end-contract-conditions')
+    except:
+        return False
+    if rulestext.strip()[0] == ':':
+        rulestext = rulestext.strip()[1:].strip()
+    #rulestext = re.split('contract-conditions:\s*', text)[-1]
     # rulelist = re.split('\d\.\s*', rulestext)
     rulelist = []
     numberList = re.findall(r'\(\d\d*\)', rulestext)
@@ -416,6 +461,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
             elif rule[:9].lower() == 'pricetype':
                 pattern = re.compile('[^pricetype\s*=\s*].*')
                 priceType = pattern.search(rule).group(0)
+                priceType = priceType.replace("'","").replace('"', '')
                 extractedRules['priceType'] = priceType
             elif rule[:5] == 'price':
                 pattern = re.compile('[^price\s*=\s*].*')
@@ -886,6 +932,19 @@ text_list1 = [
     'Transfer 20 rmt#'
 ]
 
+text_list2 = [
+    '''Create Smart Contract with the name swap-rupee-bioscope@ of the type continuous-event* 
+    at the address stateF=bitcoin_price_source:bitpay:usd_inr_exchange_source:bitpay end-stateF oYzeeUBWRpzRuczW6myh2LHGnXPyR2Bc6k$ with contract-conditions :
+    (1) subtype = tokenswap
+    (2) accepting_token = rupee#
+    (3) selling_token = sreeram#
+    (4) price = "15"
+    (5) priceType="predetermined" end-contract-conditions'''
+]
+
+blockinfo_stub = {'hash': '28505c54c2099f9f3d25e9ceffb72bffd14156b12449b6d73a5b9d2d061f1643', 'size': 253, 'height': 5587001, 'version': 536870912, 'merkleroot': '8bbc603573019a832ee82d637bd40d340e1194e760027f9a2959e6443f311547', 'tx': ['8bbc603573019a832ee82d637bd40d340e1194e760027f9a2959e6443f311547'], 'time': 1660188965, 'nonce': 646198852, 'bits': 470123011, 'difficulty': 50, 'chainwork': '00000000000000000000000000000000000000000000000110720a0f9acc471d', 'confirmations': 569, 'previousblockhash': 'c62937e8fd60e00cb07b28071acd7201501cb55b1fc0899ea1c89256d804a554', 'nextblockhash': '6dcc78c447ec4705a37a2b1531691b28e7c1f2eada0f5af2278c3a087c7c459f', 'reward': 1.5625, 'isMainChain': True, 'poolInfo': {}}
+
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -911,6 +970,9 @@ def parse_flodata(text, blockinfo, net):
         return outputreturn('noise')
 
     clean_text, processed_text = text_preprocessing(text)
+    # System state 
+    print("Processing stateF")
+    stateF_mapping = isStateF(processed_text) 
     first_classification = firstclassification_rawstring(processed_text)
     parsed_data = None 
 
@@ -920,7 +982,7 @@ def parse_flodata(text, blockinfo, net):
         if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", tokenname):
             return outputreturn('noise')
 
-        isNFT = check_word_existence_instring('nft', processed_text)            
+        isNFT = check_word_existence_instring('nft', processed_text )           
         
         isInfinite = check_word_existence_instring('infinite-token', processed_text)
 
@@ -938,12 +1000,12 @@ def parse_flodata(text, blockinfo, net):
         operation = apply_rule1(selectCategory, processed_text, send_category, create_category)
         if operation == 'category1' and tokenamount is not None:
             if isNFT:
-                return outputreturn('nft_transfer',f"{processed_text}", f"{tokenname}", tokenamount)
+                return outputreturn('nft_transfer',f"{processed_text}", f"{tokenname}", tokenamount, stateF_mapping)
             else:
-                return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", tokenamount)
+                return outputreturn('token_transfer',f"{processed_text}", f"{tokenname}", tokenamount, stateF_mapping)
         elif operation == 'category2':
             if isInfinite:
-                return outputreturn('infinite_token_create',f"{processed_text}", f"{tokenname}")
+                return outputreturn('infinite_token_create',f"{processed_text}", f"{tokenname}", stateF_mapping)
             else:
                 if tokenamount is None:
                     return outputreturn('noise')
@@ -951,9 +1013,9 @@ def parse_flodata(text, blockinfo, net):
                     nft_hash = extract_NFT_hash(clean_text)
                     if nft_hash is False:
                         return outputreturn('noise')
-                    return outputreturn('nft_create',f"{processed_text}", f"{tokenname}", tokenamount, f"{nft_hash}")
+                    return outputreturn('nft_create',f"{processed_text}", f"{tokenname}", tokenamount, f"{nft_hash}", stateF_mapping)
                 else:
-                    return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", tokenamount)
+                    return outputreturn('token_incorporation',f"{processed_text}", f"{first_classification['wordlist'][0][:-1]}", tokenamount, stateF_mapping)
         else:
             return outputreturn('noise')
 
@@ -981,9 +1043,16 @@ def parse_flodata(text, blockinfo, net):
             return outputreturn('noise') 
 
         contract_conditions = extract_contract_conditions(processed_text, contract_type, contract_token, blocktime=blockinfo['time'])
-        if not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeAddress']]) or contract_conditions == False:
+        if contract_conditions == False or not resolve_incategory_conflict(contract_conditions,[['userchoices','payeeAddress']]):
             return outputreturn('noise') 
         else:
+            contractAmount = ''
+            if 'contractAmount' in contract_conditions.keys():
+                contractAmount = contract_conditions['contractAmount']
+                try:
+                    float(contractAmount)
+                except:
+                    return outputreturn('noise')
             minimum_subscription_amount = ''
             if 'minimumsubscriptionamount' in contract_conditions.keys():
                 minimum_subscription_amount = contract_conditions['minimumsubscriptionamount']
@@ -1000,13 +1069,13 @@ def parse_flodata(text, blockinfo, net):
                     return outputreturn('noise')
 
             if 'userchoices' in contract_conditions.keys():
-                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}")
+                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}", stateF_mapping)
             elif 'payeeAddress' in contract_conditions.keys():
                 contract_conditions['payeeAddress'] = find_word_index_fromstring(clean_text,contract_conditions['payeeAddress'])
                 if not check_flo_address(contract_conditions['payeeAddress'], is_testnet):
                     return outputreturn('noise')
                 else:
-                    return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['contractAmount']}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}")
+                    return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}", stateF_mapping)
 
     if first_classification['categorization'] == 'smart-contract-participation-deposit-C':
         # either participation of one-time-event contract or 
@@ -1039,7 +1108,7 @@ def parse_flodata(text, blockinfo, net):
                 if not userchoice:
                     return outputreturn('noise')
 
-                return outputreturn('one-time-event-userchoice-smartcontract-participation',f"{clean_text}", f"{tokenname}", tokenamount, f"{contract_name}", f"{contract_address}", f"{userchoice}")
+                return outputreturn('one-time-event-userchoice-smartcontract-participation',f"{clean_text}", f"{tokenname}", tokenamount, f"{contract_name}", f"{contract_address}", f"{userchoice}", stateF_mapping)
 
             elif operation == 'category2':
                 tokenamount = apply_rule1(extractAmount_rule_new1, processed_text, 'deposit-conditions:', 'pre')
@@ -1048,7 +1117,7 @@ def parse_flodata(text, blockinfo, net):
                 deposit_conditions = extract_deposit_conditions(processed_text, blocktime=blockinfo['time'])
                 if not deposit_category:
                     return outputreturn("noise")
-                return outputreturn('continuos-event-token-swap-deposit', f"{tokenname}", tokenamount, f"{contract_name}", f"{clean_text}", f"{deposit_conditions['expiryTime']}")
+                return outputreturn('continuos-event-token-swap-deposit', f"{tokenname}", tokenamount, f"{contract_name}", f"{clean_text}", f"{deposit_conditions['expiryTime']}", stateF_mapping)
 
     if first_classification['categorization'] == 'smart-contract-participation-ote-ce-C':
         # There is no way to properly differentiate between one-time-event-time-trigger participation and token swap participation 
@@ -1074,8 +1143,8 @@ def parse_flodata(text, blockinfo, net):
             if not check_flo_address(contract_address, is_testnet):
                 return outputreturn('noise') 
 
-        return outputreturn('smart-contract-one-time-event-continuos-event-participation', f"{clean_text}", f"{tokenname}", tokenamount, f"{contract_name}", f"{contract_address}")
-    
+        return outputreturn('smart-contract-one-time-event-continuos-event-participation', f"{clean_text}", f"{tokenname}", tokenamount, f"{contract_name}", f"{contract_address}", stateF_mapping)
+
     if first_classification['categorization'] == 'userchoice-trigger':
         contract_name = extract_special_character_word(first_classification['wordlist'],'@')
         if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_name):
@@ -1084,7 +1153,7 @@ def parse_flodata(text, blockinfo, net):
         trigger_condition = extract_trigger_condition(processed_text)
         if not trigger_condition:
             return outputreturn('noise')
-        return outputreturn('one-time-event-userchoice-smartcontract-trigger', f"{contract_name}", f"{trigger_condition}")
+        return outputreturn('one-time-event-userchoice-smartcontract-trigger', f"{contract_name}", f"{trigger_condition}", stateF_mapping)
 
     if first_classification['categorization'] == 'smart-contract-creation-ce-tokenswap':
         operation = apply_rule1(selectCategory, processed_text, create_category, send_category+deposit_category)
@@ -1119,9 +1188,12 @@ def parse_flodata(text, blockinfo, net):
             if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined":
                 assert float(contract_conditions['price'])
             else:
-                assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
+                #assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
+                assert contract_conditions['priceType'] == 'statef'
         except AssertionError:
             return outputreturn('noise')
-        return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}")
+        return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping)
     
     return outputreturn('noise')
+
+#print(parse_flodata(text_list2[0], blockinfo_stub, 'testnet'))

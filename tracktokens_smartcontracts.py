@@ -6,7 +6,7 @@ import os
 import shutil 
 import sqlite3 
 import sys 
-import pyflo
+import pyflo 
 import requests 
 import socketio 
 from sqlalchemy import create_engine, func 
@@ -18,7 +18,8 @@ from config import *
 from datetime import datetime 
 from ast import literal_eval 
 from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits, ContractTransactionHistory1, DatabaseTypeMapping, TimeActions, ConsumedInfo 
-
+from statef_processing import process_stateF 
+import pdb 
 
 goodblockset = {} 
 goodtxset = {} 
@@ -55,7 +56,7 @@ def pushData_SSEapi(message):
 
 def check_database_existence(type, parameters):
     if type == 'token':
-        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens', f"{parameters['token_name']}.db")
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens', f'{parameters["token_name"]}.db')
         return os.path.isfile(path)
     
     if type == 'smart_contract':
@@ -111,7 +112,7 @@ def convert_datetime_to_arrowobject(expiryTime):
     return expirytime_object
 
 
-def check_if_contract_address(floAddress):
+def is_a_contract_address(floAddress):
     # check contract address mapping db if the address is present, and return True or False based on that 
     system_db = create_database_session_orm('system_dbs', {'db_name':'system'}, SystemBase)
     contract_number = system_db.query(func.sum(ContractAddressMapping.contractAddress)).filter(ContractAddressMapping.contractAddress == floAddress).all()[0][0]
@@ -122,14 +123,13 @@ def check_if_contract_address(floAddress):
 
 
 def processBlock(blockindex=None, blockhash=None):
-
     if blockindex is not None and blockhash is None:
         logger.info(f'Processing block {blockindex}') 
-        # Get block details
+        # Get block details 
         response = newMultiRequest(f"block-index/{blockindex}") 
         blockhash = response['blockHash'] 
 
-    blockinfo = newMultiRequest(f"block/{blockhash}")
+    blockinfo = newMultiRequest(f"block/{blockhash}") 
 
     # Check smartContracts which will be triggered locally, and not by the contract committee
     checkLocaltriggerContracts(blockinfo)
@@ -141,20 +141,32 @@ def processBlock(blockindex=None, blockhash=None):
     acceptedTxList = []
     # Scan every transaction
     logger.info("Before tx loop")
-    counter = 0
+    transaction_counter = 0
+    if blockindex == 2211700:
+        pdb.set_trace()
     for transaction in blockinfo["tx"]:
-        counter = counter + 1
-        logger.info(f"Transaction {counter} {transaction}")
+        transaction_counter = transaction_counter + 1
+        logger.info(f"Transaction {transaction_counter} : {transaction}")
         current_index = -1
         
         if transaction in ['adcbcf1781bb319645a1e115831dc0fa54b3391cec780db48e54dae3c58f4470','c6eb7adc731a60b2ffa0c48d0d72d33b2ec3a33e666156e729a63b25f6c5cd56','ac00adb1a1537d485b287b8a9d4aa135c9e99f30659e7355906f5e7a8ff0552a','066337542c568dd339a4b30f727e1466e07bf0c6a2823e5f5157e0c8cf4721b1','ebf3219efb29b783fa0d6ee5f1d1aaf1a9c55ffdae55c174c82faa2e49bcd74d','ec9a852aa8a27877ba79ae99cc1359c0e04f6e7f3097521279bcc68e3883d760','77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8', '9110512d1696dae01701d8d156264a48ca1100f96c3551904ac3941b363138a1', 'b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551', '1e5d1cb60449f15b0e9d44db177605d7e86999ba149effcc1d276c2178ceac3d',
         '1586711334961abea5c0b9769cbc626cbc016a59c9c8a423a03e401da834083a', 'bb6cef5e9612363ed263291e8d3b39533661b3ba1b3ce8c2e9500158124266b8','511f16a69c5f62ad1cce70a2f9bfba133589e3ddc560d406c4fbf3920eae8469']:
             pass
 
+
+        # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
             transaction_data = newMultiRequest(f"tx/{transaction}")
             try:
                 text = transaction_data["floData"]
+                # TODO CLEANUP - REMOVE TEXT STUB AFTER TESTING
+                '''text = Create Smart Contract with the name swap-bitcoin-bioscope@ of the type continuous-event* 
+                    at the address stateF=address:oPkHWcvqBHfCortTHScrVBjXLsZhWie99C:bitcoin_price_source:bitpay:usd_inr_exchange_source:bitpay end-stateF oYzeeUBWRpzRuczW6myh2LHGnXPyR2Bc6k$ with contract-conditions :
+                    (1) subtype = tokenswap
+                    (2) accepting_token = bitcoin#
+                    (3) selling_token = bioscope#
+                    (4) price = "15"
+                    (5) priceType="statef" end-contract-conditions'''
                 text = text.replace("\n", " \n ")
                 current_index = 2
             except:
@@ -199,7 +211,7 @@ def updateLatestTransaction(transactionData, parsed_data, db_reference, transact
     if transaction_type is None:
         transaction_type = parsed_data['type']
     conn.execute("INSERT INTO latestTransactions(transactionHash, blockNumber, jsonData, transactionType, parsedFloData, db_reference) VALUES (?,?,?,?,?,?)", (transactionData['txid'], transactionData['blockheight'], json.dumps(transactionData), transaction_type, json.dumps(parsed_data), db_reference))
-    conn.commit()
+    #conn.commit()
     conn.close()
 
 
@@ -207,7 +219,7 @@ def updateLatestBlock(blockData):
     # connect to latest block db
     conn = create_database_connection('latest_cache', {'db_name':"latestCache"})
     conn.execute('INSERT INTO latestBlocks(blockNumber, blockHash, jsonData) VALUES (?,?,?)', (blockData['height'], blockData['hash'], json.dumps(blockData)))
-    conn.commit()
+    #conn.commit()
     conn.close()
 
 
@@ -367,17 +379,13 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     # move the pids consumed in the transaction to consumedTable and delete them from activeTable
                     session.execute('INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber) SELECT id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber FROM activeTable WHERE id={}'.format(piditem[0]))
                     session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
-                    session.commit()
                 session.commit()
-
+    
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
-                                        transferAmount=tokenAmount, blockNumber=blockinfo['height'],
-                                        blockHash=blockinfo['hash'], time=blockinfo['time'],
-                                        transactionHash=transaction_data['txid'],
-                                        blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data),
-                                        transactionType=parsed_data['type'],
-                                        parsedFloData=json.dumps(parsed_data)))
+            session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,transferAmount=tokenAmount, blockNumber=blockinfo['height'],
+            blockHash=blockinfo['hash'], time=blockinfo['time'],
+            transactionHash=transaction_data['txid'],
+            blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data)))
             session.commit()
             session.close()
             return 1
@@ -386,15 +394,19 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
 def checkLocaltriggerContracts(blockinfo):
     connection = create_database_connection('system_dbs', {'db_name':"system"})
     # todo : filter activeContracts which only have local triggers
-    activeContracts = connection.execute('select contractName, contractAddress from activecontracts where status=="active"').fetchall()
-    connection.close()
+    activeContracts = connection.execute('select contractName, contractAddress from activecontracts where status=="active"').fetchall() 
+    connection.close() 
 
+    #todo - remove temp variable
+    temp = 0
     for contract in activeContracts:
         # pull out the contract structure into a dictionary
+        print(f"HEYYYYY {temp}")
         connection = create_database_connection('smart_contract', {'contract_name':f"{contract[0]}", 'contract_address':f"{contract[1]}"})
+
+        print(f"Contract being processed is {contract[0]}-{contract[1]}")
         # todo : filter activeContracts which only have local triggers
-        attributevaluepair = connection.execute(
-            "select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
+        attributevaluepair = connection.execute("select attribute, value from contractstructure where attribute != 'contractName' and attribute != 'flodata' and attribute != 'contractAddress'").fetchall()
         contractStructure = {}
         conditionDict = {}
         counter = 0
@@ -407,6 +419,16 @@ def checkLocaltriggerContracts(blockinfo):
         if len(conditionDict) > 0:
             contractStructure['exitconditions'] = conditionDict
         del counter, conditionDict
+
+        # TODO - FIGURE A BETTER SOLUTION FOR THIS 
+        transaction_data = {}
+        transaction_data['txid'] = 'internalTrigger'
+        parsed_data = {}
+        parsed_data['type'] = 'internalTrigger'
+
+
+        if 'contractAddress' not in contractStructure.keys():
+            contractStructure['contractAddress'] = contract[1]
 
         if contractStructure['contractType'] == 'one-time-event':
             # Check if the contract has blockchain trigger or committee trigger
@@ -474,11 +496,8 @@ def checkLocaltriggerContracts(blockinfo):
             elif 'payeeAddress' in contractStructure:
                 # This is a local trigger contract
                 if 'maximumsubscriptionamount' in contractStructure:
-                    maximumsubscriptionamount = connection.execute(
-                        'select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[
-                        0][0]
-                    tokenAmount_sum = \
-                        connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                    maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
+                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                     if tokenAmount_sum >= maximumsubscriptionamount:
                         # Trigger the contract
                         payeeAddress = contractStructure['payeeAddress']
@@ -521,17 +540,14 @@ def checkLocaltriggerContracts(blockinfo):
 
                 expiryTime = contractStructure['expiryTime']
                 expirytime_split = expiryTime.split(' ')
-                parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
-                                                    expirytime_split[2], expirytime_split[4])
-                expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                    tzinfo=expirytime_split[5][3:])
+                parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
                 blocktime_object = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
 
                 if blocktime_object > expirytime_object:
                     if 'minimumsubscriptionamount' in contractStructure:
                         minimumsubscriptionamount = contractStructure['minimumsubscriptionamount']
-                        tokenAmount_sum = \
-                            connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                        tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
                         if tokenAmount_sum < minimumsubscriptionamount:
                             # Initialize payback to contract participants
                             contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
@@ -580,7 +596,8 @@ def checkLocaltriggerContracts(blockinfo):
                     contractAddress = contractStructure['contractAddress']
                     connection = create_database_connection('smart_contract', {'contract_name':f"{contract[0]}", 'contract_address':f"{contract[1]}"})
                     tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
-                    returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress, blockinfo = blockinfo)
+                          
+                    returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress, transaction_data=transaction_data, blockinfo = blockinfo, parsed_data = parsed_data)
                     if returnval is None:
                         logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                         return
@@ -601,17 +618,12 @@ def checkLocaltriggerContracts(blockinfo):
 
                     connection = create_database_connection('system_dbs', {'db_name':'system'})
                     connection.execute(
-                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                            contract[0], contract[1]))
-                    connection.execute(
-                        'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
-                            blockinfo['time'], contract[0], contract[1]))
-                    connection.execute(
-                        'update activecontracts set expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(
-                            blockinfo['time'], contract[0], contract[1]))
+                        'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
+                    connection.execute('update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'], contract[0], contract[1]))
+                    connection.execute('update activecontracts set expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'], contract[0], contract[1]))
                     connection.close()
                     return
-
+            
 
 def checkReturnDeposits(blockinfo):
     # Connect to system.db with a session 
@@ -982,14 +994,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
     # All FLO checks completed at this point.
     # Semantic rules for parsed data begins
-
+    
     # todo Rule 44 - Process as per the type of transaction
     if parsed_data['type'] == 'transfer':
         logger.info(f"Transaction {transaction_data['txid']} is of the type transfer")
 
         # todo Rule 45 - If the transfer type is token, then call the function transferToken to adjust the balances
         if parsed_data['transferType'] == 'token':
-            if not check_if_contract_address(inputlist[0]) and not check_if_contract_address(outputlist[0]):
+            if not is_a_contract_address(inputlist[0]) and not is_a_contract_address(outputlist[0]):
                 # check if the token exists in the database
                 if check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                     # Pull details of the token type from system.db database 
@@ -1601,8 +1613,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 logger.info("Something went wrong in the smartcontract token transfer method")
                                 return 0
 
-
-
                 elif contract_type == 'continuos-event':
                     contract_subtype = contract_session.query(ContractStructure.value).filter(ContractStructure.attribute == 'subtype').first()[0]
                     if contract_subtype == 'tokenswap':
@@ -1867,7 +1877,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
     #  if it has been taken then reject the incorporation. Else incorporate it
     elif parsed_data['type'] == 'tokenIncorporation':
-        if not check_if_contract_address(inputlist[0]):
+        if not is_a_contract_address(inputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
                 session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], addressBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
@@ -2010,7 +2020,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
                     session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
                     session.add(ContractStructure(attribute='expiryTime', index=0, value=parsed_data['contractConditions']['expiryTime']))
-                    if 'contractAmount' in parsed_data['contractConditions']:
+                    if 'contractAmount' in parsed_data['contractConditions'].keys():
                         session.add(
                             ContractStructure(attribute='contractAmount', index=0,
                                               value=parsed_data['contractConditions']['contractAmount']))
@@ -2099,7 +2109,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                 contractName=parsed_data['contractName'],
                                                 contractAddress=inputadd,
                                                 contractType='one-time-event-trigger',
-                                                tokens_db=[parsed_data['tokenIdentification']],
+                                                tokens_db=json.dumps([parsed_data['tokenIdentification']]),
                                                 parsed_data=json.dumps(parsed_data),
                                                 transactionHash=transaction_data['txid'],
                                                 blockNumber=transaction_data['blockheight']))
@@ -2150,11 +2160,17 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
                     session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
                     session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
+                    
+                    if parsed_data['stateF'] != {}:
+                        for key, value in parsed_data['stateF'].items():
+                            session.add(ContractStructure(attribute=f'statef-{key}', index=0, value=value))
+                        
                     if 'subtype' in parsed_data['contractConditions']:
                         # todo: Check if the both the tokens mentioned exist if its a token swap
-                        if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})):
+                        #if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})):
+                        if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})):
                             #if (parsed_data['contractConditions']['subtype'] == 'tokenswap'):
-                            if parsed_data['contractConditions']['pricetype'] in ['predetermined','determined']:
+                            if parsed_data['contractConditions']['pricetype'] in ['predetermined','statef']:
                                 session.add(ContractStructure(attribute='subtype', index=0, value=parsed_data['contractConditions']['subtype'])) 
                                 session.add(ContractStructure(attribute='accepting_token', index=0, value=parsed_data['contractConditions']['accepting_token']))
                                 session.add(ContractStructure(attribute='selling_token', index=0, value=parsed_data['contractConditions']['selling_token']))
@@ -2162,9 +2178,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 session.add(ContractStructure(attribute='pricetype', index=0, value=parsed_data['contractConditions']['pricetype']))
                                 session.add(ContractStructure(attribute='price', index=0, value=parsed_data['contractConditions']['price']))
                                 
-                                # Store transfer as part of ContractTransactionHistory
+                                # Store transfer as part of ContractTransactionHistory 
                                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                session.add(ContractTransactionHistory(transactionType='incorporation', sourceFloAddress=inputadd,
+                                session.add(ContractTransactionHistory(transactionType='incorporation',
+                                                                        sourceFloAddress=inputadd,
                                                                         destFloAddress=outputlist[0],
                                                                         transferAmount=None,
                                                                         blockNumber=transaction_data['blockheight'],
@@ -2184,6 +2201,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 accepting_sending_tokenlist = [parsed_data['contractConditions']['accepting_token'], parsed_data['contractConditions']['selling_token']]
                                 for token_name in accepting_sending_tokenlist:
                                     token_name = token_name.split('#')[0]
+                                    if token_name == 'bitcoin':
+                                        continue
                                     session = create_database_session_orm('token', {'token_name': f"{token_name}"}, Base)
                                     session.add(TokenContractAssociation(tokenIdentification=token_name,
                                                                             contractName=parsed_data['contractName'],
@@ -2226,9 +2245,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                     blockNumber=transaction_data['blockheight']))
                                 session.commit()
                                 session.close()
-
                                 updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
-
                                 pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
                                 return 1
                         
@@ -2286,8 +2303,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         session.close()
                         return 0
 
-                session.commit()
-                session.close()
+                    session.commit()
+                    session.close()
 
         else:
             logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists")
@@ -2319,7 +2336,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
     elif parsed_data['type'] == 'smartContractPays':
         logger.info(f"Transaction {transaction_data['txid']} is of the type smartContractPays")
-
         # Check if input address is a committee address
         if inputlist[0] in committeeAddressList:
             # check if the contract exists
@@ -2595,15 +2611,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                 # Trigger the contract
                 connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
-                contractWinners = connection.execute(
-                    'select * from contractparticipants where userChoice="{}"'.format(
-                        parsed_data['triggerCondition'])).fetchall()
+                contractWinners = connection.execute('select * from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
                 tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
-                winnerSum = connection.execute(
-                    'select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(
+                winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(
                         parsed_data['triggerCondition'])).fetchall()[0][0]
-                tokenIdentification = connection.execute(
-                    'select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
 
                 for winner in contractWinners:
                     winnerAmount = "%.8f" % ((winner[2] / winnerSum) * tokenSum)
@@ -2611,8 +2623,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     if returnval is None:
                         logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                         return 0
-                    connection.execute(
-                        f"update contractparticipants set winningAmount='{winnerAmount}' where participantAddress='{winner[1]}' and transactionHash='{winner[4]}'")
+                    connection.execute(f"update contractparticipants set winningAmount='{winnerAmount}' where participantAddress='{winner[1]}' and transactionHash='{winner[4]}'")
 
                 # add transaction to ContractTransactionHistory
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
@@ -2645,9 +2656,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                 updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
 
-                pushData_SSEapi(
-                    'Trigger | Contract triggered of the name {}-{} is active currently at transaction {}'.format(
-                        parsed_data['contractName'], outputlist[0], transaction_data['txid']))
+                pushData_SSEapi('Trigger | Contract triggered of the name {}-{} is active currently at transaction {}'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
                 return 1
             else:
                 logger.info(f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist")
@@ -2851,7 +2860,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             Creation and transfer amount .. only integer parts will be taken
             Keyword nft must be present in both creation and transfer
         '''
-        if not check_if_contract_address(inputlist[0]):
+        if not is_a_contract_address(inputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
                 session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
@@ -2924,9 +2933,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             session.close()
             pushData_SSEapi(f"NFT incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
             return 0
-            
+
     elif parsed_data['type'] == 'infiniteTokenIncorporation':
-        if not check_if_contract_address(inputlist[0]) and not check_if_contract_address(outputlist[0]):
+        if not is_a_contract_address(inputlist[0]) and not is_a_contract_address(outputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 parsed_data['tokenAmount'] = 0
                 tokendb_session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
@@ -3026,6 +3035,8 @@ def scanBlockchain():
             break
             
     for blockindex in range(startblock, current_index):
+        if blockindex in IGNORE_BLOCK_LIST:
+            continue
         processBlock(blockindex=blockindex) 
 
     # At this point the script has updated to the latest block
@@ -3117,6 +3128,10 @@ elif config['DEFAULT']['NET'] == 'testnet':
 serverlist = serverlist.split(',')
 neturl = config['DEFAULT']['FLOSIGHT_NETURL']
 tokenapi_sse_url = config['DEFAULT']['TOKENAPI_SSE_URL']
+
+IGNORE_BLOCK_LIST = config['DEFAULT']['IGNORE_BLOCK_LIST'].split(',')
+IGNORE_BLOCK_LIST = [int(s) for s in IGNORE_BLOCK_LIST]
+IGNORE_TRANSACTION_LIST = config['DEFAULT']['IGNORE_TRANSACTION_LIST'].split(',')
 
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:

@@ -412,7 +412,6 @@ def return_token_contract_set(rollback_block):
 def initiate_rollback_process():
     '''
     tokendb_set, smartcontractdb_set = return_token_contract_set(rollback_block)
-    pdb.set_trace()
     '''
     # Connect to system.db 
     systemdb_session = create_database_session_orm('system_dbs', {'db_name': 'system'}, SystemBase)
@@ -421,7 +420,7 @@ def initiate_rollback_process():
         if db.db_type in ['token', 'nft', 'infinite-token']:
             if db.blockNumber > rollback_block:
                 delete_database(rollback_block, f"{db.db_name}") 
-            else: 
+            else:
                 rollback_database(rollback_block, 'token', f"{db.db_name}") 
         elif db.db_type in ['smartcontract']:
             if db.blockNumber > rollback_block:
