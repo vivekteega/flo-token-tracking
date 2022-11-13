@@ -3,6 +3,7 @@ import re
 import arrow
 import pyflo
 import logging
+import json
 
 """ 
 Find make lists of #, *, @ words 
@@ -896,6 +897,7 @@ def text_preprocessing(original_text):
     return clean_text,processed_text
 
 
+# TODO - REMOVE SAMPLE TEXT 
 text_list = [
     "create 500 million rmt#",
 
@@ -939,9 +941,21 @@ text_list2 = [
     (2) accepting_token = rupee#
     (3) selling_token = sreeram#
     (4) price = "15"
-    (5) priceType="predetermined" end-contract-conditions'''
+    (5) priceType="predetermined" end-contract-conditions''',
+
+    '''
+    Create a smart contract of the name simple-crowd-fund@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Tue Sep 13 2022 16:10:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7 end-contract-conditions
+    ''',
+
+    '''
+    Create a smart contract of the name simple-crowd-fund@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Tue Sep 13 2022 16:10:00 GMT+0530  (2) payeeAddress=oU412TvcMe2ah2xzqFpA95vBJ1RoPZY1LR:10:oVq6QTUeNLh8sapQ6J6EjMQMKHxFCt3uAq:20:oLE79kdHPEZ2bxa3PwtysbJeLo9hvPgizU:60:ocdCT9RAzWVsUncMu24r3HXKXFCXD7gTqh:10 end-contract-conditions
+    ''', 
+    '''
+    Create a smart contract of the name simple-crowd-fund@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Tue Sep 13 2022 16:10:00 GMT+0530  (2) payeeAddress=oU412TvcMe2ah2xzqFpA95vBJ1RoPZY1LR end-contract-conditions
+    '''
 ]
 
+# todo - REMOVE STUB
 blockinfo_stub = {'hash': '28505c54c2099f9f3d25e9ceffb72bffd14156b12449b6d73a5b9d2d061f1643', 'size': 253, 'height': 5587001, 'version': 536870912, 'merkleroot': '8bbc603573019a832ee82d637bd40d340e1194e760027f9a2959e6443f311547', 'tx': ['8bbc603573019a832ee82d637bd40d340e1194e760027f9a2959e6443f311547'], 'time': 1660188965, 'nonce': 646198852, 'bits': 470123011, 'difficulty': 50, 'chainwork': '00000000000000000000000000000000000000000000000110720a0f9acc471d', 'confirmations': 569, 'previousblockhash': 'c62937e8fd60e00cb07b28071acd7201501cb55b1fc0899ea1c89256d804a554', 'nextblockhash': '6dcc78c447ec4705a37a2b1531691b28e7c1f2eada0f5af2278c3a087c7c459f', 'reward': 1.5625, 'isMainChain': True, 'poolInfo': {}}
 
 
@@ -1072,10 +1086,40 @@ def parse_flodata(text, blockinfo, net):
                 return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}", stateF_mapping)
             elif 'payeeAddress' in contract_conditions.keys():
                 contract_conditions['payeeAddress'] = find_word_index_fromstring(clean_text,contract_conditions['payeeAddress'])
-                if not check_flo_address(contract_conditions['payeeAddress'], is_testnet):
-                    return outputreturn('noise')
-                else:
-                    return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['payeeAddress']}", f"{contract_conditions['expiryTime']}", stateF_mapping)
+                # check if colon exists in the payeeAddress string
+                if ':' in contract_conditions['payeeAddress']:
+                    colon_split = contract_conditions['payeeAddress'].split(':')
+                    if len(colon_split)%2 != 0:
+                        return outputreturn('noise')
+                    split_total = 0 
+                    payeeAddress_split_dictionary = {}
+                    for idx, item in enumerate(colon_split):
+                        if idx%2 == 0:
+                            # check if floid 
+                            if not check_flo_address(item, is_testnet):
+                                return outputreturn('noise')
+                        if idx%2 == 1:
+                            # check if number
+                            try:
+                                item = float(item)
+                                if item <= 0:
+                                    return outputreturn('noise')
+                                payeeAddress_split_dictionary[colon_split[idx-1]] = item
+                                split_total += item
+                            except:
+                                return outputreturn('noise')
+                    if split_total != 100:
+                        return outputreturn('noise')
+                    else:
+                        contract_conditions['payeeAddress'] = payeeAddress_split_dictionary
+                        return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", contract_conditions['payeeAddress'], f"{contract_conditions['expiryTime']}", stateF_mapping)
+                else:  
+                    if not check_flo_address(contract_conditions['payeeAddress'], is_testnet):
+                        return outputreturn('noise')
+                    else:
+                        contract_conditions['payeeAddress'] = {f"{contract_conditions['payeeAddress']}":100}
+                        return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", contract_conditions['payeeAddress'], f"{contract_conditions['expiryTime']}", stateF_mapping)
+
 
     if first_classification['categorization'] == 'smart-contract-participation-deposit-C':
         # either participation of one-time-event contract or 
@@ -1196,4 +1240,3 @@ def parse_flodata(text, blockinfo, net):
     
     return outputreturn('noise')
 
-#print(parse_flodata(text_list2[0], blockinfo_stub, 'testnet'))

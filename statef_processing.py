@@ -14,6 +14,18 @@ import pdb
     }
 '''
 
+'''
+stateF notes for amount split on contracts
+
+stateF_object = {
+    "floaddresses": "oPkHWcvqBHfCortTHScrVBjXLsZhWie99C-oPkHWcvqBHfCortTHScrVBjXLsZhWie99C-oPkHWcvqBHfCortTHScrVBjXLsZhWie99C",
+    "splits": "10-20-30",
+}
+
+
+
+'''
+
 # stateF 
 stateF_address = 'oPkHWcvqBHfCortTHScrVBjXLsZhWie99C'
 
