@@ -4,7 +4,6 @@ import json
 import logging 
 import os 
 import shutil 
-import sqlite3 
 import sys 
 import pyflo 
 import requests 
@@ -17,7 +16,7 @@ import parsing
 from config import * 
 from datetime import datetime 
 from ast import literal_eval 
-from models import SystemData, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, RejectedTransactionHistory, Base, ContractStructure, ContractBase, ContractParticipants, SystemBase, ActiveContracts, ContractAddressMapping, LatestCacheBase, ContractTransactionHistory, RejectedContractTransactionHistory, TokenContractAssociation, ContinuosContractBase, ContractStructure1, ContractParticipants1, ContractDeposits, ContractTransactionHistory1, DatabaseTypeMapping, TimeActions, ConsumedInfo 
+from models import SystemData, TokenBase, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, TokenContractAssociation, RejectedTransactionHistory, ContractBase, ContractStructure, ContractParticipants, ContractTransactionHistory, ContractDeposits, ConsumedInfo, ContractWinners, ContinuosContractBase, ContractStructure2, ContractParticipants2, ContractDeposits2, ContractTransactionHistory2, SystemBase, ActiveContracts, SystemData, ContractAddressMapping, TokenAddressMapping, DatabaseTypeMapping, TimeActions, RejectedContractTransactionHistory, RejectedTransactionHistory, LatestCacheBase, LatestTransactions, LatestBlocks
 from statef_processing import process_stateF 
 import pdb 
 
@@ -131,7 +130,7 @@ def processBlock(blockindex=None, blockhash=None):
 
     blockinfo = newMultiRequest(f"block/{blockhash}") 
 
-    pause_index = 2211701
+    pause_index = 2294310
     if blockindex == pause_index:
         print(f'Paused at {pause_index}')
         pdb.set_trace()
@@ -152,10 +151,8 @@ def processBlock(blockindex=None, blockhash=None):
         logger.info(f"Transaction {transaction_counter} : {transaction}")
         current_index = -1
         
-        if transaction in ['adcbcf1781bb319645a1e115831dc0fa54b3391cec780db48e54dae3c58f4470','c6eb7adc731a60b2ffa0c48d0d72d33b2ec3a33e666156e729a63b25f6c5cd56','ac00adb1a1537d485b287b8a9d4aa135c9e99f30659e7355906f5e7a8ff0552a','066337542c568dd339a4b30f727e1466e07bf0c6a2823e5f5157e0c8cf4721b1','ebf3219efb29b783fa0d6ee5f1d1aaf1a9c55ffdae55c174c82faa2e49bcd74d','ec9a852aa8a27877ba79ae99cc1359c0e04f6e7f3097521279bcc68e3883d760','77c92bcf40a86cd2e2ba9fa678249a9f4753c98c8038b1b9e9a74008f0ec93e8', '9110512d1696dae01701d8d156264a48ca1100f96c3551904ac3941b363138a1', 'b3e5c6343e3fc989e1d563b703573a21e0d409eb2ca7a9392dff7c7c522b1551', '1e5d1cb60449f15b0e9d44db177605d7e86999ba149effcc1d276c2178ceac3d',
-        '1586711334961abea5c0b9769cbc626cbc016a59c9c8a423a03e401da834083a', 'bb6cef5e9612363ed263291e8d3b39533661b3ba1b3ce8c2e9500158124266b8','511f16a69c5f62ad1cce70a2f9bfba133589e3ddc560d406c4fbf3920eae8469']:
+        if transaction in ['64abe801d12224d10422de88070a76ad8c6d17b533ba5288fb0961b4cbf6adf4']:
             pass
-
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -241,7 +238,7 @@ def process_pids(entries, session, piditem):
     
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress, transaction_data=None, parsed_data=None, isInfiniteToken=None, blockinfo=None):
-    session = create_database_session_orm('token', {'token_name': f"{tokenIdentification}"}, Base)
+    session = create_database_session_orm('token', {'token_name': f"{tokenIdentification}"}, TokenBase)
 
     if isInfiniteToken == True:
         # Make new entry 
@@ -385,10 +382,7 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                 session.commit()
     
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,transferAmount=tokenAmount, blockNumber=blockinfo['height'],
-            blockHash=blockinfo['hash'], time=blockinfo['time'],
-            transactionHash=transaction_data['txid'],
-            blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data)))
+            session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,transferAmount=tokenAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], time=blockinfo['time'], transactionHash=transaction_data['txid'], blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data)))
             session.commit()
             session.close()
             return 1
@@ -406,7 +400,6 @@ def trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_da
         if returnval is None:
             logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
             return 0
-        connection.execute('update contractparticipants set winningAmount="{}"'.format(transferAmount))
 
         # Add transaction to ContractTransactionHistory
         session = create_database_session_orm('smart_contract', {'contract_name': f"{contract_name}", 'contract_address': f"{contract_address}"}, ContractBase)
@@ -476,42 +469,36 @@ def checkLocaltriggerContracts(blockinfo):
 
                 if blocktime_object > expirytime_object:
                     if 'minimumsubscriptionamount' in contractStructure:
-                        minimumsubscriptionamount = contractStructure['minimumsubscriptionamount']
-                        tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                        minimumsubscriptionamount = float(contractStructure['minimumsubscriptionamount'])
+                        tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                         if tokenAmount_sum < minimumsubscriptionamount:
                             # Initialize payback to contract participants
-                            contractParticipants = connection.execute(
-                                'select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[
-                                0][0]
+                            contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()
 
-                            for participant in contractParticipants:
-                                tokenIdentification = contractStructure['tokenIdentification']
-                                contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
-                                returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0], blockinfo = blockinfo)
-                                if returnval is None:
-                                    logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger. THIS IS CRITICAL ERROR")
-                                    return
-                                connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[2])))
+                            if len(contractParticipants)!=0:
+                                for participant in contractParticipants:
+                                    tokenIdentification = contractStructure['tokenIdentification']
+                                    contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                                    returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0], blockinfo = blockinfo)
+                                    if returnval is None:
+                                        logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger. THIS IS CRITICAL ERROR")
+                                        return
+                                    connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[2])))
 
-                            # add transaction to ContractTransactionHistory
-                            session = create_database_session_orm('smart_contract', {'contract_name': f"{contract[0]}", 'contract_address': f"{contract[1]}"}, ContractBase)
-                            session.add(ContractTransactionHistory(transactionType='trigger',
-                                                                   transactionSubType='minimumsubscriptionamount-payback',
-                                                                   transferAmount=None,
-                                                                   blockNumber=blockinfo['height'],
-                                                                   blockHash=blockinfo['hash'],
-                                                                   time=blockinfo['time']))
-                            session.commit()
-                            session.close()
+                                # add transaction to ContractTransactionHistory
+                                session = create_database_session_orm('smart_contract', {'contract_name': f"{contract[0]}", 'contract_address': f"{contract[1]}"}, ContractBase)
+                                session.add(ContractTransactionHistory(transactionType='trigger',
+                                                                    transactionSubType='minimumsubscriptionamount-payback',
+                                                                    transferAmount=None,
+                                                                    blockNumber=blockinfo['height'],
+                                                                    blockHash=blockinfo['hash'],
+                                                                    time=blockinfo['time']))
+                                session.commit()
+                                session.close()
 
                             connection = create_database_connection('system_dbs', {'db_name':'system'})
-                            connection.execute(
-                                'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                                    contract[0], contract[1]))
-                            connection.execute(
-                                'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
-                                    blockinfo['time'],
-                                    contract[0], contract[1]))
+                            connection.execute('update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(contract[0], contract[1]))
+                            connection.execute('update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'], contract[0], contract[1]))
                             connection.close()
 
                     connection = create_database_connection('system_dbs', {'db_name':'system'})
@@ -526,9 +513,9 @@ def checkLocaltriggerContracts(blockinfo):
 
             elif 'payeeAddress' in contractStructure:
                 # This is a local trigger contract
-                tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                 if 'maximumsubscriptionamount' in contractStructure:
-                    maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
+                    maximumsubscriptionamount = float(contractStructure['maximumsubscriptionamount'])
                     if tokenAmount_sum >= maximumsubscriptionamount:
                         # Trigger the contract
                         success_returnval = trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_data, blockinfo, parsed_data, connection, contract_name=contract[0], contract_address=contract[1], transaction_subType='maximumsubscriptionamount')
@@ -550,19 +537,19 @@ def checkLocaltriggerContracts(blockinfo):
 
                 if blocktime_object > expirytime_object:
                     if 'minimumsubscriptionamount' in contractStructure:
-                        minimumsubscriptionamount = contractStructure['minimumsubscriptionamount']
+                        minimumsubscriptionamount = float(contractStructure['minimumsubscriptionamount'])
                         if tokenAmount_sum < minimumsubscriptionamount:
                             # Initialize payback to contract participants
-                            contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
-
-                            for participant in contractParticipants:
-                                tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                                contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
-                                returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0], blockinfo = blockinfo)
-                                if returnval is None:
-                                    logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
-                                    return
-                                connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[2])))
+                            contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()
+                            if len(contractParticipants)!=0:
+                                #contractParticipants = contractParticipants[0][0]
+                                for participant in contractParticipants:
+                                    tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                                    contractAddress = connection.execute('select value from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                                    returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0], transaction_data=transaction_data, parsed_data=parsed_data, blockinfo = blockinfo)
+                                    if returnval is None:
+                                        logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
+                                        return
 
                             # add transaction to ContractTransactionHistory
                             session = create_database_session_orm('smart_contract', {'contract_name': f"{contract[0]}", 'contract_address': f"{contract[1]}"}, ContractBase)
@@ -722,8 +709,8 @@ def checkReturnDeposits(blockinfo):
 
                             if blocktime_object > expirytime_object:
                                 if 'minimumsubscriptionamount' in contractStructure:
-                                    minimumsubscriptionamount = contractStructure['minimumsubscriptionamount']
-                                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                                    minimumsubscriptionamount = float(contractStructure['minimumsubscriptionamount'])
+                                    tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                                     if tokenAmount_sum < minimumsubscriptionamount:
                                         # Initialize payback to contract participants
                                         contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
@@ -772,7 +759,7 @@ def checkReturnDeposits(blockinfo):
                             # This is a local trigger contract
                             if 'maximumsubscriptionamount' in contractStructure:
                                 maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
-                                tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                                tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                                 if tokenAmount_sum >= maximumsubscriptionamount:
                                     # Trigger the contract
                                     payeeAddress = contractStructure['payeeAddress']
@@ -819,8 +806,8 @@ def checkReturnDeposits(blockinfo):
 
                             if blocktime_object > expirytime_object:
                                 if 'minimumsubscriptionamount' in contractStructure:
-                                    minimumsubscriptionamount = contractStructure['minimumsubscriptionamount']
-                                    tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                                    minimumsubscriptionamount = float(contractStructure['minimumsubscriptionamount'])
+                                    tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                                     if tokenAmount_sum < minimumsubscriptionamount:
                                         # Initialize payback to contract participants
                                         contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
@@ -865,7 +852,7 @@ def checkReturnDeposits(blockinfo):
                                 tokenIdentification = contractStructure['tokenIdentification']
                                 contractAddress = contractStructure['contractAddress']
                                 connection = create_database_connection('smart_contract', {'contract_name':f"{contract[0]}", 'contract_address':f"{contract[1]}"})
-                                tokenAmount_sum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
+                                tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                                 returnval = transferToken(tokenIdentification, tokenAmount_sum, contractAddress, payeeAddress, blockinfo = blockinfo)
                                 if returnval is None:
                                     logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
@@ -1020,7 +1007,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     return 1
                 else:
                     logger.info(f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
+                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
                     session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                         sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -1042,7 +1029,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             
             else:
                 logger.info(f"Token transfer at transaction {transaction_data['txid']} rejected as either the input address or the output address is part of a contract address")
-                session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
+                session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
                 session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                     sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -1157,8 +1144,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             expirytime_split = expirytime.split(' ')
                             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
                                                                 expirytime_split[2], expirytime_split[4])
-                            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                                tzinfo=expirytime_split[5][3:])
+                            expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
                             blocktime_object = parsing.arrow.get(transaction_data['blocktime']).to('Asia/Kolkata')
 
                             if blocktime_object > expirytime_object:
@@ -1183,8 +1169,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         ))
                                 session.commit()
                                 session.close()
-                                pushData_SSEapi(
-                                    f"Error| Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
+                                pushData_SSEapi(f"Error| Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
                                 return 0
 
                     # pull out the contract structure into a dictionary
@@ -1205,13 +1190,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                     # check if user choice has been passed, to the wrong contract type
                     if 'userChoice' in parsed_data and 'exitconditions' not in contractStructure:
-                        logger.info(
-                            f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
+                        logger.info(f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
                         # Store transfer as part of RejectedContractTransactionHistory
                         session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(
-                            RejectedContractTransactionHistory(transactionType='participation',
+                        session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                 contractName=parsed_data['contractName'],
                                                                 contractAddress=outputlist[0],
                                                                 sourceFloAddress=inputadd,
@@ -1229,19 +1212,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                 ))
                         session.commit()
                         session.close()
-                        pushData_SSEapi(
-                            f"Error | Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
+                        pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
                         return 0
 
                     # check if the right token is being sent for participation
                     if parsed_data['tokenIdentification'] != contractStructure['tokenIdentification']:
-                        logger.info(
-                            f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                        logger.info(f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                         # Store transfer as part of RejectedContractTransactionHistory
                         session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(
-                            RejectedContractTransactionHistory(transactionType='participation',
+                        session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                 contractName=parsed_data['contractName'],
                                                                 contractAddress=outputlist[0],
                                                                 sourceFloAddress=inputadd,
@@ -1259,20 +1239,17 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                 ))
                         session.commit()
                         session.close()
-                        pushData_SSEapi(
-                            f"Error| Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                        pushData_SSEapi(f"Error| Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                         return 0
 
                     # Check if contractAmount is part of the contract structure, and enforce it if it is
                     if 'contractAmount' in contractStructure:
                         if float(contractStructure['contractAmount']) != float(parsed_data['tokenAmount']):
-                            logger.info(
-                                f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            logger.info(f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
                             session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(
-                                RejectedContractTransactionHistory(transactionType='participation',
+                            session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                     contractName=parsed_data['contractName'],
                                                                     contractAddress=outputlist[0],
                                                                     sourceFloAddress=inputadd,
@@ -1290,8 +1267,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                     ))
                             session.commit()
                             session.close()
-                            pushData_SSEapi(
-                                f"Error| Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            pushData_SSEapi(f"Error| Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             return 0
 
                     partialTransferCounter = 0
@@ -1302,18 +1278,15 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
                         amountDeposited = session.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
                         session.close()
-
                         if amountDeposited is None:
                             amountDeposited = 0
 
                         if amountDeposited >= maximumsubscriptionamount:
-                            logger.info(
-                                f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            logger.info(f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             # Store transfer as part of RejectedContractTransactionHistory
                             session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(
-                                RejectedContractTransactionHistory(transactionType='participation',
+                            session.add(RejectedContractTransactionHistory(transactionType='participation',
                                                                     contractName=parsed_data['contractName'],
                                                                     contractAddress=outputlist[0],
                                                                     sourceFloAddress=inputadd,
@@ -1331,40 +1304,36 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                     ))
                             session.commit()
                             session.close()
-                            pushData_SSEapi(
-                                f"Error | Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
                             return 0
-                        elif ((float(amountDeposited) + float(parsed_data[
-                                                                    'tokenAmount'])) > maximumsubscriptionamount) and 'contractAmount' in contractStructure:
-                            logger.info(
-                                f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-                            # Store transfer as part of RejectedContractTransactionHistory
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(
-                                RejectedContractTransactionHistory(transactionType='participation',
-                                                                    contractName=parsed_data['contractName'],
-                                                                    contractAddress=outputlist[0],
-                                                                    sourceFloAddress=inputadd,
-                                                                    destFloAddress=outputlist[0],
-                                                                    transferAmount=None,
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash'],
-                                                                    time=transaction_data['blocktime'],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockchainReference=blockchainReference,
-                                                                    jsonData=json.dumps(transaction_data),
-                                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}",
+                        elif ((float(amountDeposited) + float(parsed_data['tokenAmount'])) > maximumsubscriptionamount):
+                            if 'contractAmount' in contractStructure:
+                                logger.info(f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                # Store transfer as part of RejectedContractTransactionHistory
+                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
+                                session.add(RejectedContractTransactionHistory(transactionType='participation',
+                                                                        contractName=parsed_data['contractName'],
+                                                                        contractAddress=outputlist[0],
+                                                                        sourceFloAddress=inputadd,
+                                                                        destFloAddress=outputlist[0],
+                                                                        transferAmount=None,
+                                                                        blockNumber=transaction_data['blockheight'],
+                                                                        blockHash=transaction_data['blockhash'],
+                                                                        time=transaction_data['blocktime'],
+                                                                        transactionHash=transaction_data['txid'],
+                                                                        blockchainReference=blockchainReference,
+                                                                        jsonData=json.dumps(transaction_data),
+                                                                        rejectComment=f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}",
 
-                                                                    parsedFloData=json.dumps(parsed_data)
-                                                                    ))
-                            session.commit()
-                            session.close()
-                            pushData_SSEapi(
-                                f"Error | Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-                            return 0
-                        else:
-                            partialTransferCounter = 1
+                                                                        parsedFloData=json.dumps(parsed_data)
+                                                                        ))
+                                session.commit()
+                                session.close()
+                                pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                return 0
+                            else:
+                                partialTransferCounter = 1
 
                     # Check if exitcondition exists as part of contractstructure and is given in right format
                     if 'exitconditions' in contractStructure:
@@ -1376,9 +1345,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         if parsed_data['userChoice'] in exitconditionsList:
                             if partialTransferCounter == 0:
                                 # Check if the tokenAmount being transferred exists in the address & do the token transfer
-                                returnval = transferToken(parsed_data['tokenIdentification'],
-                                                            parsed_data['tokenAmount'], inputlist[0], outputlist[0],
-                                                            transaction_data, parsed_data, blockinfo = blockinfo)
+                                returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0], outputlist[0], transaction_data, parsed_data, blockinfo = blockinfo)
                                 if returnval is not None:
                                     # Store participant details in the smart contract's db
                                     session.add(ContractParticipants(participantAddress=inputadd,
@@ -1496,91 +1463,58 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             return 0
 
                     elif 'payeeAddress' in contractStructure:
-                        # this means the contract if of the type internal trigger
+                        # this means the contract is of the type internal trigger
                         if partialTransferCounter == 0:
-                            # Check if the tokenAmount being transferred exists in the address & do the token transfer
-                            returnval = transferToken(parsed_data['tokenIdentification'],
-                                                        parsed_data['tokenAmount'], inputlist[0], outputlist[0],
-                                                        transaction_data, parsed_data, blockinfo = blockinfo)
-                            if returnval is not None:
-                                # Store participant details in the smart contract's db
-                                session.add(ContractParticipants(participantAddress=inputadd,
-                                                                    tokenAmount=parsed_data['tokenAmount'],
-                                                                    userChoice='-',
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash']))
-                                session.commit()
-
-                                # Store transfer as part of ContractTransactionHistory
-                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                session.add(ContractTransactionHistory(transactionType='participation',
-                                                                        sourceFloAddress=inputadd,
-                                                                        destFloAddress=outputlist[0],
-                                                                        transferAmount=parsed_data['tokenAmount'],
-                                                                        blockNumber=transaction_data['blockheight'],
-                                                                        blockHash=transaction_data['blockhash'],
-                                                                        time=transaction_data['blocktime'],
-                                                                        transactionHash=transaction_data['txid'],
-                                                                        blockchainReference=blockchainReference,
-                                                                        jsonData=json.dumps(transaction_data),
-
-                                                                        parsedFloData=json.dumps(parsed_data)
-                                                                        ))
-
-                                session.commit()
-                                session.close()
-
-                                # Store a mapping of participant address -> Contract participated in
-                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                                session.add(ContractAddressMapping(address=inputadd, addressType='participant',
-                                                                    tokenAmount=parsed_data['tokenAmount'],
-                                                                    contractName=parsed_data['contractName'],
-                                                                    contractAddress=outputlist[0],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash']))
-                                session.commit()
-
-                                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-internaltrigger-participation')
-                                return 1
-
-                            else:
-                                logger.info("Something went wrong in the smartcontract token transfer method")
-                                return 0
+                            transferAmount = parsed_data['tokenAmount']
                         elif partialTransferCounter == 1:
-                            # Transfer only part of the tokens users specified, till the time it reaches maximumamount
-                            returnval = transferToken(parsed_data['tokenIdentification'],
-                                                        maximumsubscriptionamount - amountDeposited,
-                                                        inputlist[0], outputlist[0], transaction_data, parsed_data, blockinfo = blockinfo)
-                            if returnval is not None:
-                                # Store participant details in the smart contract's db
-                                session.add(ContractParticipants(participantAddress=inputadd,
-                                                                    tokenAmount=maximumsubscriptionamount - amountDeposited,
-                                                                    userChoice='-',
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash']))
-                                session.commit()
-                                session.close()
+                            transferAmount = maximumsubscriptionamount - amountDeposited
+                        
+                        # Check if the tokenAmount being transferred exists in the address & do the token transfer
+                        returnval = transferToken(parsed_data['tokenIdentification'], transferAmount, inputlist[0], outputlist[0], transaction_data, parsed_data, blockinfo = blockinfo)
+                        if returnval is not None:
+                            # Store participant details in the smart contract's db
+                            session.add(ContractParticipants(participantAddress=inputadd,
+                                                                tokenAmount=transferAmount,
+                                                                userChoice='-',
+                                                                transactionHash=transaction_data['txid'],
+                                                                blockNumber=transaction_data['blockheight'],
+                                                                blockHash=transaction_data['blockhash']))
 
-                                # Store a mapping of participant address -> Contract participated in
-                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                                session.add(ContractAddressMapping(address=inputadd, addressType='participant',
-                                                                    tokenAmount=maximumsubscriptionamount - amountDeposited,
-                                                                    contractName=parsed_data['contractName'],
-                                                                    contractAddress=outputlist[0],
-                                                                    transactionHash=transaction_data['txid'],
+                            # Store transfer as part of ContractTransactionHistory
+                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
+                            session.add(ContractTransactionHistory(transactionType='participation',
+                                                                    sourceFloAddress=inputadd,
+                                                                    destFloAddress=outputlist[0],
+                                                                    transferAmount=transferAmount,
                                                                     blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash']))
-                                session.commit()
-                                session.close()
-                                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-internaltrigger-participation')
-                                return 1
+                                                                    blockHash=transaction_data['blockhash'],
+                                                                    time=transaction_data['blocktime'],
+                                                                    transactionHash=transaction_data['txid'],
+                                                                    blockchainReference=blockchainReference,
+                                                                    jsonData=json.dumps(transaction_data),
+                                                                    parsedFloData=json.dumps(parsed_data)
+                                                                    ))
 
-                            else:
-                                logger.info("Something went wrong in the smartcontract token transfer method")
-                                return 0
+                            session.commit()
+                            session.close()
+
+                            # Store a mapping of participant address -> Contract participated in
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+                            session.add(ContractAddressMapping(address=inputadd, addressType='participant',
+                                                                tokenAmount=transferAmount,
+                                                                contractName=parsed_data['contractName'],
+                                                                contractAddress=outputlist[0],
+                                                                transactionHash=transaction_data['txid'],
+                                                                blockNumber=transaction_data['blockheight'],
+                                                                blockHash=transaction_data['blockhash']))
+                            session.commit()
+
+                            updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-internaltrigger-participation')
+                            return 1
+
+                        else:
+                            logger.info("Something went wrong in the smartcontract token transfer method")
+                            return 0            
 
                 elif contract_type == 'continuos-event':
                     contract_subtype = contract_session.query(ContractStructure.value).filter(ContractStructure.attribute == 'subtype').first()[0]
@@ -1763,7 +1697,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         else:
                             # Reject the participation saying not enough deposit tokens are available 
                             logger.info(f"Swap participation at transaction {transaction_data['txid']} rejected as requested swap amount is {swapAmount} but {available_deposit_sum} is available")
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
+                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
                             blockchainReference = neturl + 'tx/' + transaction_data['txid']
                             session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                                 sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -1848,7 +1782,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     elif parsed_data['type'] == 'tokenIncorporation':
         if not is_a_contract_address(inputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
-                session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
+                session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
                 session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], addressBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
                 session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
@@ -1899,7 +1833,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 return 0
         else:
             logger.info(f"Token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                 sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -1933,8 +1867,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     # Store transfer as part of RejectedContractTransactionHistory
                     session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='incorporation',
+                    session.add(RejectedContractTransactionHistory(transactionType='incorporation',
                                                            contractName=parsed_data['contractName'],
                                                            contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
@@ -1990,18 +1923,12 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
                     session.add(ContractStructure(attribute='expiryTime', index=0, value=parsed_data['contractConditions']['expiryTime']))
                     if 'contractAmount' in parsed_data['contractConditions'].keys():
-                        session.add(
-                            ContractStructure(attribute='contractAmount', index=0,
-                                              value=parsed_data['contractConditions']['contractAmount']))
+                        session.add(ContractStructure(attribute='contractAmount', index=0, value=parsed_data['contractConditions']['contractAmount']))
 
                     if 'minimumsubscriptionamount' in parsed_data['contractConditions']:
-                        session.add(
-                            ContractStructure(attribute='minimumsubscriptionamount', index=0,
-                                              value=parsed_data['contractConditions']['minimumsubscriptionamount']))
+                        session.add(ContractStructure(attribute='minimumsubscriptionamount', index=0, value=parsed_data['contractConditions']['minimumsubscriptionamount']))
                     if 'maximumsubscriptionamount' in parsed_data['contractConditions']:
-                        session.add(
-                            ContractStructure(attribute='maximumsubscriptionamount', index=0,
-                                              value=parsed_data['contractConditions']['maximumsubscriptionamount']))
+                        session.add(ContractStructure(attribute='maximumsubscriptionamount', index=0, value=parsed_data['contractConditions']['maximumsubscriptionamount']))
                     if 'userchoices' in parsed_data['contractConditions']:
                         for key, value in literal_eval(parsed_data['contractConditions']['userchoices']).items():
                             session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
@@ -2027,7 +1954,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     session.close()
 
                     # add Smart Contract name in token contract association
-                    session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
+                    session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
                     session.add(TokenContractAssociation(tokenIdentification=parsed_data['tokenIdentification'],
                                                          contractName=parsed_data['contractName'],
                                                          contractAddress=parsed_data['contractAddress'],
@@ -2087,13 +2014,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
                     return 1
                 else:
-                    logger.info(
-                        f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different")
+                    logger.info(f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different")
                     # Store transfer as part of RejectedContractTransactionHistory
                     session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='incorporation',
+                    session.add(RejectedContractTransactionHistory(transactionType='incorporation',
                                                            contractName=parsed_data['contractName'],
                                                            contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
@@ -2111,9 +2036,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                            ))
                     session.commit()
                     session.close()
-                    pushData_SSEapi(
-                        'Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {}'.format(
-                            transaction_data['txid']))
+                    pushData_SSEapi('Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {}'.format(transaction_data['txid']))
                     return 0
         
             if parsed_data['contractType'] == 'continuous-event' or parsed_data['contractType'] == 'continuos-event':
@@ -2168,7 +2091,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     token_name = token_name.split('#')[0]
                                     if token_name == 'bitcoin':
                                         continue
-                                    session = create_database_session_orm('token', {'token_name': f"{token_name}"}, Base)
+                                    session = create_database_session_orm('token', {'token_name': f"{token_name}"}, TokenBase)
                                     session.add(TokenContractAssociation(tokenIdentification=token_name,
                                                                             contractName=parsed_data['contractName'],
                                                                             contractAddress=parsed_data['contractAddress'],
@@ -2578,8 +2501,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
                 contractWinners = connection.execute('select * from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
                 tokenSum = connection.execute('select sum(tokenAmount) from contractparticipants').fetchall()[0][0]
-                winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(
-                        parsed_data['triggerCondition'])).fetchall()[0][0]
+                winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()[0][0]
                 tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
 
                 for winner in contractWinners:
@@ -2588,7 +2510,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     if returnval is None:
                         logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                         return 0
-                    connection.execute(f"update contractparticipants set winningAmount='{winnerAmount}' where participantAddress='{winner[1]}' and transactionHash='{winner[4]}'")
+
+                    connection.execute(f"INSERT INTO contractwinners (participantAddress, winningAmount, userChoice, transactionHash, blockNumber, blockHash) VALUES('{winner[1]}', {winnerAmount}, '{parsed_data['triggerCondition']}', '{transaction_data['txid']}','{blockinfo['height']}','{blockinfo['hash']}');")
 
                 # add transaction to ContractTransactionHistory
                 blockchainReference = neturl + 'tx/' + transaction_data['txid']
@@ -2827,7 +2750,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         '''
         if not is_a_contract_address(inputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
-                session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
+                session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
                 session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
                 session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
@@ -2879,7 +2802,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 return 0
         else:
             logger.info(f"NFT incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                 sourceFloAddress=inputadd, destFloAddress=outputlist[0],
@@ -2903,7 +2826,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         if not is_a_contract_address(inputlist[0]) and not is_a_contract_address(outputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 parsed_data['tokenAmount'] = 0
-                tokendb_session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, Base)
+                tokendb_session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
                 tokendb_session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
                 tokendb_session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
@@ -2953,7 +2876,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 return 0
         else:
             logger.info(f"Infinite token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, Base)
+            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
                                                 sourceFloAddress=inputadd, destFloAddress=outputlist[0],

@@ -1,14 +1,15 @@
 from sqlalchemy import Column, Integer, Float, String
 from sqlalchemy.ext.declarative import declarative_base
 
-Base = declarative_base()
+TokenBase = declarative_base()
 ContractBase = declarative_base()
+ContinuosContractBase = declarative_base()
 SystemBase = declarative_base()
 LatestCacheBase = declarative_base()
-ContinuosContractBase = declarative_base()
 
 
-class ActiveTable(Base):
+
+class ActiveTable(TokenBase):
     __tablename__ = "activeTable"
 
     id = Column('id', Integer, primary_key=True)
@@ -21,7 +22,7 @@ class ActiveTable(Base):
     blockNumber = Column('blockNumber', Integer)
 
 
-class ConsumedTable(Base):
+class ConsumedTable(TokenBase):
     __tablename__ = "consumedTable"
 
     primaryKey = Column('primaryKey', Integer, primary_key=True)
@@ -35,7 +36,7 @@ class ConsumedTable(Base):
     blockNumber = Column('blockNumber', Integer)
 
 
-class TransferLogs(Base):
+class TransferLogs(TokenBase):
     __tablename__ = "transferlogs"
 
     primary_key = Column('id', Integer, primary_key=True)
@@ -49,7 +50,7 @@ class TransferLogs(Base):
     transactionHash = Column('transactionHash', String)
 
 
-class TransactionHistory(Base):
+class TransactionHistory(TokenBase):
     __tablename__ = "transactionHistory"
 
     primary_key = Column('id', Integer, primary_key=True)
@@ -66,7 +67,7 @@ class TransactionHistory(Base):
     parsedFloData = Column('parsedFloData', String)
 
 
-class TokenContractAssociation(Base):
+class TokenContractAssociation(TokenBase):
     __tablename__ = "tokenContractAssociation"
 
     primary_key = Column('id', Integer, primary_key=True)
@@ -147,14 +148,57 @@ class ConsumedInfo(ContractBase):
     blockNumber = Column('blockNumber', Integer)
 
 
-class RejectedContractTransactionHistory(SystemBase):
-    __tablename__ = "rejectedContractTransactionHistory"
+class ContractWinners(ContractBase):
+    __tablename__ = "contractwinners"
+
+    id = Column('id', Integer, primary_key=True)
+    participantAddress = Column('participantAddress', String)
+    winningAmount = Column('winningAmount', Float)
+    userChoice = Column('userChoice', String)
+    transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+
+
+class ContractStructure2(ContinuosContractBase):
+    __tablename__ = "contractstructure"
+
+    id = Column('id', Integer, primary_key=True)
+    attribute = Column('attribute', String)
+    index = Column('index', Integer)
+    value = Column('value', String)
+
+
+class ContractParticipants2(ContinuosContractBase):
+    __tablename__ = "contractparticipants"
+
+    id = Column('id', Integer, primary_key=True)
+    participantAddress = Column('participantAddress', String)
+    tokenAmount = Column('tokenAmount', Float)
+    transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+
+
+class ContractDeposits2(ContinuosContractBase):
+    __tablename__ = "contractdeposits"
+
+    id = Column('id', Integer, primary_key=True)
+    depositorAddress = Column('depositorAddress', String)
+    depositAmount = Column('depositAmount', Float)
+    expiryTime = Column('expiryTime', String)
+    status = Column('status', String)
+    transactionHash = Column('transactionHash', String)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+
+
+class ContractTransactionHistory2(ContinuosContractBase):
+    __tablename__ = "contractTransactionHistory"
 
     primary_key = Column('id', Integer, primary_key=True)
     transactionType = Column('transactionType', String)
     transactionSubType = Column('transactionSubType', String)
-    contractName = Column('contractName', String)
-    contractAddress = Column('contractAddress', String)
     sourceFloAddress = Column('sourceFloAddress', String)
     destFloAddress = Column('destFloAddress', String)
     transferAmount = Column('transferAmount', Float)
@@ -164,26 +208,6 @@ class RejectedContractTransactionHistory(SystemBase):
     transactionHash = Column('transactionHash', String)
     blockchainReference = Column('blockchainReference', String)
     jsonData = Column('jsonData', String)
-    rejectComment = Column('rejectComment', String)
-    parsedFloData = Column('parsedFloData', String)
-
-
-class RejectedTransactionHistory(SystemBase):
-    __tablename__ = "rejectedTransactionHistory"
-
-    primary_key = Column('id', Integer, primary_key=True)
-    tokenIdentification = Column('tokenIdentification', String)
-    sourceFloAddress = Column('sourceFloAddress', String)
-    destFloAddress = Column('destFloAddress', String)
-    transferAmount = Column('transferAmount', Float)
-    blockNumber = Column('blockNumber', Integer)
-    blockHash = Column('blockHash', String)
-    time = Column('time', Integer)
-    transactionHash = Column('transactionHash', String)
-    blockchainReference = Column('blockchainReference', String)
-    jsonData = Column('jsonData', String)
-    rejectComment = Column('rejectComment', String)
-    transactionType = Column('transactionType', String)
     parsedFloData = Column('parsedFloData', String)
 
 
@@ -263,6 +287,47 @@ class TimeActions(SystemBase):
     transactionHash = Column('transactionHash', String)
     blockNumber = Column('blockNumber', Integer)
 
+
+class RejectedContractTransactionHistory(SystemBase):
+    __tablename__ = "rejectedContractTransactionHistory"
+
+    primary_key = Column('id', Integer, primary_key=True)
+    transactionType = Column('transactionType', String)
+    transactionSubType = Column('transactionSubType', String)
+    contractName = Column('contractName', String)
+    contractAddress = Column('contractAddress', String)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+    time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
+    blockchainReference = Column('blockchainReference', String)
+    jsonData = Column('jsonData', String)
+    rejectComment = Column('rejectComment', String)
+    parsedFloData = Column('parsedFloData', String)
+
+
+class RejectedTransactionHistory(SystemBase):
+    __tablename__ = "rejectedTransactionHistory"
+
+    primary_key = Column('id', Integer, primary_key=True)
+    tokenIdentification = Column('tokenIdentification', String)
+    sourceFloAddress = Column('sourceFloAddress', String)
+    destFloAddress = Column('destFloAddress', String)
+    transferAmount = Column('transferAmount', Float)
+    blockNumber = Column('blockNumber', Integer)
+    blockHash = Column('blockHash', String)
+    time = Column('time', Integer)
+    transactionHash = Column('transactionHash', String)
+    blockchainReference = Column('blockchainReference', String)
+    jsonData = Column('jsonData', String)
+    rejectComment = Column('rejectComment', String)
+    transactionType = Column('transactionType', String)
+    parsedFloData = Column('parsedFloData', String)
+
+
 class LatestTransactions(LatestCacheBase):
     __tablename__ = "latestTransactions"
     
@@ -282,54 +347,3 @@ class LatestBlocks(LatestCacheBase):
     blockNumber = Column('blockNumber', Integer)
     blockHash = Column('blockHash', String)
     jsonData = Column('jsonData', String)
-
-
-class ContractStructure1(ContinuosContractBase):
-    __tablename__ = "contractstructure"
-
-    id = Column('id', Integer, primary_key=True)
-    attribute = Column('attribute', String)
-    index = Column('index', Integer)
-    value = Column('value', String)
-
-
-class ContractParticipants1(ContinuosContractBase):
-    __tablename__ = "contractparticipants"
-
-    id = Column('id', Integer, primary_key=True)
-    participantAddress = Column('participantAddress', String)
-    tokenAmount = Column('tokenAmount', Float)
-    transactionHash = Column('transactionHash', String)
-    blockNumber = Column('blockNumber', Integer)
-    blockHash = Column('blockHash', String)
-
-
-class ContractDeposits1(ContinuosContractBase):
-    __tablename__ = "contractdeposits"
-
-    id = Column('id', Integer, primary_key=True)
-    depositorAddress = Column('depositorAddress', String)
-    depositAmount = Column('depositAmount', Float)
-    expiryTime = Column('expiryTime', String)
-    status = Column('status', String)
-    transactionHash = Column('transactionHash', String)
-    blockNumber = Column('blockNumber', Integer)
-    blockHash = Column('blockHash', String)
-
-
-class ContractTransactionHistory1(ContinuosContractBase):
-    __tablename__ = "contractTransactionHistory"
-
-    primary_key = Column('id', Integer, primary_key=True)
-    transactionType = Column('transactionType', String)
-    transactionSubType = Column('transactionSubType', String)
-    sourceFloAddress = Column('sourceFloAddress', String)
-    destFloAddress = Column('destFloAddress', String)
-    transferAmount = Column('transferAmount', Float)
-    blockNumber = Column('blockNumber', Integer)
-    blockHash = Column('blockHash', String)
-    time = Column('time', Integer)
-    transactionHash = Column('transactionHash', String)
-    blockchainReference = Column('blockchainReference', String)
-    jsonData = Column('jsonData', String)
-    parsedFloData = Column('parsedFloData', String)

@@ -132,7 +132,7 @@ months = {
 def apply_rule1(*argv):
     a = argv[0](*argv[1:])
     if a is False:
-        return None
+        return False
     else:
         return a
 
@@ -366,7 +366,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
     for idx, item in enumerate(numberList):
         if numberList[idx] + 1 != numberList[idx + 1]:
             logger.info('Contract condition numbers are not in order')
-            return None
+            return False
         if idx == len(numberList) - 2:
             break
 
@@ -398,48 +398,46 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
             if rule == '':
                 continue
             elif rule[:14] == 'contractamount':
-                pattern = re.compile('[^contractamount\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
+                pattern = re.compile('(^contractamount\s*=\s*)(.*)')
+                searchResult = pattern.search(rule).group(2)
                 contractamount = searchResult.split(marker)[0]
                 try:
                     extractedRules['contractAmount'] = float(contractamount)
                 except:
                     logger.info("Contract amount entered is not a decimal")
             elif rule[:11] == 'userchoices':
-                pattern = re.compile('[^userchoices\s*=\s*].*')
-                conditions = pattern.search(rule).group(0)
+                pattern = re.compile('(^userchoices\s*=\s*)(.*)')
+                conditions = pattern.search(rule).group(2)
                 conditionlist = conditions.split('|')
                 extractedRules['userchoices'] = {}
                 for idx, condition in enumerate(conditionlist):
                     extractedRules['userchoices'][idx] = condition.strip()
             elif rule[:25] == 'minimumsubscriptionamount':
-                pattern = re.compile('[^minimumsubscriptionamount\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
+                pattern = re.compile('(^minimumsubscriptionamount\s*=\s*)(.*)')
+                searchResult = pattern.search(rule).group(2)
                 minimumsubscriptionamount = searchResult.split(marker)[0]
                 try:
-                    extractedRules['minimumsubscriptionamount'] = float(
-                        minimumsubscriptionamount)
+                    extractedRules['minimumsubscriptionamount'] = float(minimumsubscriptionamount)
                 except:
                     logger.info("Minimum subscription amount entered is not a decimal")
             elif rule[:25] == 'maximumsubscriptionamount':
-                pattern = re.compile('[^maximumsubscriptionamount\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
+                pattern = re.compile('(^maximumsubscriptionamount\s*=\s*)(.*)')
+                searchResult = pattern.search(rule).group(2)
                 maximumsubscriptionamount = searchResult.split(marker)[0]
                 try:
-                    extractedRules['maximumsubscriptionamount'] = float(
-                        maximumsubscriptionamount)
+                    extractedRules['maximumsubscriptionamount'] = float(maximumsubscriptionamount)
                 except:
                     logger.info("Maximum subscription amount entered is not a decimal")
             elif rule[:12] == 'payeeaddress':
-                pattern = re.compile('[^payeeAddress\s*=\s*].*')
-                searchResult = pattern.search(rule).group(0)
+                pattern = re.compile('(^payeeaddress\s*=\s*)(.*)')
+                searchResult = pattern.search(rule).group(2)
                 payeeAddress = searchResult.split(marker)[0]
                 extractedRules['payeeAddress'] = payeeAddress
 
         if len(extractedRules) > 1 and 'expiryTime' in extractedRules:
             return extractedRules
         else:
-            return None
+            return False
 
     elif contract_type == 'continuous-event':
         extractedRules = {}
@@ -459,13 +457,13 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 pattern = re.compile('(?<=selling_token\s=\s).*(?<!#)')
                 selling_token = pattern.search(rule).group(0)
                 extractedRules['selling_token'] = selling_token
-            elif rule[:9].lower() == 'pricetype':
-                pattern = re.compile('[^pricetype\s*=\s*].*')
+            elif rule[:9] == 'pricetype':
+                pattern = re.compile('(^pricetype\s*=\s*).*')
                 priceType = pattern.search(rule).group(0)
                 priceType = priceType.replace("'","").replace('"', '')
                 extractedRules['priceType'] = priceType
             elif rule[:5] == 'price':
-                pattern = re.compile('[^price\s*=\s*].*')
+                pattern = re.compile('(^price\s*=\s*).*')
                 price = pattern.search(rule).group(0)
                 if price[0]=="'" or price[0]=='"':
                     price = price[1:]
@@ -498,7 +496,7 @@ def extract_tokenswap_contract_conditions(processed_text, contract_type, contrac
     for idx, item in enumerate(numberList):
         if numberList[idx] + 1 != numberList[idx + 1]:
             logger.info('Contract condition numbers are not in order')
-            return None
+            return False
         if idx == len(numberList) - 2:
             break
 
@@ -513,7 +511,7 @@ def extract_tokenswap_contract_conditions(processed_text, contract_type, contrac
                 continue
             elif rule[:7] == 'subtype':
                 # todo : recheck the regular expression for subtype, find an elegant version which covers all permutations and combinations
-                '''pattern = re.compile('[^subtype\s*=].*')
+                '''pattern = re.compile('(^subtype\s*=\s*).*')
                 searchResult = pattern.search(rule).group(0)
                 subtype = searchResult.split(marker)[0]'''
                 extractedRules['subtype'] = rule.split('=')[1].strip()
@@ -546,9 +544,9 @@ def extract_tokenswap_contract_conditions(processed_text, contract_type, contrac
         if len(extractedRules) > 1:
             return extractedRules
         else:
-            return None
+            return False
     
-    return None
+    return False
 
 
 def extract_deposit_conditions(text, blocktime=None):
@@ -563,7 +561,7 @@ def extract_deposit_conditions(text, blocktime=None):
     for idx, item in enumerate(numberList):
         if len(numberList) > 1 and numberList[idx] + 1 != numberList[idx + 1]:
             logger.info('Deposit condition numbers are not in order')
-            return None
+            return False
         if idx == len(numberList) - 2:
             break
 
@@ -710,7 +708,7 @@ def extractAmount_rule(text):
     if counter == 1:
         return value
     else:
-        return None
+        return False
 
 def extractAmount_rule_new(text):
     base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'lakh':10 ** 5, 'crore':10 ** 7, 'quadrillion':10 ** 15}
@@ -952,6 +950,16 @@ text_list2 = [
     ''', 
     '''
     Create a smart contract of the name simple-crowd-fund@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Tue Sep 13 2022 16:10:00 GMT+0530  (2) payeeAddress=oU412TvcMe2ah2xzqFpA95vBJ1RoPZY1LR end-contract-conditions
+    ''',
+    '''
+    Create a smart contract of the name all-crowd-fund-7@ of the type one-time-event* using asset bioscope# at the FLO address oYX4GvBYtfTBNyUFRCdtYubu7ZS4gchvrb$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 12:30:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (5) contractAmount=0.6 end-contract-conditions
+    ''',
+    '''
+    Create a smart contract of the name all-crowd-fund-7@ of the type one-time-event* using asset bioscope# at the FLO address oYX4GvBYtfTBNyUFRCdtYubu7ZS4gchvrb$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 12:30:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) contractAmount=0.6 end-contract-conditions
+    ''',
+    '''send 0.02 bioscope# to twitter-survive@ to FLO address oVbebBNuERWbouDg65zLfdataWEMTnsL8r with the userchoice: survives''',
+    '''
+    Create a smart contract of the name twitter-survive@ of the type one-time-event* using asset bioscope# at the FLO address oVbebBNuERWbouDg65zLfdataWEMTnsL8r$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 14:55:00 GMT+0530  (2) userchoices= survives | dies (3) minimumsubscriptionamount=0.04 (4) maximumsubscriptionamount=1 (5) contractAmount=0.02 end-contract-conditions
     '''
 ]
 
@@ -1239,4 +1247,6 @@ def parse_flodata(text, blockinfo, net):
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping)
     
     return outputreturn('noise')
+
+print(parse_flodata(text_list2[7], blockinfo_stub, 'testnet'))
 
