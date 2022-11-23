@@ -417,7 +417,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 searchResult = pattern.search(rule).group(2)
                 minimumsubscriptionamount = searchResult.split(marker)[0]
                 try:
-                    extractedRules['minimumsubscriptionamount'] = float(minimumsubscriptionamount)
+                    extractedRules['minimumsubscrbyiptionamount'] = float(minimumsubscriptionamount)
                 except:
                     logger.info("Minimum subscription amount entered is not a decimal")
             elif rule[:25] == 'maximumsubscriptionamount':
@@ -446,36 +446,35 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 continue
             elif rule[:7] == 'subtype':
                 # todo : recheck the regular expression for subtype, find an elegant version which covers all permutations and combinations
-                pattern = re.compile('(?<=subtype\s=\s).*')
-                subtype = pattern.search(rule).group(0)
+                pattern = re.compile('(^subtype\s*=\s*)(.*)')
+                subtype = pattern.search(rule).group(2)
                 extractedRules['subtype'] = subtype
             elif rule[:15] == 'accepting_token':
-                pattern = re.compile('(?<=accepting_token\s=\s).*(?<!#)')
-                accepting_token = pattern.search(rule).group(0)
+                pattern = re.compile('(?<=accepting_token\s=\s)(.*)(?<!#)')
+                accepting_token = pattern.search(rule).group(1)
                 extractedRules['accepting_token'] = accepting_token
             elif rule[:13] == 'selling_token':
-                pattern = re.compile('(?<=selling_token\s=\s).*(?<!#)')
-                selling_token = pattern.search(rule).group(0)
+                pattern = re.compile('(?<=selling_token\s=\s)(.*)(?<!#)')
+                selling_token = pattern.search(rule).group(1)
                 extractedRules['selling_token'] = selling_token
             elif rule[:9] == 'pricetype':
-                pattern = re.compile('(^pricetype\s*=\s*).*')
-                priceType = pattern.search(rule).group(0)
+                pattern = re.compile('(^pricetype\s*=\s*)(.*)')
+                priceType = pattern.search(rule).group(2)
                 priceType = priceType.replace("'","").replace('"', '')
                 extractedRules['priceType'] = priceType
             elif rule[:5] == 'price':
-                pattern = re.compile('(^price\s*=\s*).*')
-                price = pattern.search(rule).group(0)
+                pattern = re.compile('(^price\s*=\s*)(.*)')
+                price = pattern.search(rule).group(2)
                 if price[0]=="'" or price[0]=='"':
                     price = price[1:]
                 if price[-1]=="'" or price[-1]=='"':
                     price = price[:-1]
                 extractedRules['price'] = float(price)
             elif rule[:9].lower() == 'direction':
-                pattern = re.compile('(?<=direction\s=\s).*')
-                direction = pattern.search(rule).group(0)
+                pattern = re.compile('(?<=direction\s=\s)(.*)')
+                direction = pattern.search(rule).group(1)
                 extractedRules['direction'] = direction
-            # else:
-            #    pdb.set_trace()
+        
         if len(extractedRules) > 1:
             return extractedRules
         else:
@@ -485,7 +484,6 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
 
 def extract_tokenswap_contract_conditions(processed_text, contract_type, contract_token):
     rulestext = re.split('contract-conditions:\s*', processed_text)[-1]
-    # rulelist = re.split('\d\.\s*', rulestext)
     rulelist = []
     numberList = re.findall(r'\(\d\d*\)', rulestext)
 
@@ -511,10 +509,11 @@ def extract_tokenswap_contract_conditions(processed_text, contract_type, contrac
                 continue
             elif rule[:7] == 'subtype':
                 # todo : recheck the regular expression for subtype, find an elegant version which covers all permutations and combinations
-                '''pattern = re.compile('(^subtype\s*=\s*).*')
-                searchResult = pattern.search(rule).group(0)
-                subtype = searchResult.split(marker)[0]'''
-                extractedRules['subtype'] = rule.split('=')[1].strip()
+                pattern = re.compile('(^subtype\s*=\s*)(.*)')
+                searchResult = pattern.search(rule).group(2)
+                subtype = searchResult.split(marker)[0]
+                #extractedRules['subtype'] = rule.split('=')[1].strip()
+                extractedRules['subtype'] = subtype
             elif rule[:15] == 'accepting_token':
                 pattern = re.compile('(?<=accepting_token\s=\s).*(?<!#)')
                 accepting_token = pattern.search(rule).group(0)
@@ -539,8 +538,7 @@ def extract_tokenswap_contract_conditions(processed_text, contract_type, contrac
                 pattern = re.compile('(?<=direction\s=\s).*')
                 direction = pattern.search(rule).group(0)
                 extractedRules['direction'] = direction
-            # else:
-            #    pdb.set_trace()
+
         if len(extractedRules) > 1:
             return extractedRules
         else:

@@ -145,7 +145,7 @@ def rollback_address_balance_processing(db_session, senderAddress, receiverAddre
     # for receiver, if the currentaddressbalance is 0 then do nothing .. and if the currentaddressbalance is not 0 then update the last occurence of receiver address 
     sender_query = db_session.query(ActiveTable).filter(ActiveTable.address==senderAddress).order_by(ActiveTable.id.desc()).first() 
     sender_query.addressBalance = new_senderBalance 
-
+    
     if new_receiverBalance != 0 and new_receiverBalance > 0:
         receiver_query = db_session.query(ActiveTable).filter(ActiveTable.address==receiverAddress).order_by(ActiveTable.id.desc()).limit(2).all()
         if len(receiver_query) == 2:
@@ -216,7 +216,7 @@ def rollback_database(blockNumber, dbtype, dbname):
                 break
             outputAddress = activeTable_entry.address
             transferAmount = activeTable_entry.transferBalance
-            inputAddress = None
+            inputAddress = None            
 
             # Find out consumedpid and partially consumed pids 
             parentid = None 
