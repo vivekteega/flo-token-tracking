@@ -2503,20 +2503,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                 # check the status of the contract
                 connection = create_database_connection('system_dbs', {'db_name':'system'})
-                contractStatus = connection.execute(
-                    f"select status from activecontracts where contractName=='{parsed_data['contractName']}' and contractAddress='{outputlist[0]}'").fetchall()[
-                    0][0]
+                contractStatus = connection.execute(f"select status from activecontracts where contractName=='{parsed_data['contractName']}' and contractAddress='{outputlist[0]}'").fetchall()[0][0]
                 connection.close()
                 contractList = []
 
                 if contractStatus == 'closed':
-                    logger.info(
-                        f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
+                    logger.info(f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
                     # Store transfer as part of RejectedContractTransactionHistory
                     session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
                     blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='trigger',
+                    session.add(RejectedContractTransactionHistory(transactionType='trigger',
                                                            contractName=parsed_data['contractName'],
                                                            contractAddress=outputlist[0],
                                                            sourceFloAddress=inputadd,
@@ -2722,13 +2718,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 session.close()
 
                 connection = create_database_connection('system_dbs', {'db_name':'system'})
-                connection.execute(
-                    'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                        parsed_data['contractName'], outputlist[0]))
-                connection.execute(
-                    'update activecontracts set closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(
-                        transaction_data['blocktime'],
-                        parsed_data['contractName'], outputlist[0]))
+                connection.execute('update activecontracts set status="closed", closeDate="{}" where contractName="{}" and contractAddress="{}"'.format(transaction_data['blocktime'], parsed_data['contractName'], outputlist[0]))
+                connection.execute('update time_actions set status="closed" where contractName="{}" and contractAddress="{}"'.format(parsed_data['contractName'], outputlist[0]))
                 connection.close()
 
                 updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
