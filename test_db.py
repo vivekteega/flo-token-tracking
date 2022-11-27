@@ -79,7 +79,14 @@ def create_database_session_orm(type, parameters, base):
 
 
 # Connect to system.db with a session 
-systemdb_session = create_database_session_orm('system_dbs', {'db_name':'system'}, SystemBase)
-timeactions_tx_hashes = []
-activeContracts = systemdb_session.query(ActiveContracts).all()
+systemdb_session = create_database_session_orm('system_dbs', {'db_name':'system1'}, SystemBase)
+contract_ids = systemdb_session.query(func.max(TimeActions.id)).group_by(TimeActions.contractName, TimeActions.contractAddress).all()
+time = systemdb_session.query(TimeActions).filter(TimeActions.id.in_(contract_ids[0])).all()
+#SELECT contractName, status FROM time_actions WHERE id IN (RESULT) AND status='active';
+
 pdb.set_trace()
+#active_contracts = systemdb_session.query(TimeActions).group_by(TimeActions.contractName, TimeActions.contractAddress).all()
+#timeactions_tx_hashes = []
+#activeContracts = systemdb_session.query(ActiveContracts).all()
+
+#SELECT contractName, status FROM time_actions WHERE id IN (SELECT max(id) FROM time_actions GROUP BY contractName, contractAddress) AND status='active';

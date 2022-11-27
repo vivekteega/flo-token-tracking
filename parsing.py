@@ -953,11 +953,14 @@ text_list2 = [
     Create a smart contract of the name all-crowd-fund-7@ of the type one-time-event* using asset bioscope# at the FLO address oYX4GvBYtfTBNyUFRCdtYubu7ZS4gchvrb$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 12:30:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (5) contractAmount=0.6 end-contract-conditions
     ''',
     '''
-    Create a smart contract of the name all-crowd-fund-7@ of the type one-time-event* using asset bioscope# at the FLO address oYX4GvBYtfTBNyUFRCdtYubu7ZS4gchvrb$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 12:30:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) contractAmount=0.6 end-contract-conditions
+    Create a smart contract of the name all-crowd-fund-7@ of the type one-time-event* using asset bioscope# at the FLO address oYX4GvBYtfTBNyUFRCdtYubu7ZS4gchvrb$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 12:30:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:0:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:30:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) contractAmount=0.6 end-contract-conditions
     ''',
     '''send 0.02 bioscope# to twitter-survive@ to FLO address oVbebBNuERWbouDg65zLfdataWEMTnsL8r with the userchoice: survives''',
     '''
     Create a smart contract of the name twitter-survive@ of the type one-time-event* using asset bioscope# at the FLO address oVbebBNuERWbouDg65zLfdataWEMTnsL8r$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 14:55:00 GMT+0530  (2) userchoices= survives | dies (3) minimumsubscriptionamount=0.04 (4) maximumsubscriptionamount=1 (5) contractAmount=0.02 end-contract-conditions
+    ''',
+    '''
+    create 0 teega# 
     '''
 ]
 
@@ -1012,10 +1015,11 @@ def parse_flodata(text, blockinfo, net):
         # if its an NFT then tokenamount has to be integer and infinite keyword should not be present 
         # if its a normal token then isNFT and isInfinite should be None/False and token amount has to be present 
         # if its an infinite token then tokenamount should be None and isNFT should be None/False
+        # The supply of tokenAmount cannot be 0 
 
         ##################################################
         
-        if (not tokenamount and not isInfinite) or (isNFT and not tokenamount.is_integer() and not isInfinite) or (isInfinite and tokenamount is not False and isNFT is not False):
+        if (not tokenamount and not isInfinite) or (isNFT and not tokenamount.is_integer() and not isInfinite) or (isInfinite and tokenamount is not False and isNFT is not False) or tokenamount==0:
             return outputreturn('noise')
         operation = apply_rule1(selectCategory, processed_text, send_category, create_category)
         if operation == 'category1' and tokenamount is not None:
@@ -1125,7 +1129,6 @@ def parse_flodata(text, blockinfo, net):
                     else:
                         contract_conditions['payeeAddress'] = {f"{contract_conditions['payeeAddress']}":100}
                         return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", contract_conditions['payeeAddress'], f"{contract_conditions['expiryTime']}", stateF_mapping)
-
 
     if first_classification['categorization'] == 'smart-contract-participation-deposit-C':
         # either participation of one-time-event contract or 
@@ -1246,5 +1249,6 @@ def parse_flodata(text, blockinfo, net):
     
     return outputreturn('noise')
 
-print(parse_flodata(text_list2[7], blockinfo_stub, 'testnet'))
+# todo: remove the following test line during cleanup
+#print(parse_flodata(text_list2[5], blockinfo_stub, 'testnet'))
 

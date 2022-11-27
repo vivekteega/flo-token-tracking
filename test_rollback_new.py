@@ -207,6 +207,8 @@ def find_input_output_addresses(transaction_data):
 
 def rollback_database(blockNumber, dbtype, dbname):
     if dbtype == 'token':
+        if blockNumber in [2291753, '2291753']:
+            pdb.set_trace()
         # Connect to database
         db_session = create_database_session_orm('token', {'token_name':dbname}, TokenBase)
         while(True):
