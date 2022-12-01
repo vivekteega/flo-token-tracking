@@ -79,14 +79,13 @@ def create_database_session_orm(type, parameters, base):
 
 
 # Connect to system.db with a session 
-systemdb_session = create_database_session_orm('system_dbs', {'db_name':'system1'}, SystemBase)
-contract_ids = systemdb_session.query(func.max(TimeActions.id)).group_by(TimeActions.contractName, TimeActions.contractAddress).all()
-time = systemdb_session.query(TimeActions).filter(TimeActions.id.in_(contract_ids[0])).all()
-#SELECT contractName, status FROM time_actions WHERE id IN (RESULT) AND status='active';
+session = create_database_session_orm('system_dbs', {'db_name':'system1'}, SystemBase)
 
-pdb.set_trace()
-#active_contracts = systemdb_session.query(TimeActions).group_by(TimeActions.contractName, TimeActions.contractAddress).all()
-#timeactions_tx_hashes = []
-#activeContracts = systemdb_session.query(ActiveContracts).all()
 
-#SELECT contractName, status FROM time_actions WHERE id IN (SELECT max(id) FROM time_actions GROUP BY contractName, contractAddress) AND status='active';
+subquery_filter = session.query(TimeActions.id).group_by(TimeActions.transactionHash).having(func.count(TimeActions.transactionHash)==1).subquery()
+contract_deposits = session.query(TimeActions).filter(TimeActions.id.in_(subquery_filter), TimeActions.status=='active', TimeActions.activity=='contract-deposit').all()
+
+for contract in contract_deposits:
+    print(contract.transactionHash)
+
+#SELECT * from (SELECT * FROM time_actions GROUP BY transactionHash HAVING COUNT(transactionHash)==1)time_action WHERE status='active' AND activity='contract-deposit';
