@@ -16,7 +16,7 @@ import parsing
 from config import * 
 from datetime import datetime 
 from ast import literal_eval 
-from models import SystemData, TokenBase, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, TokenContractAssociation, RejectedTransactionHistory, ContractBase, ContractStructure, ContractParticipants, ContractTransactionHistory, ContractDeposits, ConsumedInfo, ContractWinners, ContinuosContractBase, ContractStructure2, ContractParticipants2, ContractDeposits2, ContractTransactionHistory2, SystemBase, ActiveContracts, SystemData, ContractAddressMapping, TokenAddressMapping, DatabaseTypeMapping, TimeActions, RejectedContractTransactionHistory, RejectedTransactionHistory, LatestCacheBase, LatestTransactions, LatestBlocks
+from models import SystemData, TokenBase, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, TokenContractAssociation, ContractBase, ContractStructure, ContractParticipants, ContractTransactionHistory, ContractDeposits, ConsumedInfo, ContractWinners, ContinuosContractBase, ContractStructure2, ContractParticipants2, ContractDeposits2, ContractTransactionHistory2, SystemBase, ActiveContracts, SystemData, ContractAddressMapping, TokenAddressMapping, DatabaseTypeMapping, TimeActions, RejectedContractTransactionHistory, RejectedTransactionHistory, LatestCacheBase, LatestTransactions, LatestBlocks
 from statef_processing import process_stateF 
 import pdb 
 
@@ -132,8 +132,8 @@ def processBlock(blockindex=None, blockhash=None):
 
     pause_index = 2291750
     if blockindex == pause_index:
-        print(f'Paused at {pause_index}')
-        pdb.set_trace()
+        print(f'Paused at {blockindex}')
+        #sys.exit(0)
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
@@ -153,7 +153,7 @@ def processBlock(blockindex=None, blockhash=None):
         current_index = -1
         
         if transaction in ['8eed51ae47575fd78413f9be5a7909cf2653b6fedacf093e35b592319e478b21']:
-            pass
+            pdb.set_trace()
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -700,6 +700,27 @@ def rejected_transaction_history(transaction_data, parsed_data, sourceFloAddress
     session.close()
 
 
+def rejected_contract_transaction_history(transaction_data, parsed_data, transactionType, sourceFloAddress, destFloAddress, rejectComment):
+    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+    blockchainReference = neturl + 'tx/' + transaction_data['txid']
+    session.add(RejectedContractTransactionHistory(transactionType=transactionType,
+                                            contractName=parsed_data['contractName'],
+                                            contractAddress=outputlist[0],
+                                            sourceFloAddress=sourceFloAddress,
+                                            destFloAddress=destFloAddress,
+                                            transferAmount=None,
+                                            blockNumber=transaction_data['blockheight'],
+                                            blockHash=transaction_data['blockhash'],
+                                            time=transaction_data['blocktime'],
+                                            transactionHash=transaction_data['txid'],
+                                            blockchainReference=blockchainReference,
+                                            jsonData=json.dumps(transaction_data),
+                                            rejectComment=rejectComment,
+                                            parsedFloData=json.dumps(parsed_data)))
+    session.commit()
+    session.close()    
+
+
 def processTransaction(transaction_data, parsed_data, blockinfo):
     # Do the necessary checks for the inputs and outputs
     # todo Rule 38 - Here we are doing FLO processing. We attach asset amounts to a FLO address, so every FLO address
@@ -826,49 +847,17 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     # r = requests.post(tokenapi_sse_url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
                     return 1
                 else:
-                    logger.info(f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                        sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                        transferAmount=parsed_data['tokenAmount'],
-                                                        blockNumber=transaction_data['blockheight'],
-                                                        blockHash=transaction_data['blockhash'],
-                                                        time=transaction_data['blocktime'],
-                                                        transactionHash=transaction_data['txid'],
-                                                        blockchainReference=blockchainReference,
-                                                        jsonData=json.dumps(transaction_data),
-                                                        rejectComment=f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist",
-                                                        transactionType=parsed_data['type'],
-                                                        parsedFloData=json.dumps(parsed_data)
-                                                        ))
-                    session.commit()
-                    session.close()
-                    pushData_SSEapi(f"Error | Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist")
+                    rejectComment = f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist"
+                    logger.info(rejectComment)                    
+                    rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                    pushData_SSEapi(rejectComment)
                     return 0
             
             else:
-                logger.info(f"Token transfer at transaction {transaction_data['txid']} rejected as either the input address or the output address is part of a contract address")
-
-                session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                    sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                    transferAmount=parsed_data['tokenAmount'],
-                                                    blockNumber=transaction_data['blockheight'],
-                                                    blockHash=transaction_data['blockhash'],
-                                                    time=transaction_data['blocktime'],
-                                                    transactionHash=transaction_data['txid'],
-                                                    blockchainReference=blockchainReference,
-                                                    jsonData=json.dumps(transaction_data),
-                                                    rejectComment=f"Token transfer at transaction {transaction_data['txid']} rejected as either the input address or the output address is part of a contract address",
-                                                    transactionType=parsed_data['type'],
-                                                    parsedFloData=json.dumps(parsed_data)
-                                                    ))
-                session.commit()
-                session.close()
-
-                pushData_SSEapi(f"Token transfer at transaction {transaction_data['txid']} rejected as either the input address or the output address is part of a contract address")
+                rejectComment = f"Token transfer at transaction {transaction_data['txid']} rejected as either the input address or the output address is part of a contract address"
+                logger.info(rejectComment)
+                rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                pushData_SSEapi(rejectComment)
                 return 0
 
         # todo Rule 46 - If the transfer type is smart contract, then call the function transferToken to do sanity checks & lock the balance
@@ -895,33 +884,12 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     # if contractAddress was passed, then check if it matches the output address of this contract
                     if 'contractAddress' in parsed_data:
                         if parsed_data['contractAddress'] != outputlist[0]:
-                            logger.info(f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}")
+                            rejectComment = f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"
+                            logger.info(rejectComment)
                             # Store transfer as part of RejectedContractTransactionHistory
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                    contractName=parsed_data['contractName'],
-                                                                    contractAddress=outputlist[0],
-                                                                    sourceFloAddress=inputadd,
-                                                                    destFloAddress=outputlist[0],
-                                                                    transferAmount=None,
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash'],
-                                                                    time=transaction_data['blocktime'],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockchainReference=blockchainReference,
-                                                                    jsonData=json.dumps(transaction_data),
-                                                                    rejectComment=f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}",
-                                                                    parsedFloData=json.dumps(parsed_data)))
-                            session.commit()
-                            session.close()
-
-                            headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                            '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"},
-                                                headers=headers)'''
-
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
                             # Pass information to SSE channel
-                            pushData_SSEapi('Error| Mismatch in contract address specified in flodata and the output address of the transaction {}'.format(transaction_data['txid']))
+                            pushData_SSEapi(f"Error| Mismatch in contract address specified in flodata and the output address of the transaction {transaction_data['txid']}")
                             return 0
 
                     # check the status of the contract
@@ -931,32 +899,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     contractList = []
 
                     if contractStatus == 'closed':
-                        logger.info(f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
-                        # Store transfer as part of RejectedContractTransactionHistory
-                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                        blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                contractName=parsed_data['contractName'],
-                                                                contractAddress=outputlist[0],
-                                                                sourceFloAddress=inputadd,
-                                                                destFloAddress=outputlist[0],
-                                                                transferAmount=None,
-                                                                blockNumber=transaction_data['blockheight'],
-                                                                blockHash=transaction_data['blockhash'],
-                                                                time=transaction_data['blocktime'],
-                                                                transactionHash=transaction_data['txid'],
-                                                                blockchainReference=blockchainReference,
-                                                                jsonData=json.dumps(transaction_data),
-                                                                rejectComment=f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed",
+                        rejectComment = f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"
+                        logger.info(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
 
-                                                                parsedFloData=json.dumps(parsed_data)
-                                                                ))
-                        session.commit()
-                        session.close()
-
-                        headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                        '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
-                                            headers=headers)'''
                         return 0
                     else:
                         session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
@@ -972,110 +918,35 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             blocktime_object = parsing.arrow.get(transaction_data['blocktime']).to('Asia/Kolkata')
 
                             if blocktime_object > expirytime_object:
-                                logger.info(f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
-                                # Store transfer as part of RejectedContractTransactionHistory
-                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                        contractName=parsed_data['contractName'],
-                                                                        contractAddress=outputlist[0],
-                                                                        sourceFloAddress=inputadd,
-                                                                        destFloAddress=outputlist[0],
-                                                                        transferAmount=None,
-                                                                        blockNumber=transaction_data['blockheight'],
-                                                                        blockHash=transaction_data['blockhash'],
-                                                                        time=transaction_data['blocktime'],
-                                                                        transactionHash=transaction_data['txid'],
-                                                                        blockchainReference=blockchainReference,
-                                                                        jsonData=json.dumps(transaction_data),
-                                                                        rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation",
-                                                                        parsedFloData=json.dumps(parsed_data)
-                                                                        ))
-                                session.commit()
-                                session.close()
-                                pushData_SSEapi(f"Error| Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation")
+                                rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation"
+                                logger.info(rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                                pushData_SSEapi(rejectComment)
                                 return 0
 
                     # check if user choice has been passed, to the wrong contract type
                     if 'userChoice' in parsed_data and 'exitconditions' not in contractStructure:
-                        logger.info(f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
-                        # Store transfer as part of RejectedContractTransactionHistory
-                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                        blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                contractName=parsed_data['contractName'],
-                                                                contractAddress=outputlist[0],
-                                                                sourceFloAddress=inputadd,
-                                                                destFloAddress=outputlist[0],
-                                                                transferAmount=None,
-                                                                blockNumber=transaction_data['blockheight'],
-                                                                blockHash=transaction_data['blockhash'],
-                                                                time=transaction_data['blocktime'],
-                                                                transactionHash=transaction_data['txid'],
-                                                                blockchainReference=blockchainReference,
-                                                                jsonData=json.dumps(transaction_data),
-                                                                rejectComment=f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice",
-
-                                                                parsedFloData=json.dumps(parsed_data)
-                                                                ))
-                        session.commit()
-                        session.close()
-                        pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice")
+                        rejectComment = f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice"
+                        logger.info(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                        pushData_SSEapi(rejectComment)
                         return 0
 
                     # check if the right token is being sent for participation
                     if parsed_data['tokenIdentification'] != contractStructure['tokenIdentification']:
-                        logger.info(f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-                        # Store transfer as part of RejectedContractTransactionHistory
-                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                        blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                contractName=parsed_data['contractName'],
-                                                                contractAddress=outputlist[0],
-                                                                sourceFloAddress=inputadd,
-                                                                destFloAddress=outputlist[0],
-                                                                transferAmount=None,
-                                                                blockNumber=transaction_data['blockheight'],
-                                                                blockHash=transaction_data['blockhash'],
-                                                                time=transaction_data['blocktime'],
-                                                                transactionHash=transaction_data['txid'],
-                                                                blockchainReference=blockchainReference,
-                                                                jsonData=json.dumps(transaction_data),
-                                                                rejectComment=f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}",
-
-                                                                parsedFloData=json.dumps(parsed_data)
-                                                                ))
-                        session.commit()
-                        session.close()
-                        pushData_SSEapi(f"Error| Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                        rejectComment = f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"
+                        logger.info(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                        pushData_SSEapi(rejectComment)
                         return 0
 
                     # Check if contractAmount is part of the contract structure, and enforce it if it is
                     if 'contractAmount' in contractStructure:
                         if float(contractStructure['contractAmount']) != float(parsed_data['tokenAmount']):
-                            logger.info(f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-                            # Store transfer as part of RejectedContractTransactionHistory
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                    contractName=parsed_data['contractName'],
-                                                                    contractAddress=outputlist[0],
-                                                                    sourceFloAddress=inputadd,
-                                                                    destFloAddress=outputlist[0],
-                                                                    transferAmount=None,
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash'],
-                                                                    time=transaction_data['blocktime'],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockchainReference=blockchainReference,
-                                                                    jsonData=json.dumps(transaction_data),
-                                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}",
-
-                                                                    parsedFloData=json.dumps(parsed_data)
-                                                                    ))
-                            session.commit()
-                            session.close()
-                            pushData_SSEapi(f"Error| Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            rejectComment = f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"
+                            logger.info(rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                            pushData_SSEapi(rejectComment)
                             return 0
 
                     partialTransferCounter = 0
@@ -1090,55 +961,17 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             amountDeposited = 0
 
                         if amountDeposited >= maximumsubscriptionamount:
-                            logger.info(f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-                            # Store transfer as part of RejectedContractTransactionHistory
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                    contractName=parsed_data['contractName'],
-                                                                    contractAddress=outputlist[0],
-                                                                    sourceFloAddress=inputadd,
-                                                                    destFloAddress=outputlist[0],
-                                                                    transferAmount=None,
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash'],
-                                                                    time=transaction_data['blocktime'],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockchainReference=blockchainReference,
-                                                                    jsonData=json.dumps(transaction_data),
-                                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}",
-
-                                                                    parsedFloData=json.dumps(parsed_data)
-                                                                    ))
-                            session.commit()
-                            session.close()
-                            pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            rejectComment = f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"
+                            logger.info(rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                            pushData_SSEapi(rejectComment)
                             return 0
                         elif ((float(amountDeposited) + float(parsed_data['tokenAmount'])) > maximumsubscriptionamount):
                             if 'contractAmount' in contractStructure:
-                                logger.info(f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-                                # Store transfer as part of RejectedContractTransactionHistory
-                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                        contractName=parsed_data['contractName'],
-                                                                        contractAddress=outputlist[0],
-                                                                        sourceFloAddress=inputadd,
-                                                                        destFloAddress=outputlist[0],
-                                                                        transferAmount=None,
-                                                                        blockNumber=transaction_data['blockheight'],
-                                                                        blockHash=transaction_data['blockhash'],
-                                                                        time=transaction_data['blocktime'],
-                                                                        transactionHash=transaction_data['txid'],
-                                                                        blockchainReference=blockchainReference,
-                                                                        jsonData=json.dumps(transaction_data),
-                                                                        rejectComment=f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}",
-
-                                                                        parsedFloData=json.dumps(parsed_data)
-                                                                        ))
-                                session.commit()
-                                session.close()
-                                pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                                rejectComment = f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"
+                                logger.info(rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                                pushData_SSEapi(rejectComment)
                                 return 0
                             else:
                                 partialTransferCounter = 1
@@ -1245,29 +1078,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     return 0
 
                         else:
-                            logger.info(f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
-                            # Store transfer as part of RejectedContractTransactionHistory
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                    contractName=parsed_data['contractName'],
-                                                                    contractAddress=outputlist[0],
-                                                                    sourceFloAddress=inputadd,
-                                                                    destFloAddress=outputlist[0],
-                                                                    transferAmount=None,
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash'],
-                                                                    time=transaction_data['blocktime'],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockchainReference=blockchainReference,
-                                                                    jsonData=json.dumps(transaction_data),
-                                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}",
-                                                                    parsedFloData=json.dumps(parsed_data)
-                                                                    ))
-                            session.commit()
-                            session.close()
-                            pushData_SSEapi(
-                                f"Error| Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+                            rejectComment = f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"
+                            logger.info(rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                            pushData_SSEapi(rejectComment)
                             return 0
 
                     elif 'payeeAddress' in contractStructure:
@@ -1339,32 +1153,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         # if contractAddress was passed, then check if it matches the output address of this contract
                         if 'contractAddress' in parsed_data:
                             if parsed_data['contractAddress'] != outputlist[0]:
-                                logger.info(f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}")
-                                # Store transfer as part of RejectedContractTransactionHistory
-                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                                        contractName=parsed_data['contractName'],
-                                                                        contractAddress=outputlist[0],
-                                                                        sourceFloAddress=inputadd,
-                                                                        destFloAddress=outputlist[0],
-                                                                        transferAmount=None,
-                                                                        blockNumber=transaction_data['blockheight'],
-                                                                        blockHash=transaction_data['blockhash'],
-                                                                        time=transaction_data['blocktime'],
-                                                                        transactionHash=transaction_data['txid'],
-                                                                        blockchainReference=blockchainReference,
-                                                                        jsonData=json.dumps(transaction_data),
-                                                                        rejectComment=f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}",
-                                                                        parsedFloData=json.dumps(parsed_data)))
-                                session.commit()
-                                session.close()
-
-                                headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                                '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"}, headers=headers)'''
-
+                                rejectComment = f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"
+                                logger.info(rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
                                 # Pass information to SSE channel
-                                pushData_SSEapi('Error| Mismatch in contract address specified in flodata and the output address of the transaction {}'.format(transaction_data['txid']))
+                                pushData_SSEapi(f"Error| Mismatch in contract address specified in flodata and the output address of the transaction {transaction_data['txid']}")
                                 return 0
 
                         if contractStructure['pricetype'] in ['predetermined','determined']:
@@ -1495,82 +1288,22 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                         else:
                             # Reject the participation saying not enough deposit tokens are available 
-                            logger.info(f"Swap participation at transaction {transaction_data['txid']} rejected as requested swap amount is {swapAmount} but {available_deposit_sum} is available")
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                                sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                                transferAmount=swapAmount,
-                                                                blockNumber=transaction_data['blockheight'],
-                                                                blockHash=transaction_data['blockhash'],
-                                                                time=transaction_data['blocktime'],
-                                                                transactionHash=transaction_data['txid'],
-                                                                blockchainReference=blockchainReference,
-                                                                jsonData=json.dumps(transaction_data),
-                                                                rejectComment=f"Swap participation at transaction {transaction_data['txid']} rejected as requested swap amount is {swapAmount} but {available_deposit_sum} is available",
-                                                                transactionType=parsed_data['type'],
-                                                                parsedFloData=json.dumps(parsed_data)
-                                                                ))
-                            session.commit()
-                            session.close()
-                            pushData_SSEapi(f"Swap participation at transaction {transaction_data['txid']} rejected as requested swap amount is {swapAmount} but {available_deposit_sum} is available")
+                            rejectComment = f"Swap participation at transaction {transaction_data['txid']} rejected as requested swap amount is {swapAmount} but {available_deposit_sum} is available"
+                            logger.info(rejectComment)
+                            rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                            pushData_SSEapi(rejectComment)
                             return 0
 
                 else:
-                    logger.info(
-                        f"Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='participation',
-                                                            contractName=parsed_data['contractName'],
-                                                            contractAddress=outputlist[0],
-                                                            sourceFloAddress=inputadd,
-                                                            destFloAddress=outputlist[0],
-                                                            transferAmount=None,
-                                                            blockNumber=transaction_data['blockheight'],
-                                                            blockHash=transaction_data['blockhash'],
-                                                            time=transaction_data['blocktime'],
-                                                            transactionHash=transaction_data['txid'],
-                                                            blockchainReference=blockchainReference,
-                                                            jsonData=json.dumps(transaction_data),
-                                                            rejectComment=f"Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type",
-
-                                                            parsedFloData=json.dumps(parsed_data)
-                                                            ))
-                    session.commit()
-                    session.close()
-
-                    headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                    '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type"}, headers=headers)'''
+                    rejectComment = f"Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type"
+                    logger.info(rejectComment)                    
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
                     return 0
 
             else:
-                logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist")
-                # Store transfer as part of RejectedContractTransactionHistory
-                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                       contractName=parsed_data['contractName'],
-                                                       contractAddress=outputlist[0],
-                                                       sourceFloAddress=inputadd,
-                                                       destFloAddress=outputlist[0],
-                                                       transferAmount=None,
-                                                       blockNumber=transaction_data['blockheight'],
-                                                       blockHash=transaction_data['blockhash'],
-                                                       time=transaction_data['blocktime'],
-                                                       transactionHash=transaction_data['txid'],
-                                                       blockchainReference=blockchainReference,
-                                                       jsonData=json.dumps(transaction_data),
-                                                       rejectComment=f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist",
-                                                       parsedFloData=json.dumps(parsed_data)
-                                                       ))
-                session.commit()
-                session.close()
-
-                headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "}, headers=headers)'''
+                rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist"
+                logger.info(rejectComment)
+                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
                 return 0
 
         elif parsed_data['transferType'] == 'nft':
@@ -1610,46 +1343,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 pushData_SSEapi(f"Token | Successfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:
-                logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
-                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                    sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                    transferAmount=parsed_data['tokenAmount'],
-                                                    blockNumber=transaction_data['blockheight'],
-                                                    blockHash=transaction_data['blockhash'],
-                                                    time=transaction_data['blocktime'],
-                                                    transactionHash=transaction_data['txid'],
-                                                    blockchainReference=blockchainReference,
-                                                    jsonData=json.dumps(transaction_data),
-                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated",
-                                                    transactionType=parsed_data['type'],
-                                                    parsedFloData=json.dumps(parsed_data)
-                                                    ))
-                session.commit()
-                session.close()
-                pushData_SSEapi(f"Error | Token incorporation rejected at transaction {transaction_data['txid']} as token {parsed_data['tokenIdentification']} already exists")
+                rejectComment = f"Token incorporation rejected at transaction {transaction_data['txid']} as token {parsed_data['tokenIdentification']} already exists"
+                logger.info(rejectComment)
+                rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                pushData_SSEapi(rejectComment)
                 return 0
         else:
-            logger.info(f"Token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
-            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                transferAmount=parsed_data['tokenAmount'],
-                                                blockNumber=transaction_data['blockheight'],
-                                                blockHash=transaction_data['blockhash'],
-                                                time=transaction_data['blocktime'],
-                                                transactionHash=transaction_data['txid'],
-                                                blockchainReference=blockchainReference,
-                                                jsonData=json.dumps(transaction_data),
-                                                rejectComment=f"Token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address",
-                                                transactionType=parsed_data['type'],
-                                                parsedFloData=json.dumps(parsed_data)
-                                                ))
-            session.commit()
-            session.close()
-            pushData_SSEapi(f"Token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
+            rejectComment = f"Token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address"
+            logger.info(rejectComment)
+            rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+            pushData_SSEapi(rejectComment)
             return 0
 
     # todo Rule 48 - If the parsed data type if smart contract incorporation, then check if the name hasn't been taken already
@@ -1662,52 +1365,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                 # either userchoice or payeeAddress condition should be present. Check for it
                 if 'userchoices' not in parsed_data['contractConditions'] and 'payeeAddress' not in parsed_data['contractConditions']:
-                    logger.info(f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(RejectedContractTransactionHistory(transactionType='incorporation',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0],
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected",
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-                    session.commit()
-                    session.close()
+                    rejectComment = f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                    logger.info(rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
                     return 0
 
                 # userchoice and payeeAddress conditions cannot come together. Check for it
                 if 'userchoices' in parsed_data['contractConditions'] and 'payeeAddress' in parsed_data['contractConditions']:
-                    logger.info(f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
-                    # Store transfer as part of RejectedContractTransactionHistory 
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(RejectedContractTransactionHistory(transactionType='incorporation',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0],
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected",
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-                    session.commit()
-                    session.close()
+                    rejectComment = f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                    logger.info(rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
                     return 0
 
                 # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
@@ -1813,29 +1480,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
                     return 1
                 else:
-                    logger.info(f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(RejectedContractTransactionHistory(transactionType='incorporation',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0],
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in flodata and input address are different",
-
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-                    session.commit()
-                    session.close()
-                    pushData_SSEapi('Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {}'.format(transaction_data['txid']))
+                    rejectComment = f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different"
+                    logger.info(rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
+                    pushData_SSEapi(f"Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {transaction_data['txid']}")
                     return 0
         
             if parsed_data['contractType'] == 'continuous-event' or parsed_data['contractType'] == 'continuos-event':
@@ -1941,84 +1589,24 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     pass                        
                                     '''
                             else:
-                                logger.info(f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
-                                # Store transfer as part of RejectedContractTransactionHistory
-                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                session.add(RejectedContractTransactionHistory(transactionType='incorporation',
-                                                                                contractName=parsed_data['contractName'],
-                                                                                contractAddress=outputlist[0],
-                                                                                sourceFloAddress=inputadd,
-                                                                                destFloAddress=outputlist[0],
-                                                                                transferAmount=None,
-                                                                                blockNumber=transaction_data['blockheight'],
-                                                                                blockHash=transaction_data['blockhash'],
-                                                                                time=transaction_data['blocktime'],
-                                                                                transactionHash=transaction_data['txid'],
-                                                                                blockchainReference=blockchainReference,
-                                                                                jsonData=json.dumps(
-                                                                                    transaction_data),
-                                                                                rejectComment=f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected",
-                                                                                parsedFloData=json.dumps(
-                                                                                    parsed_data)
-                                                                                ))
-                                session.commit()
-                                session.close()
+                                rejectComment = f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                                logger.info(rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
                                 return 0
                     
                     else:
-                        logger.info(f"No subtype provided || mentioned tokens do not exist for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected")
-                        # Store transfer as part of RejectedContractTransactionHistory
-                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                        blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(RejectedContractTransactionHistory(transactionType='incorporation',
-                                                                        contractName=parsed_data['contractName'],
-                                                                        contractAddress=outputlist[0],
-                                                                        sourceFloAddress=inputadd,
-                                                                        destFloAddress=outputlist[0],
-                                                                        transferAmount=None,
-                                                                        blockNumber=transaction_data['blockheight'],
-                                                                        blockHash=transaction_data['blockhash'],
-                                                                        time=transaction_data['blocktime'],
-                                                                        transactionHash=transaction_data['txid'],
-                                                                        blockchainReference=blockchainReference,
-                                                                        jsonData=json.dumps(transaction_data),
-                                                                        rejectComment=f"No subtype provided for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected",
-                                                                        parsedFloData=json.dumps(parsed_data)
-                                                                        ))
-                        session.commit()
-                        session.close()
+                        rejectComment = f"No subtype provided || mentioned tokens do not exist for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                        logger.info(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
                         return 0
 
                     session.commit()
                     session.close()
 
         else:
-            logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists")
-            # Store transfer as part of RejectedContractTransactionHistory
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedContractTransactionHistory(transactionType='incorporation',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0], sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists",
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-            session.commit()
-            session.close()
-
-            headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-            '''r = requests.post(tokenapi_sse_url, json={
-                'message': 'Error | Contract Incorporation rejected as a smartcontract with same name {}-{} is active currentlyt at transaction {}'.format(parsed_data['contractName'], parsed_data['contractAddress'], transaction_data['txid'])}, headers=headers)
-            '''
+            rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists"
+            logger.info(rejectComment)
+            rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
             return 0
 
     elif parsed_data['type'] == 'smartContractPays':
@@ -2043,59 +1631,18 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 # if contractAddress has been passed, check if output address is contract Incorporation address
                 if 'contractAddress' in contractStructure:
                     if outputlist[0] != contractStructure['contractAddress']:
-                        logger.warning(f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet")
-                        # Store transfer as part of RejectedContractTransactionHistory
-                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                        blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                        session.add(
-                            RejectedContractTransactionHistory(transactionType='trigger',
-                                                               contractName=parsed_data['contractName'],
-                                                               contractAddress=outputlist[0],
-                                                               sourceFloAddress=inputadd,
-                                                               destFloAddress=outputlist[0],
-                                                               transferAmount=None,
-                                                               blockNumber=transaction_data['blockheight'],
-                                                               blockHash=transaction_data['blockhash'],
-                                                               time=transaction_data['blocktime'],
-                                                               transactionHash=transaction_data['txid'],
-                                                               blockchainReference=blockchainReference,
-                                                               jsonData=json.dumps(transaction_data),
-                                                               rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet",
-                                                               parsedFloData=json.dumps(parsed_data)
-                                                               ))
-                        session.commit()
-                        session.close()
-                        pushData_SSEapi(
-                            f"Error | Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet")
+                        rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet"
+                        logger.warning(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                        pushData_SSEapi(rejectComment)
                         return 0
 
                 # check the type of smart contract ie. external trigger or internal trigger
                 if 'payeeAddress' in contractStructure:
-                    logger.warning(f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='trigger',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0],
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger",
-
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-                    session.commit()
-                    session.close()
-                    pushData_SSEapi(
-                        f"Error | Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger")
+                    rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger"
+                    logger.warning(rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                    pushData_SSEapi(rejectComment)
                     return 0
 
                 # check the status of the contract
@@ -2105,33 +1652,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 contractList = []
 
                 if contractStatus == 'closed':
-                    logger.info(f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(RejectedContractTransactionHistory(transactionType='trigger',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0],
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed",
-
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-                    session.commit()
-                    session.close()
-
-                    headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                    '''r = requests.post(tokenapi_sse_url, json={
-                        'message': f"Error | Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"},
-                                      headers=headers)'''
+                    rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"
+                    logger.info(rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
                     return 0
                 else:
                     session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
@@ -2149,32 +1672,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         blocktime_object = parsing.arrow.get(transaction_data['blocktime']).to('Asia/Kolkata')
 
                         if blocktime_object <= expirytime_object:
-                            logger.info(
-                                f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger")
-                            # Store transfer as part of RejectedContractTransactionHistory
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(
-                                RejectedContractTransactionHistory(transactionType='trigger',
-                                                                   contractName=parsed_data['contractName'],
-                                                                   contractAddress=outputlist[0],
-                                                                   sourceFloAddress=inputadd,
-                                                                   destFloAddress=outputlist[0],
-                                                                   transferAmount=None,
-                                                                   blockNumber=transaction_data['blockheight'],
-                                                                   blockHash=transaction_data['blockhash'],
-                                                                   time=transaction_data['blocktime'],
-                                                                   transactionHash=transaction_data['txid'],
-                                                                   blockchainReference=blockchainReference,
-                                                                   jsonData=json.dumps(transaction_data),
-                                                                   rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger",
-
-                                                                   parsedFloData=json.dumps(parsed_data)
-                                                                   ))
-                            session.commit()
-                            session.close()
-                            pushData_SSEapi(
-                                f"Error| Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger")
+                            rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger"
+                            logger.info(rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                            pushData_SSEapi(rejectComment)
                             return 0
 
                 # check if the user choice passed is part of the contract structure
@@ -2183,32 +1684,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     tempchoiceList.append(contractStructure['exitconditions'][item])
 
                 if parsed_data['triggerCondition'] not in tempchoiceList:
-                    logger.info(
-                        f"Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(
-                        RejectedContractTransactionHistory(transactionType='trigger',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0],
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name",
-
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-                    session.commit()
-                    session.close()
-                    pushData_SSEapi(
-                        f"Error | Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name")
+                    rejectComment = f"Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name"
+                    logger.info(rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                    pushData_SSEapi(rejectComment)
                     return 0
 
                 # check if minimumsubscriptionamount exists as part of the contract structure
@@ -2324,53 +1803,17 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 pushData_SSEapi('Trigger | Contract triggered of the name {}-{} is active currently at transaction {}'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
                 return 1
             else:
-                logger.info(f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist")
-                # Store transfer as part of RejectedContractTransactionHistory
-                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(RejectedContractTransactionHistory(transactionType='trigger',
-                                                       contractName=parsed_data['contractName'],
-                                                       contractAddress=outputlist[0],
-                                                       sourceFloAddress=inputadd,
-                                                       destFloAddress=outputlist[0],
-                                                       transferAmount=None,
-                                                       blockNumber=transaction_data['blockheight'],
-                                                       blockHash=transaction_data['blockhash'],
-                                                       time=transaction_data['blocktime'],
-                                                       transactionHash=transaction_data['txid'],
-                                                       blockchainReference=blockchainReference,
-                                                       jsonData=json.dumps(transaction_data),
-                                                       rejectComment=f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist",
-                                                       parsedFloData=json.dumps(parsed_data)
-                                                       ))
-                session.commit()
-                session.close()
-                pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist")
+                rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist"
+                logger.info(rejectComment)
+                rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                pushData_SSEapi(rejectComment)
                 return 0
 
         else:
-            logger.info(f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list")
-            # Store transfer as part of RejectedContractTransactionHistory
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedContractTransactionHistory(transactionType='trigger',
-                                                           contractName=parsed_data['contractName'],
-                                                           contractAddress=outputlist[0],
-                                                           sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           rejectComment=f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list",
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
-            session.commit()
-            session.close()
-            pushData_SSEapi(f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list")
+            rejectComment = f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list"
+            logger.info(rejectComment)
+            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+            pushData_SSEapi(rejectComment)
             return 0
 
     elif parsed_data['type'] == 'smartContractDeposit':
@@ -2388,32 +1831,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             # if contractAddress was passed, then check if it matches the output address of this contract
             if 'contractAddress' in parsed_data:
                 if parsed_data['contractAddress'] != outputlist[0]:
-                    logger.info(f"Contract deposit at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}")
-                    # Store transfer as part of RejectedContractTransactionHistory
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(RejectedContractTransactionHistory(transactionType='participation',
-                                                            contractName=parsed_data['contractName'],
-                                                            contractAddress=outputlist[0],
-                                                            sourceFloAddress=inputadd,
-                                                            destFloAddress=outputlist[0],
-                                                            transferAmount=None,
-                                                            blockNumber=transaction_data['blockheight'],
-                                                            blockHash=transaction_data['blockhash'],
-                                                            time=transaction_data['blocktime'],
-                                                            transactionHash=transaction_data['txid'],
-                                                            blockchainReference=blockchainReference,
-                                                            jsonData=json.dumps(transaction_data),
-                                                            rejectComment=f"Contract deposit at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}",
-                                                            parsedFloData=json.dumps(parsed_data)))
-                    session.commit()
-                    session.close()
-
-                    headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-                    '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"}, headers=headers)'''
-
+                    rejectComment = f"Contract deposit at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"
+                    logger.info(rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
                     # Pass information to SSE channel
-                    pushData_SSEapi('Error| Mismatch in contract address specified in flodata and the output address of the transaction {}'.format(transaction_data['txid']))
+                    pushData_SSEapi(f"Error| Mismatch in contract address specified in flodata and the output address of the transaction {transaction_data['txid']}")
                     return 0
 
             # pull out the contract structure into a dictionary
@@ -2477,30 +1899,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             return 1
 
         else:
-            logger.info(f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist")
-            # Store transfer as part of RejectedContractTransactionHistory
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedContractTransactionHistory(transactionType='smartContractDeposit',
-                                                    contractName=parsed_data['contractName'],
-                                                    contractAddress=outputlist[0],
-                                                    sourceFloAddress=inputadd,
-                                                    destFloAddress=outputlist[0],
-                                                    transferAmount=None,
-                                                    blockNumber=transaction_data['blockheight'],
-                                                    blockHash=transaction_data['blockhash'],
-                                                    time=transaction_data['blocktime'],
-                                                    transactionHash=transaction_data['txid'],
-                                                    blockchainReference=blockchainReference,
-                                                    jsonData=json.dumps(transaction_data),
-                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist",
-                                                    parsedFloData=json.dumps(parsed_data)
-                                                    ))
-            session.commit()
-            session.close()
-
-            headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
-            '''r = requests.post(tokenapi_sse_url, json={'message': f"Error | Contract transaction {transaction_data['txid']} rejected as a smartcontract with same name {parsed_data['contractName']}-{parsed_data['contractAddress']} dosent exist "}, headers=headers)'''
+            rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist"
+            logger.info(rejectComment)
+            rejected_contract_transaction_history(transaction_data, parsed_data, 'smartContractDeposit', inputadd, outputlist[0], rejectComment)
             return 0
     
     elif parsed_data['type'] == 'nftIncorporation':
@@ -2544,46 +1945,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:
-                logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
-                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                    sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                    transferAmount=parsed_data['tokenAmount'],
-                                                    blockNumber=transaction_data['blockheight'],
-                                                    blockHash=transaction_data['blockhash'],
-                                                    time=transaction_data['blocktime'],
-                                                    transactionHash=transaction_data['txid'],
-                                                    blockchainReference=blockchainReference,
-                                                    jsonData=json.dumps(transaction_data),
-                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated",
-                                                    transactionType=parsed_data['type'],
-                                                    parsedFloData=json.dumps(parsed_data)
-                                                    ))
-                session.commit()
-                session.close()
-                pushData_SSEapi(f"Error | Token incorporation rejected at transaction {transaction_data['txid']} as token {parsed_data['tokenIdentification']} already exists")
+                rejectComment = f"Transaction {transaction_data['txid']} rejected as an NFT with the name {parsed_data['tokenIdentification']} has already been incorporated"
+                logger.info(rejectComment)
+                rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                pushData_SSEapi(rejectComment)
                 return 0
         else:
-            logger.info(f"NFT incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
-            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                transferAmount=parsed_data['tokenAmount'],
-                                                blockNumber=transaction_data['blockheight'],
-                                                blockHash=transaction_data['blockhash'],
-                                                time=transaction_data['blocktime'],
-                                                transactionHash=transaction_data['txid'],
-                                                blockchainReference=blockchainReference,
-                                                jsonData=json.dumps(transaction_data),
-                                                rejectComment=f"NFT incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address",
-                                                transactionType=parsed_data['type'],
-                                                parsedFloData=json.dumps(parsed_data)
-                                                ))
-            session.commit()
-            session.close()
-            pushData_SSEapi(f"NFT incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
+            rejectComment = f"NFT incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address"
+            logger.info(rejectComment)
+            rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+            pushData_SSEapi(rejectComment)
             return 0
 
     elif parsed_data['type'] == 'infiniteTokenIncorporation':
@@ -2619,45 +1990,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:
-                logger.info(f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated")
-                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                    sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                    blockNumber=transaction_data['blockheight'],
-                                                    blockHash=transaction_data['blockhash'],
-                                                    time=transaction_data['blocktime'],
-                                                    transactionHash=transaction_data['txid'],
-                                                    blockchainReference=blockchainReference,
-                                                    jsonData=json.dumps(transaction_data),
-                                                    rejectComment=f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated",
-                                                    transactionType=parsed_data['type'],
-                                                    parsedFloData=json.dumps(parsed_data)
-                                                    ))
-                session.commit()
-                session.close()
-                pushData_SSEapi(f"Error | Token incorporation rejected at transaction {transaction_data['txid']} as token {parsed_data['tokenIdentification']} already exists")
+                rejectComment = f"Transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} has already been incorporated"
+                logger.info(rejectComment)
+                rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                pushData_SSEapi(rejectComment)
                 return 0
         else:
-            logger.info(f"Infinite token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
-            session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
-            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                                sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                                transferAmount=parsed_data['tokenAmount'],
-                                                blockNumber=transaction_data['blockheight'],
-                                                blockHash=transaction_data['blockhash'],
-                                                time=transaction_data['blocktime'],
-                                                transactionHash=transaction_data['txid'],
-                                                blockchainReference=blockchainReference,
-                                                jsonData=json.dumps(transaction_data),
-                                                rejectComment=f"NFT incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address",
-                                                transactionType=parsed_data['type'],
-                                                parsedFloData=json.dumps(parsed_data)
-                                                ))
-            session.commit()
-            session.close()
-            pushData_SSEapi(f"Infinite token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address")
+            rejectComment = f"Infinite token incorporation at transaction {transaction_data['txid']} rejected as either the input address is part of a contract address"
+            logger.info(rejectComment)
+            rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+            pushData_SSEapi(rejectComment)
             return 0
 
 
