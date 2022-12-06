@@ -462,12 +462,35 @@ def process_minimum_subscriptionamount(contractStructure, connection):
         return 0
 
 
+def process_maximum_subscriptionamount(contractStructure, connection, status):
+    maximumsubscriptionamount = float(contractStructure['maximumsubscriptionamount'])
+    if tokenAmount_sum >= maximumsubscriptionamount:
+        # Trigger the contract
+        if status == 'close':
+            success_returnval = trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_data, blockinfo, parsed_data, connection, contract_name=query.contractName, contract_address=query.contractAddress, transaction_subType='maximumsubscriptionamount')
+            if not success_returnval:
+                return 0
+        connection = create_database_connection('system_dbs', {'db_name':'system'})
+        connection.execute('update activecontracts set status="closed", closeDate="{}", expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'], blockinfo['time'], query.contractName, query.contractAddress))
+        connection.execute('update time_actions set status="closed" where contractName="{}" and contractAddress="{}"'.format(query.contractName, query.contractAddress))                            
+        connection.close()
+        return 1
+    else:
+        return 0
+
 def check_contract_status(connection, session, contractName, contractAddress):
     # Status of the contract is at 2 tables in system.db
     # activecontracts and time_actions
     # select the last entry form the colum 
     contract_status = connection.execute('SELECT status FROM time_actions WHERE id=(SELECT MAX(id) FROM time_actions WHERE contractName="" AND contractAddress="")').fetchall()
     return contract_status[0][0]
+
+
+def close_expire_contract(contractStructure, contractStatus, transactionHash, blockNumber, blockHash, incorporationDate, expiryDate, closeDate, trigger_time, trigger_activity, contractName, contractAddress, contractType, tokens_db, parsed_data, blockHeight):
+    connection = create_database_connection('system_dbs', {'db_name':'system'})
+    connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], contractStatus, contractStructure['tokenIdentification'], contractStructure['contractType'], transactionHash, blockNumber, blockHash, incorporationDate, expiryDate, closeDate))
+    connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, trigger_time, trigger_activity, contractStatus, contractName, contractAddress, contractType, tokens_db, parsed_data, transactionHash, blockHeight))
+    connection.close()
 
 
 def return_active_contracts(session):
@@ -587,32 +610,31 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                         maximumsubscriptionamount = float(maximumsubscriptionamount)
                         if tokenAmount_sum >= maximumsubscriptionamount:
                             # Expire the contract
-                            connection = create_database_connection('system_dbs', {'db_name':'system'})
-
+                            '''connection = create_database_connection('system_dbs', {'db_name':'system'})
                             connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], 'expired', contractStructure['tokenIdentification'], contractStructure['contractType'], query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', 'query.expiryDate', 'query.closeDate'))
-
                             connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, query.time, query.activity, 'expired', query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, query.transactionHash, blockinfo['height']))
+                            connection.close()'''
 
-                            connection.close()
+                            close_expire_contract(contractStructure, 'expired', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', 'query.expiryDate', 'query.closeDate', query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                                    
                     if blocktime > query_time:
                         if 'minimumsubscriptionamount' in contractStructure:
                             if process_minimum_subscriptionamount(contractStructure, connection):
-                                connection = create_database_connection('system_dbs', {'db_name':'system'})
+                                '''connection = create_database_connection('system_dbs', {'db_name':'system'})
                                 connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], 'closed', contractStructure['tokenIdentification'], contractStructure['contractType'], query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time']))
-
                                 connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, query.time, query.activity, 'closed', query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, query.transactionHash, blockinfo['height']))
+                                connection.close()'''
 
-                                connection.close()
+                                close_expire_contract(contractStructure, 'closed', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                                 return 
 
                         # Expire the contract      
-                        connection = create_database_connection('system_dbs', {'db_name':'system'})
+                        '''connection = create_database_connection('system_dbs', {'db_name':'system'})
                         connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], 'expired', contractStructure['tokenIdentification'], contractStructure['contractType'], query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], 'query.closeDate'))
-
                         connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, query.time, query.activity, 'expired', query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, query.transactionHash, blockinfo['height']))
+                        connection.close()'''
 
-                        connection.close()         
+                        close_expire_contract(contractStructure, 'expired', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], 'query.closeDate', query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                 
                 elif 'payeeAddress' in contractStructure: # Internal trigger contract type
                     # TODO - FIGURE A BETTER SOLUTION FOR THIS 
@@ -641,10 +663,12 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                     if blocktime > query_time: 
                         if 'minimumsubscriptionamount' in contractStructure:
                             if process_minimum_subscriptionamount(contractStructure, connection):
-                                connection = create_database_connection('system_dbs', {'db_name':'system'})
+                                '''connection = create_database_connection('system_dbs', {'db_name':'system'})
                                 connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], 'closed', contractStructure['tokenIdentification'], contractStructure['contractType'], query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time']))
                                 connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, query.time, query.activity, 'closed', query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, query.transactionHash, blockinfo['height']))
-                                connection.close()
+                                connection.close()'''
+
+                                close_expire_contract(contractStructure, 'closed', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                                 return
                         
                         # Trigger the contract
@@ -652,12 +676,12 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                         if not success_returnval:
                             return 0
                         
-                        connection = create_database_connection('system_dbs', {'db_name':'system'})
-
+                        '''connection = create_database_connection('system_dbs', {'db_name':'system'})
                         connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], 'expired', contractStructure['tokenIdentification'], contractStructure['contractType'], query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time']))
-                        
                         connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None,query.time, query.activity, 'expired', query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, query.transactionHash, blockinfo['height']))
-                        connection.close()
+                        connection.close()'''
+
+                        close_expire_contract(contractStructure, 'expired', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                         return
 
 
@@ -700,23 +724,23 @@ def rejected_transaction_history(transaction_data, parsed_data, sourceFloAddress
     session.close()
 
 
-def rejected_contract_transaction_history(transaction_data, parsed_data, transactionType, sourceFloAddress, destFloAddress, rejectComment):
+def rejected_contract_transaction_history(transaction_data, parsed_data, transactionType, contractAddress, sourceFloAddress, destFloAddress, rejectComment):
     session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
     blockchainReference = neturl + 'tx/' + transaction_data['txid']
     session.add(RejectedContractTransactionHistory(transactionType=transactionType,
-                                            contractName=parsed_data['contractName'],
-                                            contractAddress=outputlist[0],
-                                            sourceFloAddress=sourceFloAddress,
-                                            destFloAddress=destFloAddress,
-                                            transferAmount=None,
-                                            blockNumber=transaction_data['blockheight'],
-                                            blockHash=transaction_data['blockhash'],
-                                            time=transaction_data['blocktime'],
-                                            transactionHash=transaction_data['txid'],
-                                            blockchainReference=blockchainReference,
-                                            jsonData=json.dumps(transaction_data),
-                                            rejectComment=rejectComment,
-                                            parsedFloData=json.dumps(parsed_data)))
+                                                    contractName=parsed_data['contractName'],
+                                                    contractAddress=contractAddress,
+                                                    sourceFloAddress=sourceFloAddress,
+                                                    destFloAddress=destFloAddress,
+                                                    transferAmount=None,
+                                                    blockNumber=transaction_data['blockheight'],
+                                                    blockHash=transaction_data['blockhash'],
+                                                    time=transaction_data['blocktime'],
+                                                    transactionHash=transaction_data['txid'],
+                                                    blockchainReference=blockchainReference,
+                                                    jsonData=json.dumps(transaction_data),
+                                                    rejectComment=rejectComment,
+                                                    parsedFloData=json.dumps(parsed_data)))
     session.commit()
     session.close()    
 
@@ -887,7 +911,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             rejectComment = f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"
                             logger.info(rejectComment)
                             # Store transfer as part of RejectedContractTransactionHistory
-                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                             # Pass information to SSE channel
                             pushData_SSEapi(f"Error| Mismatch in contract address specified in flodata and the output address of the transaction {transaction_data['txid']}")
                             return 0
@@ -901,8 +925,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     if contractStatus == 'closed':
                         rejectComment = f"Transaction {transaction_data['txid']} closed as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"
                         logger.info(rejectComment)
-                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
-
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                         return 0
                     else:
                         session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
@@ -912,15 +935,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             # now parse the expiry time in python
                             expirytime = result[0].value.strip()
                             expirytime_split = expirytime.split(' ')
-                            parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
-                                                                expirytime_split[2], expirytime_split[4])
+                            parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
                             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
                             blocktime_object = parsing.arrow.get(transaction_data['blocktime']).to('Asia/Kolkata')
 
                             if blocktime_object > expirytime_object:
                                 rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation"
                                 logger.info(rejectComment)
-                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                                 pushData_SSEapi(rejectComment)
                                 return 0
 
@@ -928,7 +950,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     if 'userChoice' in parsed_data and 'exitconditions' not in contractStructure:
                         rejectComment = f"Transaction {transaction_data['txid']} rejected as userChoice, {parsed_data['userChoice']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice"
                         logger.info(rejectComment)
-                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                         pushData_SSEapi(rejectComment)
                         return 0
 
@@ -936,7 +958,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     if parsed_data['tokenIdentification'] != contractStructure['tokenIdentification']:
                         rejectComment = f"Transaction {transaction_data['txid']} rejected as the token being transferred, {parsed_data['tokenIdentidication'].upper()}, is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"
                         logger.info(rejectComment)
-                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                         pushData_SSEapi(rejectComment)
                         return 0
 
@@ -945,7 +967,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         if float(contractStructure['contractAmount']) != float(parsed_data['tokenAmount']):
                             rejectComment = f"Transaction {transaction_data['txid']} rejected as contractAmount being transferred is not part of the structure of Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"
                             logger.info(rejectComment)
-                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                             pushData_SSEapi(rejectComment)
                             return 0
 
@@ -963,14 +985,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         if amountDeposited >= maximumsubscriptionamount:
                             rejectComment = f"Transaction {transaction_data['txid']} rejected as maximum subscription amount has been reached for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"
                             logger.info(rejectComment)
-                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                             pushData_SSEapi(rejectComment)
                             return 0
                         elif ((float(amountDeposited) + float(parsed_data['tokenAmount'])) > maximumsubscriptionamount):
                             if 'contractAmount' in contractStructure:
                                 rejectComment = f"Transaction {transaction_data['txid']} rejected as the contractAmount surpasses the maximum subscription amount, {contractStructure['maximumsubscriptionamount']} {contractStructure['tokenIdentification'].upper()}, for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}"
                                 logger.info(rejectComment)
-                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                                 pushData_SSEapi(rejectComment)
                                 return 0
                             else:
@@ -1011,7 +1033,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                             jsonData=json.dumps(transaction_data),
                                                                             parsedFloData=json.dumps(parsed_data)
                                                                             ))
-
                                     session.commit()
                                     session.close()
 
@@ -1028,15 +1049,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                                     # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
                                     connection = create_database_connection('system_dbs', {'db_name':'system'})
-                                    firstInteractionCheck = connection.execute(
-                                        f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
-
+                                    firstInteractionCheck = connection.execute(f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
                                     if len(firstInteractionCheck) == 0:
-                                        connection.execute(
-                                            f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
-
+                                        connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
                                     connection.close()
-
                                     updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-externaltrigger-participation')
                                     return 1
 
@@ -1045,9 +1061,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     return 0
                             elif partialTransferCounter == 1:
                                 # Transfer only part of the tokens users specified, till the time it reaches maximumamount
-                                returnval = transferToken(parsed_data['tokenIdentification'],
-                                                            maximumsubscriptionamount - amountDeposited,
-                                                            inputlist[0], outputlist[0], transaction_data, parsed_data, blockinfo = blockinfo)
+                                returnval = transferToken(parsed_data['tokenIdentification'], maximumsubscriptionamount - amountDeposited, inputlist[0], outputlist[0], transaction_data, parsed_data, blockinfo = blockinfo)
                                 if returnval is not None:
                                     # Store participant details in the smart contract's db
                                     session.add(ContractParticipants(participantAddress=inputadd,
@@ -1080,7 +1094,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         else:
                             rejectComment = f"Transaction {transaction_data['txid']} rejected as wrong userchoice entered for the Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]}"
                             logger.info(rejectComment)
-                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                             pushData_SSEapi(rejectComment)
                             return 0
 
@@ -1116,7 +1130,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                     jsonData=json.dumps(transaction_data),
                                                                     parsedFloData=json.dumps(parsed_data)
                                                                     ))
-
                             session.commit()
                             session.close()
 
@@ -1130,7 +1143,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                 blockNumber=transaction_data['blockheight'],
                                                                 blockHash=transaction_data['blockhash']))
                             session.commit()
-
                             updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-internaltrigger-participation')
                             return 1
 
@@ -1155,7 +1167,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             if parsed_data['contractAddress'] != outputlist[0]:
                                 rejectComment = f"Contract participation at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"
                                 logger.info(rejectComment)
-                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                                 # Pass information to SSE channel
                                 pushData_SSEapi(f"Error| Mismatch in contract address specified in flodata and the output address of the transaction {transaction_data['txid']}")
                                 return 0
@@ -1191,7 +1203,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Particiaption")
                                 return 0
 
-
                             # ContractDepositTable 
                             # For each unique deposit( address, expirydate, blocknumber) there will be 2 entries added to the table 
                             # the consumption of the deposits will start form the top of the table 
@@ -1226,7 +1237,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     contract_session.add(ConsumedInfo(  id_deposittable= a_deposit.id,
                                                                         transactionHash= a_deposit.transactionHash,
                                                                         blockNumber= blockinfo['height']))
-
                                     remaining_amount = remaining_amount - a_deposit.depositBalance
                                     remaining_amount = 0 
                                     break
@@ -1297,13 +1307,13 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 else:
                     rejectComment = f"Transaction {transaction_data['txid']} rejected as the participation doesn't belong to any valid contract type"
                     logger.info(rejectComment)                    
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                     return 0
 
             else:
                 rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist"
                 logger.info(rejectComment)
-                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                 return 0
 
         elif parsed_data['transferType'] == 'nft':
@@ -1367,14 +1377,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 if 'userchoices' not in parsed_data['contractConditions'] and 'payeeAddress' not in parsed_data['contractConditions']:
                     rejectComment = f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                     logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
                     return 0
 
                 # userchoice and payeeAddress conditions cannot come together. Check for it
                 if 'userchoices' in parsed_data['contractConditions'] and 'payeeAddress' in parsed_data['contractConditions']:
                     rejectComment = f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                     logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
                     return 0
 
                 # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
@@ -1482,7 +1492,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 else:
                     rejectComment = f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different"
                     logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
                     pushData_SSEapi(f"Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {transaction_data['txid']}")
                     return 0
         
@@ -1524,10 +1534,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         time=transaction_data['blocktime'],
                                                                         transactionHash=transaction_data['txid'],
                                                                         blockchainReference=blockchainReference,
-                                                                        jsonData=json.dumps(
-                                                                            transaction_data),
-                                                                        parsedFloData=json.dumps(
-                                                                            parsed_data)
+                                                                        jsonData=json.dumps(transaction_data),
+                                                                        parsedFloData=json.dumps(parsed_data)
                                                                         ))
                                 session.commit()
                                 session.close()
@@ -1583,21 +1591,16 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
                                 pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
                                 return 1
-                        
-                                '''else if (parsed_data['contractConditions']['subtype'] == 'bitbonds'):
-                                    # Check if both the tokens mentioned in the bond exist 
-                                    pass                        
-                                    '''
                             else:
                                 rejectComment = f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                                 logger.info(rejectComment)
-                                rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
                                 return 0
                     
                     else:
                         rejectComment = f"No subtype provided || mentioned tokens do not exist for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                         logger.info(rejectComment)
-                        rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
                         return 0
 
                     session.commit()
@@ -1606,7 +1609,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         else:
             rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists"
             logger.info(rejectComment)
-            rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, outputlist[0], rejectComment)
+            rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
             return 0
 
     elif parsed_data['type'] == 'smartContractPays':
@@ -1633,7 +1636,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     if outputlist[0] != contractStructure['contractAddress']:
                         rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} hasn't expired yet"
                         logger.warning(rejectComment)
-                        rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', outputlist[0], inputadd, outputlist[0], rejectComment)
                         pushData_SSEapi(rejectComment)
                         return 0
 
@@ -1641,7 +1644,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 if 'payeeAddress' in contractStructure:
                     rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} has an internal trigger"
                     logger.warning(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', outputlist[0], inputadd, outputlist[0], rejectComment)
                     pushData_SSEapi(rejectComment)
                     return 0
 
@@ -1654,7 +1657,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 if contractStatus == 'closed':
                     rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']} at the {outputlist[0]} is closed"
                     logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', outputlist[0], inputadd, outputlist[0], rejectComment)
                     return 0
                 else:
                     session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
@@ -1674,7 +1677,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         if blocktime_object <= expirytime_object:
                             rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger"
                             logger.info(rejectComment)
-                            rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', outputlist[0], inputadd, outputlist[0], rejectComment)
                             pushData_SSEapi(rejectComment)
                             return 0
 
@@ -1686,7 +1689,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 if parsed_data['triggerCondition'] not in tempchoiceList:
                     rejectComment = f"Transaction {transaction_data['txid']} rejected as triggerCondition, {parsed_data['triggerCondition']}, has been passed to Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} which doesn't accept any userChoice of the given name"
                     logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', outputlist[0], inputadd, outputlist[0], rejectComment)
                     pushData_SSEapi(rejectComment)
                     return 0
 
@@ -1793,10 +1796,12 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 session.commit()
                 session.close()
 
-                connection = create_database_connection('system_dbs', {'db_name':'system'})
+                '''connection = create_database_connection('system_dbs', {'db_name':'system'})
                 connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], 'closed', contractStructure['tokenIdentification'], contractStructure['contractType'], transaction_data['txid'], blockinfo['height'], blockinfo['hash'], 'query.incorporationDate', 'query.expiryDate', blockinfo['time']))
                 connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, blockinfo['time'], 'contract-time-trigger', 'closed', contractStructure['contractName'], contractStructure['contractAddress'], contractStructure['contractType'], 'query.tokens_db', 'query.parsed_data', transaction_data['txid'], blockinfo['height']))
-                connection.close()
+                connection.close()'''
+
+                close_expire_contract(contractStructure, 'closed', transaction_data['txid'], blockinfo['height'], blockinfo['hash'], 'query.incorporationDate', 'query.expiryDate', blockinfo['time'], blockinfo['time'], 'contract-time-trigger', contractStructure['contractName'], contractStructure['contractAddress'], contractStructure['contractType'], 'query.tokens_db', 'query.parsed_data', blockinfo['height'])                
 
                 updateLatestTransaction(transaction_data, parsed_data, f"{contractStructure['contractName']}-{contractStructure['contractAddress']}")
 
@@ -1805,14 +1810,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             else:
                 rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart Contract named {parsed_data['contractName']} at the address {outputlist[0]} doesn't exist"
                 logger.info(rejectComment)
-                rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', inputadd, outputlist[0], rejectComment)
+                rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', outputlist[0], inputadd, outputlist[0], rejectComment)
                 pushData_SSEapi(rejectComment)
                 return 0
 
         else:
             rejectComment = f"Transaction {transaction_data['txid']} rejected as input address, {inputlist[0]}, is not part of the committee address list"
             logger.info(rejectComment)
-            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+            rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
             pushData_SSEapi(rejectComment)
             return 0
 
@@ -1833,7 +1838,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 if parsed_data['contractAddress'] != outputlist[0]:
                     rejectComment = f"Contract deposit at transaction {transaction_data['txid']} rejected as contractAddress specified in flodata, {parsed_data['contractAddress']}, doesnt not match with transaction's output address {outputlist[0]}"
                     logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', inputadd, outputlist[0], rejectComment)
+                    rejected_contract_transaction_history(transaction_data, parsed_data, 'participation', outputlist[0], inputadd, outputlist[0], rejectComment)
                     # Pass information to SSE channel
                     pushData_SSEapi(f"Error| Mismatch in contract address specified in flodata and the output address of the transaction {transaction_data['txid']}")
                     return 0
@@ -1901,7 +1906,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         else:
             rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {outputlist[0]} doesnt exist"
             logger.info(rejectComment)
-            rejected_contract_transaction_history(transaction_data, parsed_data, 'smartContractDeposit', inputadd, outputlist[0], rejectComment)
+            rejected_contract_transaction_history(transaction_data, parsed_data, 'smartContractDeposit', outputlist[0], inputadd, outputlist[0], rejectComment)
             return 0
     
     elif parsed_data['type'] == 'nftIncorporation':
