@@ -130,10 +130,10 @@ def processBlock(blockindex=None, blockhash=None):
 
     blockinfo = newMultiRequest(f"block/{blockhash}") 
 
-    pause_index = 2291750
+    pause_index = 2324050
     if blockindex == pause_index:
         print(f'Paused at {blockindex}')
-        #sys.exit(0)
+        pdb.set_trace()
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
@@ -152,7 +152,7 @@ def processBlock(blockindex=None, blockhash=None):
         logger.info(f"Transaction {transaction_counter} : {transaction}")
         current_index = -1
         
-        if transaction in ['8eed51ae47575fd78413f9be5a7909cf2653b6fedacf093e35b592319e478b21']:
+        if transaction in ['a9dedd024ee40239caf30c782abd4561c291c95fef3229e640ca8ec0dc7081d6', '2bcdd259f642cf5a901a814b5dafddec62dcdd0848732e7384ba087939c915ac', 'e9a305b20eaa3a4e6e778ec51c4137061ed8e630bdec271944760bd0b9fcc6a8', '606fcad4e73311cc441a494c7e35ad5f8c900f9107bcba3da5076ffa8e243913']:
             pdb.set_trace()
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
@@ -450,11 +450,11 @@ def process_minimum_subscriptionamount(contractStructure, connection):
         # add transaction to ContractTransactionHistory
         session = create_database_session_orm('smart_contract', {'contract_name': f"{contractStructure['contractName']}", 'contract_address': f"{contractStructure['contractAddress']}"}, ContractBase)
         session.add(ContractTransactionHistory(transactionType='trigger',
-                                            transactionSubType='minimumsubscriptionamount-payback',
-                                            transferAmount=None,
-                                            blockNumber=blockinfo['height'],
-                                            blockHash=blockinfo['hash'],
-                                            time=blockinfo['time']))
+                                                transactionSubType='minimumsubscriptionamount-payback',
+                                                transferAmount=None,
+                                                blockNumber=blockinfo['height'],
+                                                blockHash=blockinfo['hash'],
+                                                time=blockinfo['time']))
         session.commit()
         session.close()
         return 1
@@ -470,13 +470,10 @@ def process_maximum_subscriptionamount(contractStructure, connection, status):
             success_returnval = trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_data, blockinfo, parsed_data, connection, contract_name=query.contractName, contract_address=query.contractAddress, transaction_subType='maximumsubscriptionamount')
             if not success_returnval:
                 return 0
-        connection = create_database_connection('system_dbs', {'db_name':'system'})
-        connection.execute('update activecontracts set status="closed", closeDate="{}", expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'], blockinfo['time'], query.contractName, query.contractAddress))
-        connection.execute('update time_actions set status="closed" where contractName="{}" and contractAddress="{}"'.format(query.contractName, query.contractAddress))                            
-        connection.close()
         return 1
     else:
         return 0
+
 
 def check_contract_status(connection, session, contractName, contractAddress):
     # Status of the contract is at 2 tables in system.db
@@ -606,8 +603,7 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                     tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                     # maximumsubscription check, if reached then expire the contract 
                     if 'maximumsubscriptionamount' in contractStructure:
-                        maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
-                        maximumsubscriptionamount = float(maximumsubscriptionamount)
+                        maximumsubscriptionamount = float(contractStructure['maximumsubscriptionamount'])
                         if tokenAmount_sum >= maximumsubscriptionamount:
                             # Expire the contract
                             '''connection = create_database_connection('system_dbs', {'db_name':'system'})
@@ -646,18 +642,19 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                     tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                     # maximumsubscription check, if reached then trigger the contract
                     if 'maximumsubscriptionamount' in contractStructure:
-                        maximumsubscriptionamount = connection.execute('select value from contractstructure where attribute=="maximumsubscriptionamount"').fetchall()[0][0]
-                        maximumsubscriptionamount = float(maximumsubscriptionamount)
+                        maximumsubscriptionamount = float(contractStructure['maximumsubscriptionamount'])
                         if tokenAmount_sum >= maximumsubscriptionamount:
                             # Trigger the contract
                             success_returnval = trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_data, blockinfo, parsed_data, connection, contract_name=query.contractName, contract_address=query.contractAddress, transaction_subType='maximumsubscriptionamount')
                             if not success_returnval:
                                 return 0
     
-                            connection = create_database_connection('system_dbs', {'db_name':'system'})
+                            '''connection = create_database_connection('system_dbs', {'db_name':'system'})
                             connection.execute('update activecontracts set status="closed", closeDate="{}", expiryDate="{}" where contractName="{}" and contractAddress="{}"'.format(blockinfo['time'], blockinfo['time'], query.contractName, query.contractAddress))
                             connection.execute('update time_actions set status="closed" where contractName="{}" and contractAddress="{}"'.format(query.contractName, query.contractAddress))                            
-                            connection.close()
+                            connection.close()'''
+
+                            close_expire_contract(contractStructure, 'closed', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                             return
       
                     if blocktime > query_time: 
@@ -917,9 +914,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             return 0
 
                     # check the status of the contract
-                    connection = create_database_connection('system_dbs', {'db_name':'system'})
-                    contractStatus = connection.execute(f"select status from activecontracts where contractName=='{parsed_data['contractName']}' and contractAddress='{outputlist[0]}'").fetchall()[0][0]
-                    connection.close()
+                    contractStatus = check_contract_status(connection, session, parsed_data['contractName'], outputlist[0])
                     contractList = []
 
                     if contractStatus == 'closed':
@@ -1506,14 +1501,13 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
                     session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
                     
-                    if parsed_data['stateF'] != {}:
+                    if parsed_data['stateF'] != {} and parsed_data['stateF'] is not False:
                         for key, value in parsed_data['stateF'].items():
                             session.add(ContractStructure(attribute=f'statef-{key}', index=0, value=value))
-                        
+                    
                     if 'subtype' in parsed_data['contractConditions']:
                         # todo: Check if the both the tokens mentioned exist if its a token swap
-                        #if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})):
-                        if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})):
+                        if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})):
                             #if (parsed_data['contractConditions']['subtype'] == 'tokenswap'):
                             if parsed_data['contractConditions']['pricetype'] in ['predetermined','statef']:
                                 session.add(ContractStructure(attribute='subtype', index=0, value=parsed_data['contractConditions']['subtype'])) 
@@ -1649,9 +1643,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     return 0
 
                 # check the status of the contract
-                connection = create_database_connection('system_dbs', {'db_name':'system'})
-                contractStatus = connection.execute(f"select status from activecontracts where contractName=='{parsed_data['contractName']}' and contractAddress='{outputlist[0]}'").fetchall()[0][0]
-                connection.close()
+                contractStatus = check_contract_status(connection, session, parsed_data['contractName'], outputlist[0])                
                 contractList = []
 
                 if contractStatus == 'closed':
@@ -1667,11 +1659,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         # now parse the expiry time in python
                         expirytime = result[0].value.strip()
                         expirytime_split = expirytime.split(' ')
-                        parse_string = '{}/{}/{} {}'.format(expirytime_split[3],
-                                                            parsing.months[expirytime_split[1]],
-                                                            expirytime_split[2], expirytime_split[4])
-                        expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(
-                            tzinfo=expirytime_split[5][3:])
+                        parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
+                        expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
                         blocktime_object = parsing.arrow.get(transaction_data['blocktime']).to('Asia/Kolkata')
 
                         if blocktime_object <= expirytime_object:
@@ -1713,16 +1702,13 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                         for participant in contractParticipants:
                             tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                            contractAddress = connection.execute(
-                                'select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                            contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
                             returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0], transaction_data, parsed_data, blockinfo = blockinfo)
                             if returnval is None:
                                 logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                                 return 0
 
-                            connection.execute(
-                                'update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format(
-                                    (participant[1], participant[0], participant[4])))
+                            connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[4])))
 
                         # add transaction to ContractTransactionHistory
                         blockchainReference = neturl + 'tx/' + transaction_data['txid']
@@ -1738,27 +1724,20 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                transactionHash=transaction_data['txid'],
                                                                blockchainReference=blockchainReference,
                                                                jsonData=json.dumps(transaction_data),
-
                                                                parsedFloData=json.dumps(parsed_data)
                                                                ))
                         session.commit()
                         session.close()
 
-                        connection = create_database_connection('system_dbs', {'db_name':'system'})
-                        connection.execute(
-                            'update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(
-                                parsed_data['contractName'], outputlist[0]))
-                        connection.execute(
-                            'update activecontracts set status="{}" where contractName="{}" and contractAddress="{}"'.format(
-                                transaction_data['blocktime'],
-                                parsed_data['contractName'], outputlist[0]))
-                        connection.close()
+                        '''connection = create_database_connection('system_dbs', {'db_name':'system'})
+                        connection.execute('update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(parsed_data['contractName'], outputlist[0]))
+                        connection.execute('update time_actions set status="{}" where contractName="{}" and contractAddress="{}"'.format(parsed_data['contractName'], outputlist[0]))
+                        connection.close()'''
+                        
+                        close_expire_contract(contractStructure, 'closed', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
 
                         updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
-
-                        pushData_SSEapi(
-                            'Trigger | Minimum subscription amount not reached at contract {}-{} at transaction {}. Tokens will be refunded'.format(
-                                parsed_data['contractName'], outputlist[0], transaction_data['txid']))
+                        pushData_SSEapi('Trigger | Minimum subscription amount not reached at contract {}-{} at transaction {}. Tokens will be refunded'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
                         return 1
 
                 # Trigger the contract
@@ -1775,7 +1754,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         if returnval is None:
                             logger.critical("Something went wrong in the token transfer method while doing local Smart Contract Trigger")
                             return 0
-
                         connection.execute(f"INSERT INTO contractwinners (participantAddress, winningAmount, userChoice, transactionHash, blockNumber, blockHash) VALUES('{winner[1]}', {winnerAmount}, '{parsed_data['triggerCondition']}', '{transaction_data['txid']}','{blockinfo['height']}','{blockinfo['hash']}');")
 
                 # add transaction to ContractTransactionHistory
@@ -1822,6 +1800,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             return 0
 
     elif parsed_data['type'] == 'smartContractDeposit':
+        pdb.set_trace()
         if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
             # Check if the transaction hash already exists in the contract db (Safety check)
             connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
@@ -1829,8 +1808,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
             if len(participantAdd_txhash) != 0 and transaction_data['txid'] in list(participantAdd_txhash_T[1]):
-                logger.warning(f"Transaction {transaction_data['txid']} rejected as it already exists in the Smart Contract db. This is unusual, please check your code")
-                pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as it already exists in the Smart Contract db. This is unusual, please check your code")
+                rejectComment = f"Transaction {transaction_data['txid']} rejected as it already exists in the Smart Contract db. This is unusual, please check your code"
+                logger.warning(rejectComment)
+                rejected_contract_transaction_history(transaction_data, parsed_data, 'deposit', outputlist[0], inputadd, outputlist[0], rejectComment)
                 return 0
 
             # if contractAddress was passed, then check if it matches the output address of this contract
@@ -1857,20 +1837,12 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             old_depositBalance = session.query(ContractDeposits.depositBalance).order_by(ContractDeposits.id.desc()).first()
+            pdb.set_trace()
             if old_depositBalance is None:
                 old_depositBalance = 0 
             else:
                 old_depositBalance = old_depositBalance[0]
-            session.add(ContractDeposits( depositorAddress = inputadd,
-                                            depositAmount = parsed_data['depositAmount'],
-                                            depositBalance = old_depositBalance + parsed_data['depositAmount'],
-                                            expiryTime = parsed_data['depositConditions']['expiryTime'],
-                                            unix_expiryTime = convert_datetime_to_arrowobject(parsed_data['depositConditions']['expiryTime']).timestamp,
-                                            status = 'active',
-                                            transactionHash = transaction_data['txid'],
-                                            blockNumber = transaction_data['blockheight'],
-                                            blockHash = transaction_data['blockhash']
-                                            ))
+            session.add(ContractDeposits(depositorAddress = inputadd, depositAmount = parsed_data['depositAmount'], depositBalance = old_depositBalance + parsed_data['depositAmount'], expiryTime = parsed_data['depositConditions']['expiryTime'], unix_expiryTime = convert_datetime_to_arrowobject(parsed_data['depositConditions']['expiryTime']).timestamp(), status = 'active', transactionHash = transaction_data['txid'], blockNumber = transaction_data['blockheight'], blockHash = transaction_data['blockhash']))
             session.add(ContractTransactionHistory(transactionType = 'smartContractDeposit',
                                                     transactionSubType = None,
                                                     sourceFloAddress = inputadd,
