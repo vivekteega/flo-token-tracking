@@ -16,7 +16,7 @@ import parsing
 from config import * 
 from datetime import datetime 
 from ast import literal_eval 
-from models import SystemData, TokenBase, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, TokenContractAssociation, ContractBase, ContractStructure, ContractParticipants, ContractTransactionHistory, ContractDeposits, ConsumedInfo, ContractWinners, ContinuosContractBase, ContractStructure2, ContractParticipants2, ContractDeposits2, ContractTransactionHistory2, SystemBase, ActiveContracts, SystemData, ContractAddressMapping, TokenAddressMapping, DatabaseTypeMapping, TimeActions, RejectedContractTransactionHistory, RejectedTransactionHistory, LatestCacheBase, LatestTransactions, LatestBlocks
+from models import SystemData, TokenBase, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, TokenContractAssociation, ContractBase, ContractStructure, ContractParticipants, ContractTransactionHistory, ContractDeposits, ConsumedInfo, ContractWinners, ContinuosContractBase, ContractStructure2, ContractParticipants2, ContractDeposits2, ContractTransactionHistory2, SystemBase, ActiveContracts, SystemData, ContractAddressMapping, TokenAddressMapping, DatabaseTypeMapping, TimeActions, RejectedContractTransactionHistory, RejectedTransactionHistory, LatestCacheBase, LatestTransactions, LatestBlocks 
 from statef_processing import process_stateF 
 import pdb 
 
@@ -63,7 +63,7 @@ def check_database_existence(type, parameters):
         return os.path.isfile(path)
 
 
-def create_database_connection(type, parameters):
+def create_database_connection(type, parameters=None):
     if type == 'token':
         path = os.path.join(config['DEFAULT']['DATA_PATH'], 'tokens', f"{parameters['token_name']}.db")
         engine = create_engine(f"sqlite:///{path}", echo=True)
@@ -130,10 +130,10 @@ def processBlock(blockindex=None, blockhash=None):
 
     blockinfo = newMultiRequest(f"block/{blockhash}") 
 
-    pause_index = 2324050
-    if blockindex == pause_index:
+    pause_index = [2211699, 2211700, 2211701]
+    if blockindex in pause_index:
         print(f'Paused at {blockindex}')
-        pdb.set_trace()
+        #pdb.set_trace()
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
@@ -153,7 +153,7 @@ def processBlock(blockindex=None, blockhash=None):
         current_index = -1
         
         if transaction in ['a9dedd024ee40239caf30c782abd4561c291c95fef3229e640ca8ec0dc7081d6', '2bcdd259f642cf5a901a814b5dafddec62dcdd0848732e7384ba087939c915ac', 'e9a305b20eaa3a4e6e778ec51c4137061ed8e630bdec271944760bd0b9fcc6a8', '606fcad4e73311cc441a494c7e35ad5f8c900f9107bcba3da5076ffa8e243913']:
-            pdb.set_trace()
+            pass
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -424,7 +424,11 @@ def trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_da
                                                 transferAmount=transferAmount,
                                                 blockNumber=blockinfo['height'],
                                                 blockHash=blockinfo['hash'],
-                                                time=blockinfo['time']))
+                                                time=blockinfo['time'],
+                                                transactionHash=transaction_data['txid'],
+                                                jsonData=json.dumps(transaction_data),
+                                                parsedFloData=json.dumps(parsed_data)
+                                                ))
             session.commit()
             session.close()
         
@@ -479,7 +483,8 @@ def check_contract_status(connection, session, contractName, contractAddress):
     # Status of the contract is at 2 tables in system.db
     # activecontracts and time_actions
     # select the last entry form the colum 
-    contract_status = connection.execute('SELECT status FROM time_actions WHERE id=(SELECT MAX(id) FROM time_actions WHERE contractName="" AND contractAddress="")').fetchall()
+    connection = create_database_connection('system_dbs')
+    contract_status = connection.execute(f'SELECT status FROM time_actions WHERE id=(SELECT MAX(id) FROM time_actions WHERE contractName="{contractName}" AND contractAddress="{contractAddress}")').fetchall()
     return contract_status[0][0]
 
 
@@ -634,10 +639,20 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                 
                 elif 'payeeAddress' in contractStructure: # Internal trigger contract type
                     # TODO - FIGURE A BETTER SOLUTION FOR THIS 
+                    tx_type = 'internalTrigger'
+                    data = [blockinfo['hash'], blockinfo['height'] , blockinfo['time'], blockinfo['size'], tx_type]
+
+                    response = requests.get(f'https://stdops.ranchimall.net/hash?data={data}')
+                    if response.status_code == 200:
+                        txid = response.json()
+                    elif response.status_code == 404:
+                        logger.info('Internal trigger has failed')
+                        sys.exit(0)
+
                     transaction_data = {}
-                    transaction_data['txid'] = 'internalTrigger'
+                    transaction_data['txid'] = txid
                     parsed_data = {}
-                    parsed_data['type'] = 'internalTrigger'
+                    parsed_data['type'] = tx_type
 
                     tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
                     # maximumsubscription check, if reached then trigger the contract
@@ -678,7 +693,7 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                         connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None,query.time, query.activity, 'expired', query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, query.transactionHash, blockinfo['height']))
                         connection.close()'''
 
-                        close_expire_contract(contractStructure, 'expired', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
+                        close_expire_contract(contractStructure, 'closed', query.transactionHash, query.blockNumber, blockinfo['hash'], 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                         return
 
 
@@ -914,7 +929,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             return 0
 
                     # check the status of the contract
-                    contractStatus = check_contract_status(connection, session, parsed_data['contractName'], outputlist[0])
+                    contractStatus = check_contract_status(connection, contract_session, parsed_data['contractName'], outputlist[0])
                     contractList = []
 
                     if contractStatus == 'closed':
@@ -1800,7 +1815,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             return 0
 
     elif parsed_data['type'] == 'smartContractDeposit':
-        pdb.set_trace()
         if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
             # Check if the transaction hash already exists in the contract db (Safety check)
             connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
@@ -1837,7 +1851,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
             old_depositBalance = session.query(ContractDeposits.depositBalance).order_by(ContractDeposits.id.desc()).first()
-            pdb.set_trace()
             if old_depositBalance is None:
                 old_depositBalance = 0 
             else:
