@@ -103,10 +103,89 @@ def create_database_session_orm(type, parameters, base):
     return session
 
 
+def add_transaction_history(token_name, sourceFloAddress, destFloAddress, transferAmount, blockNumber, blockHash, blocktime, transactionHash, jsonData, transactionType, parsedFloData):
+    session = create_database_session_orm('token', {'token_name': token_name}, TokenBase)
+    blockchainReference = neturl + 'tx/' + transactionHash
+    session.add(TransactionHistory(
+                                    sourceFloAddress=sourceFloAddress, 
+                                    destFloAddress=destFloAddress,
+                                    transferAmount=transferAmount,
+                                    blockNumber=blockNumber,
+                                    blockHash=blockHash,
+                                    blocktime=blocktime,
+                                    transactionHash=transactionHash,
+                                    blockchainReference=blockchainReference,
+                                    jsonData=jsonData,
+                                    transactionType=transactionType,
+                                    parsedFloData=parsedFloData
+                                ))
+    session.commit()
+    session.close()
+
+
+def add_contract_transaction_history(contract_name, contract_address, transactionType, transactionSubType, sourceFloAddress, destFloAddress, transferAmount, blockNumber, blockHash, blocktime, transactionHash, jsonData, parsedFloData):
+    session = create_database_session_orm('smart_contract', {'contract_name': f"{contract_name}", 'contract_address': f"{contract_address}"}, ContractBase)
+    blockchainReference = neturl + 'tx/' + transactionHash
+    session.add(ContractTransactionHistory(transactionType=transactionType,
+                                            sourceFloAddress=sourceFloAddress,
+                                            destFloAddress=destFloAddress,
+                                            transferAmount=transferAmount,
+                                            blockNumber=blockNumber,
+                                            blockHash=blockHash,
+                                            blocktime=blocktime,
+                                            transactionHash=transactionHash,
+                                            blockchainReference=blockchainReference,
+                                            jsonData=jsonData,
+                                            parsedFloData=parsedFloData
+                                            ))
+    session.commit()
+    session.close()
+
+
+def rejected_transaction_history(transaction_data, parsed_data, sourceFloAddress, destFloAddress, rejectComment):
+    session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
+    blockchainReference = neturl + 'tx/' + transaction_data['txid']
+    session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
+                                        sourceFloAddress=sourceFloAddress, destFloAddress=destFloAddress,
+                                        transferAmount=parsed_data['tokenAmount'],
+                                        blockNumber=transaction_data['blockheight'],
+                                        blockHash=transaction_data['blockhash'],
+                                        time=transaction_data['blocktime'],
+                                        transactionHash=transaction_data['txid'],
+                                        blockchainReference=blockchainReference,
+                                        jsonData=json.dumps(transaction_data),
+                                        rejectComment=rejectComment,
+                                        transactionType=parsed_data['type'],
+                                        parsedFloData=json.dumps(parsed_data)
+                                        ))
+    session.commit()
+    session.close()
+
+
+def rejected_contract_transaction_history(transaction_data, parsed_data, transactionType, contractAddress, sourceFloAddress, destFloAddress, rejectComment):
+    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+    blockchainReference = neturl + 'tx/' + transaction_data['txid']
+    session.add(RejectedContractTransactionHistory(transactionType=transactionType,
+                                                    contractName=parsed_data['contractName'],
+                                                    contractAddress=contractAddress,
+                                                    sourceFloAddress=sourceFloAddress,
+                                                    destFloAddress=destFloAddress,
+                                                    transferAmount=None,
+                                                    blockNumber=transaction_data['blockheight'],
+                                                    blockHash=transaction_data['blockhash'],
+                                                    time=transaction_data['blocktime'],
+                                                    transactionHash=transaction_data['txid'],
+                                                    blockchainReference=blockchainReference,
+                                                    jsonData=json.dumps(transaction_data),
+                                                    rejectComment=rejectComment,
+                                                    parsedFloData=json.dumps(parsed_data)))
+    session.commit()
+    session.close()    
+
+
 def convert_datetime_to_arrowobject(expiryTime):
     expirytime_split = expiryTime.split(' ')
-    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]],
-                                        expirytime_split[2], expirytime_split[4])
+    parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
     expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
     return expirytime_object
 
@@ -160,14 +239,6 @@ def processBlock(blockindex=None, blockhash=None):
             transaction_data = newMultiRequest(f"tx/{transaction}")
             try:
                 text = transaction_data["floData"]
-                # TODO CLEANUP - REMOVE TEXT STUB AFTER TESTING
-                '''text = Create Smart Contract with the name swap-bitcoin-bioscope@ of the type continuous-event* 
-                    at the address stateF=address:oPkHWcvqBHfCortTHScrVBjXLsZhWie99C:bitcoin_price_source:bitpay:usd_inr_exchange_source:bitpay end-stateF oYzeeUBWRpzRuczW6myh2LHGnXPyR2Bc6k$ with contract-conditions :
-                    (1) subtype = tokenswap
-                    (2) accepting_token = bitcoin#
-                    (3) selling_token = bioscope#
-                    (4) price = "15"
-                    (5) priceType="statef" end-contract-conditions'''
                 text = text.replace("\n", " \n ")
                 current_index = 2
             except:
@@ -244,15 +315,9 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
     if isInfiniteToken == True:
         # Make new entry 
         session.add(ActiveTable(address=outputAddress, consumedpid='1', transferBalance=float(tokenAmount), blockNumber=blockinfo['height']))
-        blockchainReference = neturl + 'tx/' + transaction_data['txid']
-        session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,
-                                        transferAmount=tokenAmount, blockNumber=blockinfo['height'],
-                                        blockHash=blockinfo['hash'], time=blockinfo['time'],
-                                        transactionHash=transaction_data['txid'],
-                                        blockchainReference=blockchainReference, 
-                                        jsonData=json.dumps(transaction_data),
-                                        transactionType=parsed_data['type'],
-                                        parsedFloData=json.dumps(parsed_data)))
+        
+        add_transaction_history(token_name=tokenIdentification, sourceFloAddress=inputAddress, destFloAddress=outputAddress, transferAmount=tokenAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
+
         session.commit()
         session.close()
         return 1
@@ -381,9 +446,9 @@ def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress,
                     session.execute('INSERT INTO consumedTable (id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber) SELECT id, address, parentid, consumedpid, transferBalance, addressBalance, orphaned_parentid, blockNumber FROM activeTable WHERE id={}'.format(piditem[0]))
                     session.execute('DELETE FROM activeTable WHERE id={}'.format(piditem[0]))
                 session.commit()
-    
-            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            session.add(TransactionHistory(sourceFloAddress=inputAddress, destFloAddress=outputAddress,transferAmount=tokenAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], time=blockinfo['time'], transactionHash=transaction_data['txid'], blockchainReference=blockchainReference, jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data)))
+                
+            add_transaction_history(token_name=tokenIdentification, sourceFloAddress=inputAddress, destFloAddress=outputAddress, transferAmount=tokenAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
+            
             session.commit()
             session.close()
             return 1
@@ -393,17 +458,8 @@ def trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_da
     # Trigger the contract
     if tokenAmount_sum <= 0:
         # Add transaction to ContractTransactionHistory
-        session = create_database_session_orm('smart_contract', {'contract_name': f"{contract_name}", 'contract_address': f"{contract_address}"}, ContractBase)
-        session.add(ContractTransactionHistory(transactionType='trigger',
-                                            transactionSubType='zero-participation',
-                                            sourceFloAddress='',
-                                            destFloAddress='',
-                                            transferAmount=0,
-                                            blockNumber=blockinfo['height'],
-                                            blockHash=blockinfo['hash'],
-                                            time=blockinfo['time']))
-        session.commit()
-        session.close()
+        add_contract_transaction_history(contract_name=contract_name, contract_address=contract_address, transactionType='trigger', transactionSubType='zero-participation', sourceFloAddress='', destFloAddress='', transferAmount=0, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=None, parsedFloData=None)
+
     else:
         payeeAddress = json.loads(contractStructure['payeeAddress'])
         tokenIdentification = contractStructure['tokenIdentification']
@@ -416,22 +472,8 @@ def trigger_internal_contract(tokenAmount_sum, contractStructure, transaction_da
                 return 0
 
             # Add transaction to ContractTransactionHistory
-            session = create_database_session_orm('smart_contract', {'contract_name': f"{contract_name}", 'contract_address': f"{contract_address}"}, ContractBase)
-            session.add(ContractTransactionHistory(transactionType='trigger',
-                                                transactionSubType=transaction_subType,
-                                                sourceFloAddress=contract_address,
-                                                destFloAddress=floaddress,
-                                                transferAmount=transferAmount,
-                                                blockNumber=blockinfo['height'],
-                                                blockHash=blockinfo['hash'],
-                                                time=blockinfo['time'],
-                                                transactionHash=transaction_data['txid'],
-                                                jsonData=json.dumps(transaction_data),
-                                                parsedFloData=json.dumps(parsed_data)
-                                                ))
-            session.commit()
-            session.close()
-        
+            add_contract_transaction_history(contract_name=contract_name, contract_address=contract_address, transactionType='trigger', transactionSubType=transaction_subType, sourceFloAddress=contract_address, destFloAddress=floaddress, transferAmount=transferAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
+
     return 1
 
 
@@ -452,15 +494,8 @@ def process_minimum_subscriptionamount(contractStructure, connection):
             connection.execute('update contractparticipants set winningAmount="{}" where participantAddress="{}" and transactionHash="{}"'.format((participant[1], participant[0], participant[2])))
 
         # add transaction to ContractTransactionHistory
-        session = create_database_session_orm('smart_contract', {'contract_name': f"{contractStructure['contractName']}", 'contract_address': f"{contractStructure['contractAddress']}"}, ContractBase)
-        session.add(ContractTransactionHistory(transactionType='trigger',
-                                                transactionSubType='minimumsubscriptionamount-payback',
-                                                transferAmount=None,
-                                                blockNumber=blockinfo['height'],
-                                                blockHash=blockinfo['hash'],
-                                                time=blockinfo['time']))
-        session.commit()
-        session.close()
+        add_contract_transaction_history(contract_name=contractStructure['contractName'], contract_address=contractStructure['contractAddress'], transactionType='trigger', transactionSubType='minimumsubscriptionamount-payback', sourceFloAddress=None, destFloAddress=None, transferAmount=None, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=None, jsonData=None, parsedFloData=None)
+                
         return 1
     else:
         return 0
@@ -568,20 +603,7 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                         blockHash = blockinfo['hash']
                     ))
 
-                    contract_db.add(ContractTransactionHistory(
-                        transactionType = 'smartContractDepositReturn',
-                        transactionSubType = '',
-                        sourceFloAddress = query.contractAddress,
-                        destFloAddress = depositorAddress,
-                        transferAmount = returnAmount,
-                        blockNumber = blockinfo['height'],
-                        blockHash = blockinfo['hash'],
-                        time = blockinfo['time'],
-                        transactionHash = deposit_query.transactionHash,
-                        blockchainReference = '',
-                        jsonData = '',
-                        parsedFloData = ''
-                    ))
+                    add_contract_transaction_history(contract_name=query.contractName, contract_address=query.contractAddress, transactionType='smartContractDepositReturn', transactionSubType=None, sourceFloAddress=query.contractAddress, destFloAddress=depositorAddress, transferAmount=returnAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=deposit_query.transactionHash, jsonData=None, parsedFloData=None)
 
                     systemdb_session.add(TimeActions(
                         time = query.time,
@@ -714,47 +736,6 @@ def extract_contractStructure(contractName, contractAddress):
     del counter, conditionDict
 
     return contractStructure
-
-
-def rejected_transaction_history(transaction_data, parsed_data, sourceFloAddress, destFloAddress, rejectComment):
-    session = create_database_session_orm('system_dbs', {'db_name': "system"}, TokenBase)
-    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-    session.add(RejectedTransactionHistory(tokenIdentification=parsed_data['tokenIdentification'],
-                                        sourceFloAddress=sourceFloAddress, destFloAddress=destFloAddress,
-                                        transferAmount=parsed_data['tokenAmount'],
-                                        blockNumber=transaction_data['blockheight'],
-                                        blockHash=transaction_data['blockhash'],
-                                        time=transaction_data['blocktime'],
-                                        transactionHash=transaction_data['txid'],
-                                        blockchainReference=blockchainReference,
-                                        jsonData=json.dumps(transaction_data),
-                                        rejectComment=rejectComment,
-                                        transactionType=parsed_data['type'],
-                                        parsedFloData=json.dumps(parsed_data)
-                                        ))
-    session.commit()
-    session.close()
-
-
-def rejected_contract_transaction_history(transaction_data, parsed_data, transactionType, contractAddress, sourceFloAddress, destFloAddress, rejectComment):
-    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-    session.add(RejectedContractTransactionHistory(transactionType=transactionType,
-                                                    contractName=parsed_data['contractName'],
-                                                    contractAddress=contractAddress,
-                                                    sourceFloAddress=sourceFloAddress,
-                                                    destFloAddress=destFloAddress,
-                                                    transferAmount=None,
-                                                    blockNumber=transaction_data['blockheight'],
-                                                    blockHash=transaction_data['blockhash'],
-                                                    time=transaction_data['blocktime'],
-                                                    transactionHash=transaction_data['txid'],
-                                                    blockchainReference=blockchainReference,
-                                                    jsonData=json.dumps(transaction_data),
-                                                    rejectComment=rejectComment,
-                                                    parsedFloData=json.dumps(parsed_data)))
-    session.commit()
-    session.close()    
 
 
 def processTransaction(transaction_data, parsed_data, blockinfo):
@@ -1030,21 +1011,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     session.commit()
 
                                     # Store transfer as part of ContractTransactionHistory
-                                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                                    session.add(ContractTransactionHistory(transactionType='participation',
-                                                                            sourceFloAddress=inputadd,
-                                                                            destFloAddress=outputlist[0],
-                                                                            transferAmount=parsed_data['tokenAmount'],
-                                                                            blockNumber=transaction_data['blockheight'],
-                                                                            blockHash=transaction_data['blockhash'],
-                                                                            time=transaction_data['blocktime'],
-                                                                            transactionHash=transaction_data['txid'],
-                                                                            blockchainReference=blockchainReference,
-                                                                            jsonData=json.dumps(transaction_data),
-                                                                            parsedFloData=json.dumps(parsed_data)
-                                                                            ))
-                                    session.commit()
-                                    session.close()
+                                    add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=outputlist[0], transactionType='participation', transactionSubType=None, sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
 
                                     # Store a mapping of participant address -> Contract participated in
                                     session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
@@ -1119,27 +1086,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         returnval = transferToken(parsed_data['tokenIdentification'], transferAmount, inputlist[0], outputlist[0], transaction_data, parsed_data, blockinfo = blockinfo)
                         if returnval is not None:
                             # Store participant details in the smart contract's db
-                            session.add(ContractParticipants(participantAddress=inputadd,
-                                                                tokenAmount=transferAmount,
-                                                                userChoice='-',
-                                                                transactionHash=transaction_data['txid'],
-                                                                blockNumber=transaction_data['blockheight'],
-                                                                blockHash=transaction_data['blockhash']))
+                            session.add(ContractParticipants(participantAddress=inputadd, tokenAmount=transferAmount, userChoice='-', transactionHash=transaction_data['txid'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash']))
 
                             # Store transfer as part of ContractTransactionHistory
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(ContractTransactionHistory(transactionType='participation',
-                                                                    sourceFloAddress=inputadd,
-                                                                    destFloAddress=outputlist[0],
-                                                                    transferAmount=transferAmount,
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash'],
-                                                                    time=transaction_data['blocktime'],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockchainReference=blockchainReference,
-                                                                    jsonData=json.dumps(transaction_data),
-                                                                    parsedFloData=json.dumps(parsed_data)
-                                                                    ))
+                            add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=outputlist[0], transactionType='participation', transactionSubType=None, sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=transferAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
                             session.commit()
                             session.close()
 
@@ -1287,19 +1237,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         blockHash= blockinfo['hash'],
                                                                         winningAmount = swapAmount))
 
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            contract_session.add(ContractTransactionHistory( transactionType = 'participation',
-                                                                                transactionSubType = 'swap',
-                                                                                sourceFloAddress = inputlist[0],
-                                                                                destFloAddress = outputlist[0],
-                                                                                transferAmount = swapAmount,
-                                                                                blockNumber = blockinfo['height'],
-                                                                                blockHash = blockinfo['hash'],
-                                                                                time = blockinfo['time'],
-                                                                                transactionHash = transaction_data['txid'],
-                                                                                blockchainReference = blockchainReference,
-                                                                                jsonData = json.dumps(transaction_data),
-                                                                                parsedFloData = json.dumps(parsed_data)))
+                            add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=outputlist[0], transactionType='participation', transactionSubType='swap', sourceFloAddress=inputlist[0], destFloAddress=outputlist[0], transferAmount=swapAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
+                            
                             contract_session.commit()
                             contract_session.close()
 
@@ -1339,17 +1278,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
                                         blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
-                                        transactionHash=transaction_data['txid']))
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                            transferAmount=parsed_data['tokenAmount'],
-                                            blockNumber=transaction_data['blockheight'],
-                                            blockHash=transaction_data['blockhash'],
-                                            time=transaction_data['blocktime'],
-                                            transactionHash=transaction_data['txid'],
-                                            blockchainReference=blockchainReference,
-                                            jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'],
-                                            parsedFloData=json.dumps(parsed_data)))
+                                        transactionHash=transaction_data['txid']))            
+                
+                add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=transaction_data['blocktime'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
+                
                 session.commit()
                 session.close()
 
@@ -1424,18 +1356,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         session.add(ContractStructure(attribute='payeeAddress', index=0, value=json.dumps(parsed_data['contractConditions']['payeeAddress'])))
 
                     # Store transfer as part of ContractTransactionHistory
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session.add(ContractTransactionHistory(transactionType='incorporation', sourceFloAddress=inputadd,
-                                                           destFloAddress=outputlist[0],
-                                                           transferAmount=None,
-                                                           blockNumber=transaction_data['blockheight'],
-                                                           blockHash=transaction_data['blockhash'],
-                                                           time=transaction_data['blocktime'],
-                                                           transactionHash=transaction_data['txid'],
-                                                           blockchainReference=blockchainReference,
-                                                           jsonData=json.dumps(transaction_data),
-                                                           parsedFloData=json.dumps(parsed_data)
-                                                           ))
+                    add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=parsed_data['contractAddress'], transactionType='incorporation', transactionSubType=None, sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=None, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
+                    
                     session.commit()
                     session.close()
 
@@ -1911,16 +1833,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
                                         blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
                                         transactionHash=transaction_data['txid']))
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                            transferAmount=parsed_data['tokenAmount'],
-                                            blockNumber=transaction_data['blockheight'],
-                                            blockHash=transaction_data['blockhash'],
-                                            time=transaction_data['blocktime'],
-                                            transactionHash=transaction_data['txid'],
-                                            blockchainReference=blockchainReference,
-                                            jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'],
-                                            parsedFloData=json.dumps(parsed_data)))
+                                
+                add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=transaction_data['blocktime'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
+                
                 session.commit()
                 session.close()
 
@@ -1957,17 +1872,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
                                         blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
                                         transactionHash=transaction_data['txid']))
-                blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                tokendb_session.add(TransactionHistory(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                            transferAmount=parsed_data['tokenAmount'],
-                                            blockNumber=transaction_data['blockheight'],
-                                            blockHash=transaction_data['blockhash'],
-                                            time=transaction_data['blocktime'],
-                                            transactionHash=transaction_data['txid'],
-                                            blockchainReference=blockchainReference,
-                                            jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'],
-                                            parsedFloData=json.dumps(parsed_data)))
+                
+                add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
 
+                
                 # add it to token address to token mapping db table
                 connection = create_database_connection('system_dbs', {'db_name':'system'})
                 connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
