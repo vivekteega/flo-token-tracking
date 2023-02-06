@@ -208,7 +208,6 @@ def processBlock(blockindex=None, blockhash=None):
         blockhash = response['blockHash'] 
 
     blockinfo = newMultiRequest(f"block/{blockhash}") 
-
     pause_index = [2211699, 2211700, 2211701]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
@@ -805,6 +804,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
     logger.info(f"Input address list : {inputlist}")
     logger.info(f"Output address list : {outputlist}")
+
+    transaction_data['senderAddress'] = inputlist[0]
+    transaction_data['receiverAddress'] = outputlist[0]
 
     # All FLO checks completed at this point.
     # Semantic rules for parsed data begins
@@ -1984,7 +1986,7 @@ logger.addHandler(file_handler)
 logger.addHandler(stream_handler)
 
 
-#  Rule 1 - Read command line arguments to reset the databases as blank
+#  Rule 1     - Read command line arguments to reset the databases as blank
 #  Rule 2     - Read config to set testnet/mainnet
 #  Rule 3     - Set flo blockexplorer location depending on testnet or mainnet
 #  Rule 4     - Set the local flo-cli path depending on testnet or mainnet ( removed this feature | Flosights are the only source )

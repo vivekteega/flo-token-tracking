@@ -8,7 +8,6 @@ SystemBase = declarative_base()
 LatestCacheBase = declarative_base()
 
 
-
 class ActiveTable(TokenBase):
     __tablename__ = "activeTable"
 
