@@ -417,7 +417,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 searchResult = pattern.search(rule).group(2)
                 minimumsubscriptionamount = searchResult.split(marker)[0]
                 try:
-                    extractedRules['minimumsubscrbyiptionamount'] = float(minimumsubscriptionamount)
+                    extractedRules['minimumsubscriptionamount'] = float(minimumsubscriptionamount)
                 except:
                     logger.info("Minimum subscription amount entered is not a decimal")
             elif rule[:25] == 'maximumsubscriptionamount':
@@ -453,8 +453,16 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 pattern = re.compile('(?<=accepting_token\s=\s)(.*)(?<!#)')
                 accepting_token = pattern.search(rule).group(1)
                 extractedRules['accepting_token'] = accepting_token
+            elif rule[:15] == 'acceptingToken':
+                pattern = re.compile('(?<=acceptingToken\s=\s)(.*)(?<!#)')
+                accepting_token = pattern.search(rule).group(1)
+                extractedRules['accepting_token'] = accepting_token
             elif rule[:13] == 'selling_token':
                 pattern = re.compile('(?<=selling_token\s=\s)(.*)(?<!#)')
+                selling_token = pattern.search(rule).group(1)
+                extractedRules['selling_token'] = selling_token
+            elif rule[:13] == 'sellingToken':
+                pattern = re.compile('(?<=sellingToken\s=\s)(.*)(?<!#)')
                 selling_token = pattern.search(rule).group(1)
                 extractedRules['selling_token'] = selling_token
             elif rule[:9] == 'pricetype':
@@ -1243,7 +1251,7 @@ def parse_flodata(text, blockinfo, net):
             else:
                 #assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
                 assert contract_conditions['priceType'] == 'statef'
-        except AssertionError:
+        except AssertionError: 
             return outputreturn('noise')
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping)
     
