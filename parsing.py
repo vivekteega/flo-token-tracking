@@ -1013,8 +1013,8 @@ def parse_flodata(text, blockinfo, net):
         if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", tokenname):
             return outputreturn('noise')
 
-        isNFT = check_word_existence_instring('nft', processed_text )           
-        
+        isNFT = check_word_existence_instring('nft', processed_text)           
+
         isInfinite = check_word_existence_instring('infinite-token', processed_text)
 
         tokenamount = apply_rule1(extractAmount_rule_new, processed_text)
@@ -1027,7 +1027,7 @@ def parse_flodata(text, blockinfo, net):
 
         ##################################################
         
-        if (not tokenamount and not isInfinite) or (isNFT and not tokenamount.is_integer() and not isInfinite) or (isInfinite and tokenamount is not False and isNFT is not False) or tokenamount==0:
+        if (not tokenamount and not isInfinite) or (isNFT and not tokenamount.is_integer() and not isInfinite) or (isInfinite and tokenamount is not False and isNFT is not False) or tokenamount<=0:
             return outputreturn('noise')
         operation = apply_rule1(selectCategory, processed_text, send_category, create_category)
         if operation == 'category1' and tokenamount is not None:
@@ -1082,21 +1082,24 @@ def parse_flodata(text, blockinfo, net):
             if 'contractAmount' in contract_conditions.keys():
                 contractAmount = contract_conditions['contractAmount']
                 try:
-                    float(contractAmount)
+                    if float(contractAmount)<=0:
+                        return outputreturn('noise') 
                 except:
                     return outputreturn('noise')
             minimum_subscription_amount = ''
             if 'minimumsubscriptionamount' in contract_conditions.keys():
                 minimum_subscription_amount = contract_conditions['minimumsubscriptionamount']
                 try:
-                    float(minimum_subscription_amount)
+                    if float(minimum_subscription_amount)<=0:
+                        return outputreturn('noise')
                 except:
                     return outputreturn('noise')
             maximum_subscription_amount = ''
             if 'maximumsubscriptionamount' in contract_conditions.keys():
                 maximum_subscription_amount = contract_conditions['maximumsubscriptionamount']
                 try:
-                    float(maximum_subscription_amount)
+                    if float(maximum_subscription_amount)<=0:
+                        return outputreturn('noise')
                 except:
                     return outputreturn('noise')
 
@@ -1164,6 +1167,11 @@ def parse_flodata(text, blockinfo, net):
                 tokenamount = apply_rule1(extractAmount_rule_new1, processed_text, 'userchoice:', 'pre')
                 if not tokenamount:
                     return outputreturn('noise')
+                try:
+                    if float(tokenamount)<=0:
+                        return outputreturn('noise')
+                except:
+                    return outputreturn('noise')
                 userchoice = extract_userchoice(processed_text)
                 # todo - do we need more validations for user choice?
                 if not userchoice:
@@ -1175,6 +1183,11 @@ def parse_flodata(text, blockinfo, net):
                 tokenamount = apply_rule1(extractAmount_rule_new1, processed_text, 'deposit-conditions:', 'pre')
                 if not tokenamount:
                     return outputreturn('noise')
+                try:
+                    if float(tokenamount)<=0:
+                        return outputreturn('noise')
+                except:
+                    return outputreturn('noise')
                 deposit_conditions = extract_deposit_conditions(processed_text, blocktime=blockinfo['time'])
                 if not deposit_category:
                     return outputreturn("noise")
@@ -1183,13 +1196,17 @@ def parse_flodata(text, blockinfo, net):
     if first_classification['categorization'] == 'smart-contract-participation-ote-ce-C':
         # There is no way to properly differentiate between one-time-event-time-trigger participation and token swap participation 
         # so we merge them in output return 
-
         tokenname = first_classification['wordlist'][0][:-1]
         if not check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", tokenname):
             return outputreturn('noise')
 
         tokenamount = apply_rule1(extractAmount_rule_new1, processed_text)
         if not tokenamount:
+            return outputreturn('noise')
+        try:
+            if float(tokenamount)<=0:
+                return outputreturn('noise')
+        except:
             return outputreturn('noise')
         
         contract_name = extract_special_character_word(first_classification['wordlist'],'@')
@@ -1247,7 +1264,7 @@ def parse_flodata(text, blockinfo, net):
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['selling_token'])
             if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined":
-                assert float(contract_conditions['price'])
+                assert float(contract_conditions['price'])>=0
             else:
                 #assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
                 assert contract_conditions['priceType'] == 'statef'
