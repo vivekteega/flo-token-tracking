@@ -103,6 +103,12 @@ def create_database_session_orm(type, parameters, base):
     return session
 
 
+def delete_contract_database(parameters):
+    if check_database_existence('smart_contract', {'contract_name':f"{parameters['contract_name']}", 'contract_address':f"{parameters['contract_address']}"}):
+        path = os.path.join(config['DEFAULT']['DATA_PATH'], 'smartContracts', f"{parameters['contract_name']}-{parameters['contract_address']}.db")
+        os.remove(path)
+
+
 def add_transaction_history(token_name, sourceFloAddress, destFloAddress, transferAmount, blockNumber, blockHash, blocktime, transactionHash, jsonData, transactionType, parsedFloData):
     session = create_database_session_orm('token', {'token_name': token_name}, TokenBase)
     blockchainReference = neturl + 'tx/' + transactionHash
@@ -208,10 +214,10 @@ def processBlock(blockindex=None, blockhash=None):
         blockhash = response['blockHash'] 
 
     blockinfo = newMultiRequest(f"block/{blockhash}") 
-    pause_index = [2211699, 2211700, 2211701]
+    pause_index = [2211699, 2211700, 2211701, 2170000]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
-        #pdb.set_trace()
+        #sys.exit(0)
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
@@ -720,7 +726,7 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
 
 def extract_contractStructure(contractName, contractAddress):
     connection = create_database_connection('smart_contract', {'contract_name':f"{contractName}", 'contract_address':f"{contractAddress}"})
-    attributevaluepair = connection.execute("select attribute, value from contractstructure where attribute != 'flodata'").fetchall()
+    attributevaluepair = connection.execute("SELECT attribute, value FROM contractstructure WHERE attribute != 'flodata'").fetchall()
     contractStructure = {}
     conditionDict = {}
     counter = 0
@@ -747,7 +753,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     # vins. However in any single transaction the system considers valid, they can be only one source address from which the flodata is
     # originting. To ensure consistency, we will have to check that even if there are more than one vins in a transaction, there should be
     # exactly one FLO address on the originating side and that FLO address should be the owner of the asset tokens being transferred
-
 
     # Create vinlist and outputlist
     vinlist = []
@@ -1322,6 +1327,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     rejectComment = f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                     logger.info(rejectComment)
                     rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                    delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
                     return 0
 
                 # userchoice and payeeAddress conditions cannot come together. Check for it
@@ -1329,6 +1335,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     rejectComment = f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                     logger.info(rejectComment)
                     rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                    delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
                     return 0
 
                 # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
@@ -1428,6 +1435,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     logger.info(rejectComment)
                     rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
                     pushData_SSEapi(f"Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {transaction_data['txid']}")
+                    delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
                     return 0
         
             if parsed_data['contractType'] == 'continuous-event' or parsed_data['contractType'] == 'continuos-event':
@@ -1477,8 +1485,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 accepting_sending_tokenlist = [parsed_data['contractConditions']['accepting_token'], parsed_data['contractConditions']['selling_token']]
                                 for token_name in accepting_sending_tokenlist:
                                     token_name = token_name.split('#')[0]
-                                    if token_name == 'bitcoin':
-                                        continue
                                     session = create_database_session_orm('token', {'token_name': f"{token_name}"}, TokenBase)
                                     session.add(TokenContractAssociation(tokenIdentification=token_name,
                                                                             contractName=parsed_data['contractName'],
@@ -1528,21 +1534,28 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 rejectComment = f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                                 logger.info(rejectComment)
                                 rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                                delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
                                 return 0
                     
+                        else:
+                            rejectComment = f"One of the token for the swap does not exist.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                            logger.info(rejectComment)
+                            rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                            delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
+                            return 0
+
                     else:
                         rejectComment = f"No subtype provided || mentioned tokens do not exist for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                         logger.info(rejectComment)
                         rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                        delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
                         return 0
-
-                    session.commit()
-                    session.close()
 
         else:
             rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists"
             logger.info(rejectComment)
             rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+            delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
             return 0
 
     elif parsed_data['type'] == 'smartContractPays':
