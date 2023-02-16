@@ -85,11 +85,12 @@ def refresh_committee_list(admin_flo_id, api_url):
         transaction_info = requests.get(f'{api_url}api/tx/{transaction}')
         if transaction_info.status_code == 200:
             transaction_info = transaction_info.json()
-            try:
-                tx_flodata = json.loads(transaction_info['floData'])
-                committee_list += process_committee_flodata(tx_flodata)
-            except:
-                continue
+            if transaction_info['vin'][0]['addr'] == admin_flo_id:
+                try:
+                    tx_flodata = json.loads(transaction_info['floData'])
+                    committee_list += process_committee_flodata(tx_flodata)
+                except:
+                    continue
     return committee_list
 
 
