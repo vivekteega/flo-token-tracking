@@ -60,11 +60,13 @@ def process_committee_flodata(flodata):
     except KeyError:
         print('Flodata related to contract committee')
     else:
+        # Adding first and removing later to maintain consistency and not to depend on floData for order of execution
         for action in contract_committee_actions.keys():
             if action == 'add':
                 for floid in contract_committee_actions[f'{action}']:
                     flo_address_list.append(floid)
-            
+
+        for action in contract_committee_actions.keys():
             if action == 'remove':
                 for floid in contract_committee_actions[f'{action}']:
                     flo_address_list.remove(floid)
@@ -72,7 +74,7 @@ def process_committee_flodata(flodata):
         return flo_address_list
 
 
-def refresh_committee_list(admin_flo_id, api_url):
+def refresh_committee_list(admin_flo_id, api_url, blocktime):
     response = requests.get(f'{api_url}api/addr/{admin_flo_id}')
     if response.status_code == 200:
         response = response.json()
@@ -81,11 +83,12 @@ def refresh_committee_list(admin_flo_id, api_url):
         sys.exit(0)
 
     committee_list = []
+    response['transactions'].reverse()
     for idx, transaction in enumerate(response['transactions']):
         transaction_info = requests.get(f'{api_url}api/tx/{transaction}')
         if transaction_info.status_code == 200:
             transaction_info = transaction_info.json()
-            if transaction_info['vin'][0]['addr'] == admin_flo_id:
+            if transaction_info['vin'][0]['addr']==admin_flo_id and transaction_info['blocktime']<=blocktime:
                 try:
                     tx_flodata = json.loads(transaction_info['floData'])
                     committee_list += process_committee_flodata(tx_flodata)
@@ -254,7 +257,7 @@ def processBlock(blockindex=None, blockhash=None):
         response = newMultiRequest(f"block-index/{blockindex}") 
         blockhash = response['blockHash'] 
 
-    blockinfo = newMultiRequest(f"block/{blockhash}") 
+    blockinfo = newMultiRequest(f"block/{blockhash}")
     pause_index = [2211699, 2211700, 2211701, 2170000]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
@@ -1597,7 +1600,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
     elif parsed_data['type'] == 'smartContractPays':
         logger.info(f"Transaction {transaction_data['txid']} is of the type smartContractPays")
-        committeeAddressList = refresh_committee_list(APP_ADMIN, neturl)
+        committeeAddressList = refresh_committee_list(APP_ADMIN, neturl, blockinfo['time'])
         # Check if input address is a committee address
         if inputlist[0] in committeeAddressList:
             # check if the contract exists
@@ -2080,8 +2083,6 @@ IGNORE_BLOCK_LIST = config['DEFAULT']['IGNORE_BLOCK_LIST'].split(',')
 IGNORE_BLOCK_LIST = [int(s) for s in IGNORE_BLOCK_LIST]
 IGNORE_TRANSACTION_LIST = config['DEFAULT']['IGNORE_TRANSACTION_LIST'].split(',')
 
-# Setup APP ADMIN and Committee address list
-committeeAddressList = refresh_committee_list(APP_ADMIN, neturl)
 
 # Delete database and smartcontract directory if reset is set to 1
 if args.reset == 1:
