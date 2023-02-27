@@ -207,8 +207,6 @@ def find_input_output_addresses(transaction_data):
 
 def rollback_database(blockNumber, dbtype, dbname):
     if dbtype == 'token':
-        if blockNumber in [2291753, '2291753']:
-            pdb.set_trace()
         # Connect to database
         db_session = create_database_session_orm('token', {'token_name':dbname}, TokenBase)
         while(True):
@@ -315,7 +313,7 @@ def delete_database(blockNumber, dbname):
     db_names, db_type = zip(*databases_to_delete)
 
     for database in databases_to_delete:
-        if database[1] in ['token','infinite-token']:
+        if database[1] in ['token','infinite-token','nft']:
             dirpath = os.path.join(apppath, 'tokens', f"{dbname}.db")
             if os.path.exists(dirpath):
                 os.remove(dirpath)

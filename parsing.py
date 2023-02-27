@@ -1189,7 +1189,7 @@ def parse_flodata(text, blockinfo, net):
                 except:
                     return outputreturn('noise')
                 deposit_conditions = extract_deposit_conditions(processed_text, blocktime=blockinfo['time'])
-                if not deposit_category:
+                if not deposit_conditions:
                     return outputreturn("noise")
                 return outputreturn('continuos-event-token-swap-deposit', f"{tokenname}", tokenamount, f"{contract_name}", f"{clean_text}", f"{deposit_conditions['expiryTime']}", stateF_mapping)
 
@@ -1263,7 +1263,7 @@ def parse_flodata(text, blockinfo, net):
             assert contract_conditions['subtype'] == 'tokenswap'
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['selling_token'])
-            if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined":
+            if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined" or contract_conditions['priceType']=="dynamic":
                 assert float(contract_conditions['price'])>=0
             else:
                 #assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)

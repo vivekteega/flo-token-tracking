@@ -22,8 +22,6 @@ stateF_object = {
     "splits": "10-20-30",
 }
 
-
-
 '''
 
 # stateF 

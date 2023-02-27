@@ -20,9 +20,6 @@ from models import SystemData, TokenBase, ActiveTable, ConsumedTable, TransferLo
 from statef_processing import process_stateF 
 import pdb 
 
-goodblockset = {} 
-goodtxset = {} 
-
 
 def newMultiRequest(apicall):
     current_server = serverlist[0]
@@ -250,6 +247,36 @@ def is_a_contract_address(floAddress):
         return True
 
 
+def fetchDynamicSwapPrice(contractStructure):
+    oracle_address = contractStructure['oracle_address']
+    # fetch transactions from the blockchain where from address : oracle-address... to address: contract address
+    # find the first contract transaction which adheres to price change format
+    # {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
+
+    response = requests.get(f'{api_url}api/addr/{oracle_address}')
+    if response.status_code == 200:
+        response = response.json()
+        transactions = response['transactions']
+        for transaction_hash in transactions:
+            transaction_response = requests.get(f'{api_url}api/tx/{oracle_address}')
+            if transaction_response.status_code == 200:
+                transaction = transaction_response.json()
+                floData = transaction['floData']
+                # If flodata is in the format we are looking for
+                try:
+                    floData = json.loads(floData)
+                    # Check if the contract name and address are right
+                    return float(floData['price-update']['price'])
+                except:
+                    continue
+            else:
+                logger.info('API error while fetchDynamicSwapPrice')
+                sys.exit(0)
+    else:
+        logger.info('API error fetchDynamicSwapPrice')
+        sys.exit(0)
+
+
 def processBlock(blockindex=None, blockhash=None):
     if blockindex is not None and blockhash is None:
         logger.info(f'Processing block {blockindex}') 
@@ -280,7 +307,8 @@ def processBlock(blockindex=None, blockhash=None):
         logger.info(f"Transaction {transaction_counter} : {transaction}")
         current_index = -1
         
-        if transaction in ['a9dedd024ee40239caf30c782abd4561c291c95fef3229e640ca8ec0dc7081d6', '2bcdd259f642cf5a901a814b5dafddec62dcdd0848732e7384ba087939c915ac', 'e9a305b20eaa3a4e6e778ec51c4137061ed8e630bdec271944760bd0b9fcc6a8', '606fcad4e73311cc441a494c7e35ad5f8c900f9107bcba3da5076ffa8e243913']:
+        if transaction in ['a9dedd024ee40239caf30c782abd4561c291c95fef3229e640ca8ec0dc7081d6', '2bcdd259f642cf5a901a814b5dafddec62dcdd0848732e7384ba087939c915ac', 'e9a305b20eaa3a4e6e778ec51c4137061ed8e630bdec271944760bd0b9fcc6a8', '606fcad4e73311cc441a494c7e35ad5f8c900f9107bcba3da5076ffa8e243913', '5ef8b7229956b8dceefbdc6087d17012e6555c67de06ba503e19f6f6bf563a76', '732c184d240ee173e08ab8cdbe7a2a19714fe14ae0d868a88041cff12586e9d3',
+        '11571ce7e5eed0bce30e24de89bb1ba6cc432df7b5b40bbc9f0225b98968cb47']:
             pass
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
@@ -721,7 +749,7 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                 
                 elif 'payeeAddress' in contractStructure: # Internal trigger contract type
 
-                    tokenAmount_sum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
+                    tokenAmount_sum = connection.execute('SELECT IFNULL(sum(tokenAmount), 0) FROM contractparticipants').fetchall()[0][0]
                     # maximumsubscription check, if reached then trigger the contract
                     if 'maximumsubscriptionamount' in contractStructure:
                         maximumsubscriptionamount = float(contractStructure['maximumsubscriptionamount'])
@@ -867,7 +895,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 if check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                     # Pull details of the token type from system.db database 
                     connection = create_database_connection('system_dbs', {'db_name':'system'})
-                    db_details = connection.execute("select db_name, db_type, keyword, object_format from databaseTypeMapping where db_name='{}'".format(parsed_data['tokenIdentification']))
+                    db_details = connection.execute("SELECT db_name, db_type, keyword, object_format FROM databaseTypeMapping WHERE db_name='{}'".format(parsed_data['tokenIdentification']))
                     db_details = list(zip(*db_details))
                     if db_details[1][0] == 'infinite-token':
                         db_object = json.loads(db_details[3][0])
@@ -880,7 +908,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                     # Check if the transaction hash already exists in the token db
                     connection = create_database_connection('token', {'token_name':f"{parsed_data['tokenIdentification']}"})
-                    blockno_txhash = connection.execute('select blockNumber, transactionHash from transactionHistory').fetchall()
+                    blockno_txhash = connection.execute('SELECT blockNumber, transactionHash FROM transactionHistory').fetchall()
                     connection.close()
                     blockno_txhash_T = list(zip(*blockno_txhash))
 
@@ -899,7 +927,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                     # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
                     connection = create_database_connection('system_dbs', {'db_name':'system'})
-                    firstInteractionCheck = connection.execute(f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
+                    firstInteractionCheck = connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{outputlist[0]}' AND token='{parsed_data['tokenIdentification']}'").fetchall()
 
                     if len(firstInteractionCheck) == 0:
                         connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
@@ -937,7 +965,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                 if contract_type == 'one-time-event':
                     # Check if the transaction hash already exists in the contract db (Safety check)
-                    participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
+                    participantAdd_txhash = connection.execute('SELECT participantAddress, transactionHash FROM contractparticipants').fetchall()
                     participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
                     if len(participantAdd_txhash) != 0 and transaction_data['txid'] in list(participantAdd_txhash_T[1]):
@@ -1073,7 +1101,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                                     # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
                                     connection = create_database_connection('system_dbs', {'db_name':'system'})
-                                    firstInteractionCheck = connection.execute(f"select * from tokenAddressMapping where tokenAddress='{outputlist[0]}' and token='{parsed_data['tokenIdentification']}'").fetchall()
+                                    firstInteractionCheck = connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{outputlist[0]}' AND token='{parsed_data['tokenIdentification']}'").fetchall()
                                     if len(firstInteractionCheck) == 0:
                                         connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
                                     connection.close()
@@ -1161,7 +1189,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     contract_subtype = contract_session.query(ContractStructure.value).filter(ContractStructure.attribute == 'subtype').first()[0]
                     if contract_subtype == 'tokenswap':
                         # Check if the transaction hash already exists in the contract db (Safety check)
-                        participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
+                        participantAdd_txhash = connection.execute('SELECT participantAddress, transactionHash FROM contractparticipants').fetchall()
                         participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
                         if len(participantAdd_txhash) != 0 and transaction_data['txid'] in list(participantAdd_txhash_T[1]):
@@ -1182,7 +1210,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         if contractStructure['pricetype'] in ['predetermined','determined']:
                             swapPrice = float(contractStructure['price'])
                         elif contractStructure['pricetype'] == 'dynamic':
-                            pass
+                            swapPrice = fetchDynamicSwapPrice(contractStructure)
 
                         swapAmount = float(parsed_data['tokenAmount'])/swapPrice
 
@@ -1313,7 +1341,68 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 return 0
 
         elif parsed_data['transferType'] == 'nft':
-            pass
+            if not is_a_contract_address(inputlist[0]) and not is_a_contract_address(outputlist[0]):
+                # check if the token exists in the database
+                if check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
+                    # Pull details of the token type from system.db database 
+                    connection = create_database_connection('system_dbs', {'db_name':'system'})
+                    db_details = connection.execute("SELECT db_name, db_type, keyword, object_format FROM databaseTypeMapping WHERE db_name='{}'".format(parsed_data['tokenIdentification']))
+                    db_details = list(zip(*db_details))
+                    if db_details[1][0] == 'infinite-token':
+                        db_object = json.loads(db_details[3][0])
+                        if db_object['root_address'] == inputlist[0]:
+                            isInfiniteToken = True
+                        else:
+                            isInfiniteToken = False
+                    else:
+                        isInfiniteToken = False
+
+                    # Check if the transaction hash already exists in the token db
+                    connection = create_database_connection('token', {'token_name':f"{parsed_data['tokenIdentification']}"})
+                    blockno_txhash = connection.execute('SELECT blockNumber, transactionHash FROM transactionHistory').fetchall()
+                    connection.close()
+                    blockno_txhash_T = list(zip(*blockno_txhash))
+
+                    if transaction_data['txid'] in list(blockno_txhash_T[1]):
+                        logger.warning(f"Transaction {transaction_data['txid']} already exists in the token db. This is unusual, please check your code")
+                        pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} already exists in the token db. This is unusual, please check your code")
+                        return 0
+                    
+                    returnval = transferToken(parsed_data['tokenIdentification'], parsed_data['tokenAmount'], inputlist[0],outputlist[0], transaction_data, parsed_data, isInfiniteToken=isInfiniteToken, blockinfo = blockinfo)
+                    if returnval is None:
+                        logger.info("Something went wrong in the token transfer method")
+                        pushData_SSEapi(f"Error | Something went wrong while doing the internal db transactions for {transaction_data['txid']}")
+                        return 0
+                    else:
+                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}", transaction_type='token-transfer')
+
+                    # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+                    connection = create_database_connection('system_dbs', {'db_name':'system'})
+                    firstInteractionCheck = connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{outputlist[0]}' AND token='{parsed_data['tokenIdentification']}'").fetchall()
+
+                    if len(firstInteractionCheck) == 0:
+                        connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+
+                    connection.close()
+
+                    # Pass information to SSE channel
+                    headers = {'Accept': 'application/json', 'Content-Type': 'application/json'}
+                    # r = requests.post(tokenapi_sse_url, json={f"message': 'Token Transfer | name:{parsed_data['tokenIdentification']} | transactionHash:{transaction_data['txid']}"}, headers=headers)
+                    return 1
+                else:
+                    rejectComment = f"Token transfer at transaction {transaction_data['txid']} rejected as a token with the name {parsed_data['tokenIdentification']} doesnt not exist"
+                    logger.info(rejectComment)                    
+                    rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                    pushData_SSEapi(rejectComment)
+                    return 0
+            
+            else:
+                rejectComment = f"Token transfer at transaction {transaction_data['txid']} rejected as either the input address or the output address is part of a contract address"
+                logger.info(rejectComment)
+                rejected_transaction_history(transaction_data, parsed_data, inputadd, outputlist[0], rejectComment)
+                pushData_SSEapi(rejectComment)
+                return 0
+
 
     # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
     #  if it has been taken then reject the incorporation. Else incorporate it
@@ -1496,7 +1585,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         # todo: Check if the both the tokens mentioned exist if its a token swap
                         if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})):
                             #if (parsed_data['contractConditions']['subtype'] == 'tokenswap'):
-                            if parsed_data['contractConditions']['pricetype'] in ['predetermined','statef']:
+                            if parsed_data['contractConditions']['pricetype'] in ['predetermined','statef','dynamic']:
                                 session.add(ContractStructure(attribute='subtype', index=0, value=parsed_data['contractConditions']['subtype'])) 
                                 session.add(ContractStructure(attribute='accepting_token', index=0, value=parsed_data['contractConditions']['accepting_token']))
                                 session.add(ContractStructure(attribute='selling_token', index=0, value=parsed_data['contractConditions']['selling_token']))
@@ -1607,7 +1696,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
                 # Check if the transaction hash already exists in the contract db (Safety check)
                 connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
-                participantAdd_txhash = connection.execute(f"select sourceFloAddress, transactionHash from contractTransactionHistory where transactionType != 'incorporation'").fetchall()
+                participantAdd_txhash = connection.execute(f"SELECT sourceFloAddress, transactionHash FROM contractTransactionHistory WHERE transactionType != 'incorporation'").fetchall()
                 participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
                 if len(participantAdd_txhash) != 0 and transaction_data['txid'] in list(participantAdd_txhash_T[1]):
@@ -1691,11 +1780,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         logger.info('Minimum subscription amount hasn\'t been reached\n The token will be returned back')
                         # Initialize payback to contract participants
                         connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
-                        contractParticipants = connection.execute('select participantAddress, tokenAmount, transactionHash from contractparticipants').fetchall()[0][0]
+                        contractParticipants = connection.execute('SELECT participantAddress, tokenAmount, transactionHash FROM contractparticipants').fetchall()[0][0]
 
                         for participant in contractParticipants:
-                            tokenIdentification = connection.execute('select * from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
-                            contractAddress = connection.execute('select * from contractstructure where attribute="contractAddress"').fetchall()[0][0]
+                            tokenIdentification = connection.execute('SELECT * FROM contractstructure WHERE attribute="tokenIdentification"').fetchall()[0][0]
+                            contractAddress = connection.execute('SELECT * FROM contractstructure WHERE attribute="contractAddress"').fetchall()[0][0]
                             returnval = transferToken(tokenIdentification, participant[1], contractAddress, participant[0], transaction_data, parsed_data, blockinfo = blockinfo)
                             if returnval is None:
                                 logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Trigger")
@@ -1735,11 +1824,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                 # Trigger the contract
                 connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
-                tokenSum = connection.execute('select IFNULL(sum(tokenAmount), 0) from contractparticipants').fetchall()[0][0]
+                tokenSum = connection.execute('SELECT IFNULL(sum(tokenAmount), 0) FROM contractparticipants').fetchall()[0][0]
                 if tokenSum > 0:
-                    contractWinners = connection.execute('select * from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
-                    winnerSum = connection.execute('select sum(tokenAmount) from contractparticipants where userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()[0][0]
-                    tokenIdentification = connection.execute('select value from contractstructure where attribute="tokenIdentification"').fetchall()[0][0]
+                    contractWinners = connection.execute('SELECT * FROM contractparticipants WHERE userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()
+                    winnerSum = connection.execute('SELECT sum(tokenAmount) FROM contractparticipants WHERE userChoice="{}"'.format(parsed_data['triggerCondition'])).fetchall()[0][0]
+                    tokenIdentification = connection.execute('SELECT value FROM contractstructure WHERE attribute="tokenIdentification"').fetchall()[0][0]
 
                     for winner in contractWinners:
                         winnerAmount = "%.8f" % ((winner[2] / winnerSum) * tokenSum)
@@ -1796,7 +1885,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
         if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
             # Check if the transaction hash already exists in the contract db (Safety check)
             connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
-            participantAdd_txhash = connection.execute('select participantAddress, transactionHash from contractparticipants').fetchall()
+            participantAdd_txhash = connection.execute('SELECT participantAddress, transactionHash FROM contractparticipants').fetchall()
             participantAdd_txhash_T = list(zip(*participantAdd_txhash))
 
             if len(participantAdd_txhash) != 0 and transaction_data['txid'] in list(participantAdd_txhash_T[1]):
@@ -1877,19 +1966,15 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             DIFFERENT BETWEEN TOKEN AND NFT
             System.db will have a different entry
             in creation nft word will be extra
-            NFT Hash must be  present
+            NFT Hash must be present
             Creation and transfer amount .. only integer parts will be taken
             Keyword nft must be present in both creation and transfer
         '''
         if not is_a_contract_address(inputlist[0]):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
-                session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
-                session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
-                                        transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
-                                        blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
-                                        transactionHash=transaction_data['txid']))
-                                
+                session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], addressBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
+                session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1, blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'], transactionHash=transaction_data['txid']))
                 add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=transaction_data['blocktime'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
                 
                 session.commit()
@@ -1899,11 +1984,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 connection = create_database_connection('system_dbs', {'db_name':'system'})
                 connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputadd}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}');")
                 nft_data = {'sha256_hash': f"{parsed_data['nftHash']}"}
-                connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'nft', '', '{nft_data}', '{transaction_data['blockheight']}'")
+                connection.execute(f"INSERT INTO databaseTypeMapping (db_name, db_type, keyword, object_format, blockNumber) VALUES ('{parsed_data['tokenIdentification']}', 'nft', '', '{json.dumps(nft_data)}', '{transaction_data['blockheight']}')")
                 connection.close()
 
                 updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['tokenIdentification']}")
-                pushData_SSEapi(f"Token | Succesfully incorporated token {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
+                pushData_SSEapi(f"NFT | Succesfully incorporated NFT {parsed_data['tokenIdentification']} at transaction {transaction_data['txid']}")
                 return 1
             else:
                 rejectComment = f"Transaction {transaction_data['txid']} rejected as an NFT with the name {parsed_data['tokenIdentification']} has already been incorporated"
