@@ -50,7 +50,7 @@ flodata_object = {
 
 
 def pull_stateF(floID):
-    response = requests.get(f"https://testnet-flosight.duckdns.org/api/txs/?address={floID}")
+    response = requests.get(f"https://flosight-testnet.ranchimall.net/api/txs/?address={floID}")
     if response.status_code == 200:
         address_details = response.json()
         latest_stateF = address_details['txs'][0]['floData']

@@ -685,40 +685,9 @@ def checkSearchPattern(parsed_list, searchpattern):
         return True
 
 
-def extractAmount_rule(text):
-    base_units = {'thousand': 10 ** 3, 'million': 10 ** 6, 'billion': 10 ** 9, 'trillion': 10 ** 12}
-    textList = text.split(' ')
-    counter = 0
-    value = None
-    for idx, word in enumerate(textList):
-        logger.info(word)
-        try:
-            result = float(word)
-            if textList[idx + 1] in base_units:
-                value = result * base_units[textList[idx + 1]]
-                counter = counter + 1
-            else:
-                value = result
-                counter = counter + 1
-        except:
-            for unit in base_units:
-                result = word.split(unit)
-                logger.info(result)
-                if len(result) == 2 and result[1] == '' and result[0] != '':
-                    try:
-                        value = float(result[0]) * base_units[unit]
-                        counter = counter + 1
-                    except:
-                        continue
-
-    if counter == 1:
-        return value
-    else:
-        return False
-
 def extractAmount_rule_new(text):
     base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'lakh':10 ** 5, 'crore':10 ** 7, 'quadrillion':10 ** 15}
-    amount_tuple = re.findall(r'\b([.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
+    amount_tuple = re.findall(r'\b(-?[.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
     if len(amount_tuple) > 1 or len(amount_tuple) == 0:
         return False
     else:
@@ -738,10 +707,10 @@ def extractAmount_rule_new1(text, split_word=None, split_direction=None):
             text = text.split(split_word)[1]
 
     # appending dummy because the regex does not recognize a number at the start of a string
-    text = f"dummy {text}"
+    # text = f"dummy {text}"
     text = text.replace("'", "")
     text = text.replace('"', '')
-    amount_tuple = re.findall(r'\b\s([.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
+    amount_tuple = re.findall(r'\b(-?[.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
     if len(amount_tuple) > 1 or len(amount_tuple) == 0:
         return False
     else:
@@ -972,9 +941,6 @@ text_list2 = [
     '''
 ]
 
-# todo - REMOVE STUB
-blockinfo_stub = {'hash': '28505c54c2099f9f3d25e9ceffb72bffd14156b12449b6d73a5b9d2d061f1643', 'size': 253, 'height': 5587001, 'version': 536870912, 'merkleroot': '8bbc603573019a832ee82d637bd40d340e1194e760027f9a2959e6443f311547', 'tx': ['8bbc603573019a832ee82d637bd40d340e1194e760027f9a2959e6443f311547'], 'time': 1660188965, 'nonce': 646198852, 'bits': 470123011, 'difficulty': 50, 'chainwork': '00000000000000000000000000000000000000000000000110720a0f9acc471d', 'confirmations': 569, 'previousblockhash': 'c62937e8fd60e00cb07b28071acd7201501cb55b1fc0899ea1c89256d804a554', 'nextblockhash': '6dcc78c447ec4705a37a2b1531691b28e7c1f2eada0f5af2278c3a087c7c459f', 'reward': 1.5625, 'isMainChain': True, 'poolInfo': {}}
-
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -1016,7 +982,6 @@ def parse_flodata(text, blockinfo, net):
         isNFT = check_word_existence_instring('nft', processed_text)           
 
         isInfinite = check_word_existence_instring('infinite-token', processed_text)
-
         tokenamount = apply_rule1(extractAmount_rule_new, processed_text)
  
         ## Cannot be NFT and normal token and infinite token. Find what are the conflicts 
@@ -1264,7 +1229,7 @@ def parse_flodata(text, blockinfo, net):
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['selling_token'])
             if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined" or contract_conditions['priceType']=="dynamic":
-                assert float(contract_conditions['price'])>=0
+                assert float(contract_conditions['price'])>0
             else:
                 #assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
                 assert contract_conditions['priceType'] == 'statef'
@@ -1273,7 +1238,3 @@ def parse_flodata(text, blockinfo, net):
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping)
     
     return outputreturn('noise')
-
-# todo: remove the following test line during cleanup
-#print(parse_flodata(text_list2[5], blockinfo_stub, 'testnet'))
-
