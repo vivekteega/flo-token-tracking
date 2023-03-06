@@ -53,5 +53,3 @@ Docker-compatibility branch is needed right now because Docker image made for fl
 4. If running for the first time, run  `python3.7 tracktokens-smartcontracts.py --reset` otherwise run `python3.7 tracktokens-smartcontracts.py`
 
 
-If you want to listen to RanchiMall's Token Tracker scanner's events you have to subscribe to Ranchimallflo API's end point `/sse`
-Reference - https://ably.com/topic/server-sent-events
