@@ -983,7 +983,7 @@ def parse_flodata(text, blockinfo, net):
 
         isInfinite = check_word_existence_instring('infinite-token', processed_text)
         tokenamount = apply_rule1(extractAmount_rule_new, processed_text)
- 
+
         ## Cannot be NFT and normal token and infinite token. Find what are the conflicts 
         # if its an NFT then tokenamount has to be integer and infinite keyword should not be present 
         # if its a normal token then isNFT and isInfinite should be None/False and token amount has to be present 
@@ -992,7 +992,7 @@ def parse_flodata(text, blockinfo, net):
 
         ##################################################
         
-        if (not tokenamount and not isInfinite) or (isNFT and not tokenamount.is_integer() and not isInfinite) or (isInfinite and tokenamount is not False and isNFT is not False) or tokenamount<=0:
+        if (not tokenamount and not isInfinite) or (isNFT and not tokenamount.is_integer() and not isInfinite) or (isInfinite and tokenamount is not False and isNFT is not False) or (not isInfinite and tokenamount<=0):
             return outputreturn('noise')
         operation = apply_rule1(selectCategory, processed_text, send_category, create_category)
         if operation == 'category1' and tokenamount is not None:
