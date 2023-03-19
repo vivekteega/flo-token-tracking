@@ -1,4 +1,5 @@
 # FLO Token & Smart Contract System 
+[![Test flodata parsing](https://github.com/ranchimall/flo-token-tracking/actions/workflows/test_parsing.yml/badge.svg?branch=swap-statef-testing)](https://github.com/ranchimall/flo-token-tracking/actions/workflows/test_parsing.yml)
 
 ## Important versions and their hashes
 The python script scans the FLO Blockchain for Token and Smart Contract activity and creates/updates local SQLite databases accordingly. 
