@@ -687,7 +687,7 @@ def checkSearchPattern(parsed_list, searchpattern):
 
 def extractAmount_rule_new(text):
     base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'lakh':10 ** 5, 'crore':10 ** 7, 'quadrillion':10 ** 15}
-    amount_tuple = re.findall(r'\b(-?[.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
+    amount_tuple = re.findall(r'(-?\d+(?:\.\d+)?)\s*(?=(?:[bmk]|thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion|\s))(billion|million|thousand|k|lakh|crore|quadrillion)?', text)
     if len(amount_tuple) > 1 or len(amount_tuple) == 0:
         return False
     else:
@@ -710,7 +710,7 @@ def extractAmount_rule_new1(text, split_word=None, split_direction=None):
     # text = f"dummy {text}"
     text = text.replace("'", "")
     text = text.replace('"', '')
-    amount_tuple = re.findall(r'\b(-?[.\d]+)\s*(thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion)*\b', text)
+    amount_tuple = re.findall(r'(-?\d+(?:\.\d+)?)\s*(?=(?:[bmk]|thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion|\s))(billion|million|thousand|k|lakh|crore|quadrillion)?', text)
     if len(amount_tuple) > 1 or len(amount_tuple) == 0:
         return False
     else:

@@ -1,0 +1,134 @@
+import unittest
+import parsing
+
+class TestParsing(unittest.TestCase):
+
+    blockinfo_stub = {'time': 25634}
+
+    def test_token_creation(self):
+        text = 'create 100 rmt#'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'mainnet')
+        expected_result = {
+            'type': 'tokenIncorporation', 
+            'flodata': 'create 100 rmt#', 
+            'tokenIdentification': 'rmt', 
+            'tokenAmount': 100.0, 
+            'stateF': False
+            }
+        self.assertEqual(result, expected_result)
+    
+    def test_token_transfer(self):
+        text = 'transfer 10.340 rmt#'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'mainnet')
+        expected_result = {
+            'type': 'transfer', 
+            'transferType': 'token', 
+            'flodata': 'transfer 10.340 rmt#', 
+            'tokenIdentification': 'rmt', 
+            'tokenAmount': 10.34, 
+            'stateF': False
+            }
+        self.assertEqual(result, expected_result)
+
+    def test_nft_creation(self):
+        pass
+    
+    def test_nft_transfer(self):
+        pass
+
+    def test_infinite_token_incorporation(self):
+        pass
+    
+    def test_infinite_token_transfer(self):
+        pass
+
+    def test_onetimeevent_timetrigger_creation(self):
+        # contractamount
+        text = '''Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) contractAmount=0.1 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {
+            'type': 'smartContractIncorporation', 
+            'contractType': 'one-time-event', 
+            'tokenIdentification': 'bioscope', 
+            'contractName': 'all-crowd-fund-1', 
+            'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 
+            'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) contractAmount=0.1 end-contract-conditions', 
+            'contractConditions': {
+                'contractAmount': '0.1', 
+                'payeeAddress': {
+                    'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0
+                    }, 
+                'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'
+                }
+            }
+        self.assertEqual(result, expected_result)
+
+        # minimumsubscriptionamount
+        text = '''Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 end-contract-conditions', 'contractConditions': {'minimumsubscriptionamount': '1.0', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
+        self.assertEqual(result, expected_result)
+
+        # maximumsubscriptionamount
+        text = '''Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) maximumsubscriptionamount=10 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) maximumsubscriptionamount=10 end-contract-conditions', 'contractConditions': {'maximumsubscriptionamount': '10.0', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
+        self.assertEqual(result, expected_result)
+
+        # minimumsubscriptionamount | contractamount
+        text = '''Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1.600 (4) contractAmount=0.1 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1.600 (4) contractAmount=0.1 end-contract-conditions', 'contractConditions': {'contractAmount': '0.1', 'minimumsubscriptionamount': '1.6', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
+        self.assertEqual(result, expected_result)
+
+        # maximumsubscriptionamount | contractamount
+        text = '''Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) maximumsubscriptionamount=10  (4) contractAmount=0.1 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) maximumsubscriptionamount=10 (4) contractAmount=0.1 end-contract-conditions', 'contractConditions': {'contractAmount': '0.1', 'maximumsubscriptionamount': '10.0', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
+        self.assertEqual(result, expected_result)
+        
+        # minimumsubscriptionamount | maximumsubscriptionamount
+        text = '''Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) maximumsubscriptionamount=10 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) maximumsubscriptionamount=10 end-contract-conditions', 'contractConditions': {'minimumsubscriptionamount': '1.0', 'maximumsubscriptionamount': '10.0', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
+        self.assertEqual(result, expected_result)
+        
+        # minimumsubscriptionamount | maximumsubscriptionamount | contractamount
+        text = '''Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions:(1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530  (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) maximumsubscriptionamount=10  (5) contractAmount=0.1 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) maximumsubscriptionamount=10 (5) contractAmount=0.1 end-contract-conditions', 'contractConditions': {'contractAmount': '0.1', 'minimumsubscriptionamount': '1.0', 'maximumsubscriptionamount': '10.0', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
+        self.assertEqual(result, expected_result)
+
+    def test_onetimeevent_timetrigger_participation(self):
+        text = '''send 2.2 bioscope# to all-crowd-fund@'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': 'send 2.2 bioscope# to all-crowd-fund@', 'tokenIdentification': 'bioscope', 'tokenAmount': 2.2, 'contractName': 'all-crowd-fund'}
+        self.assertEqual(result, expected_result)
+
+        text = 'transfer 6.20000 bioscope# to all-crowd-fund-7@'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': 'transfer 6.20000 bioscope# to all-crowd-fund-7@', 'tokenIdentification': 'bioscope', 'tokenAmount': 6.2, 'contractName': 'all-crowd-fund-7'}
+        self.assertEqual(result, expected_result)
+    
+    def test_onetimeevent_externaltrigger_creation(self):
+        # contractamount
+        text = '''Create a smart contract of the name twitter-survive@ of the type one-time-event* using asset bioscope# at the FLO address oVbebBNuERWbouDg65zLfdataWEMTnsL8r$ with contract-conditions:(1) expiryTime= Sun Nov 15 2022 14:55:00 GMT+0530  (2) userchoices= survives | dies (3) contractAmount=0.02 end-contract-conditions'''
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {
+            'type': 'smartContractIncorporation', 
+            'contractType': 'one-time-event', 
+            'tokenIdentification': 'bioscope', 
+            'contractName': 'twitter-survive', 
+            'contractAddress': 'oVbebBNuERWbouDg65zLfdataWEMTnsL8r', 
+            'flodata': 'Create a smart contract of the name twitter-survive@ of the type one-time-event* using asset bioscope# at the FLO address oVbebBNuERWbouDg65zLfdataWEMTnsL8r$ with contract-conditions: (1) expiryTime= Sun Nov 15 2022 14:55:00 GMT+0530 (2) userchoices= survives | dies (3) contractAmount=0.02 end-contract-conditions', 
+            'contractConditions': {
+                'contractAmount': '0.02', 
+                'userchoices': "{0: 'survives', 1: 'dies'}", 
+                'expiryTime': 'sun nov 15 2022 14:55:00 gmt+0530'
+                }
+            }
+        self.assertEqual(result, expected_result)
+
+
+if __name__ == '__main__':
+    unittest.main()
