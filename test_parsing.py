@@ -109,6 +109,21 @@ class TestParsing(unittest.TestCase):
         result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
         expected_result = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': 'transfer 6.20000 bioscope# to all-crowd-fund-7@', 'tokenIdentification': 'bioscope', 'tokenAmount': 6.2, 'contractName': 'all-crowd-fund-7'}
         self.assertEqual(result, expected_result)
+
+        text = 'transfer 6.20000 bioscope# to all-crowd-fund-7@ 24'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'noise'}
+        self.assertEqual(result, expected_result)
+
+        text = 'transfer 6.20000 bioscope# to all-crowd-fund-7@ 24 '
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'noise'}
+        self.assertEqual(result, expected_result)
+
+        text = '6.20.000 transfer bioscope# to all-crowd-fund-7@ 24'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'transfer', 'transferType': 'smartContract', 'flodata': '6.20.000 transfer bioscope# to all-crowd-fund-7@ 24', 'tokenIdentification': 'bioscope', 'tokenAmount': 24.0, 'contractName': 'all-crowd-fund-7'}
+        self.assertEqual(result, expected_result)
     
     def test_onetimeevent_externaltrigger_creation(self):
         # contractamount

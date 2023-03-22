@@ -686,8 +686,14 @@ def checkSearchPattern(parsed_list, searchpattern):
 
 
 def extractAmount_rule_new(text):
-    base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'lakh':10 ** 5, 'crore':10 ** 7, 'quadrillion':10 ** 15}
-    amount_tuple = re.findall(r'(-?\d+(?:\.\d+)?)\s*(?=(?:[bmk]|thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion|\s))(billion|million|thousand|k|lakh|crore|quadrillion)?', text)
+    base_units = {'thousand': 10 ** 3, 'k': 10 ** 3, 'lakh':10 ** 5, 'crore':10 ** 7, 'million': 10 ** 6, 'm': 10 ** 6, 'billion': 10 ** 9, 'b': 10 ** 9, 'trillion': 10 ** 12, 'quadrillion':10 ** 15}
+
+    # appending whitespace because the regex does not recognize a number at the start & end of string ie. "send rmt# 45"
+    text = f" {text} "
+    text = text.replace("'", "")
+    text = text.replace('"', '')
+
+    amount_tuple = re.findall(r'(?<!\S)(-?\d+(?:\.\d+)?)\s*(?=(?:[bmk]|thousand|k|lakh|crore|million|m|billion|b|trillion|t|quadrillion|\s))(thousand|k|lakh|crore|million|m|billion|b|trillion|t|quadrillion)?\b', text)
     if len(amount_tuple) > 1 or len(amount_tuple) == 0:
         return False
     else:
@@ -706,11 +712,11 @@ def extractAmount_rule_new1(text, split_word=None, split_direction=None):
         if split_direction=='post':
             text = text.split(split_word)[1]
 
-    # appending dummy because the regex does not recognize a number at the start of a string
-    # text = f"dummy {text}"
+    # appending whitespace because the regex does not recognize a number at the start & end of string ie. "send rmt# 45"
+    text = f" {text} "
     text = text.replace("'", "")
     text = text.replace('"', '')
-    amount_tuple = re.findall(r'(-?\d+(?:\.\d+)?)\s*(?=(?:[bmk]|thousand|million|billion|trillion|m|b|t|k|lakh|crore|quadrillion|\s))(billion|million|thousand|k|lakh|crore|quadrillion)?', text)
+    amount_tuple = re.findall(r'(?<!\S)(-?\d+(?:\.\d+)?)\s*(?=(?:[bmk]|thousand|k|lakh|crore|million|m|billion|b|trillion|t|quadrillion|\s))(thousand|k|lakh|crore|million|m|billion|b|trillion|t|quadrillion)?\b', text)
     if len(amount_tuple) > 1 or len(amount_tuple) == 0:
         return False
     else:
@@ -972,6 +978,7 @@ def parse_flodata(text, blockinfo, net):
     stateF_mapping = isStateF(processed_text) 
     first_classification = firstclassification_rawstring(processed_text)
     parsed_data = None 
+
 
     if first_classification['categorization'] == 'tokensystem-C':
         # Resolving conflict for 'tokensystem-C' 
@@ -1238,3 +1245,4 @@ def parse_flodata(text, blockinfo, net):
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping)
     
     return outputreturn('noise')
+
