@@ -280,6 +280,7 @@ def outputreturn(*argv):
                 'selling_token' : argv[7],
                 'pricetype' : argv[8],
                 'price' : argv[9],
+                'oracle_address' : argv[11]
             },
             'stateF': argv[10]
         }
@@ -432,6 +433,8 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 pattern = re.compile('(^payeeaddress\s*=\s*)(.*)')
                 searchResult = pattern.search(rule).group(2)
                 payeeAddress = searchResult.split(marker)[0]
+                payeeAddress = payeeAddress.strip('"')
+                payeeAddress = payeeAddress.strip("'")
                 extractedRules['payeeAddress'] = payeeAddress
 
         if len(extractedRules) > 1 and 'expiryTime' in extractedRules:
@@ -482,6 +485,13 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                 pattern = re.compile('(?<=direction\s=\s)(.*)')
                 direction = pattern.search(rule).group(1)
                 extractedRules['direction'] = direction
+            elif rule[:14] == 'oracle_address':
+                pattern = re.compile('(^oracle_address\s*=\s*)(.*)')
+                searchResult = pattern.search(rule).group(2)
+                oracle_address = searchResult.split(marker)[0]
+                oracle_address = oracle_address.strip('"')
+                oracle_address = oracle_address.strip("'")
+                extractedRules['oracle_address'] = oracle_address
         
         if len(extractedRules) > 1:
             return extractedRules
@@ -632,6 +642,14 @@ def find_original_case(contract_address, original_text):
         return dollar_word[0][:-1]
     else:
         None
+
+def find_original_case_regex(floaddress, original_text):
+    pattern = f'(?i)\b({floaddress})\b'
+    regex_match = re.findall(r'(?i)\b(' + re.escape(floaddress) + r')\b', original_text)
+    if len(regex_match) == 0: # or len(amount_tuple) > 1 :
+        return False
+    else:
+        return regex_match[0]
 
 
 def find_word_index_fromstring(originaltext, word):
@@ -1235,13 +1253,20 @@ def parse_flodata(text, blockinfo, net):
             assert contract_conditions['subtype'] == 'tokenswap'
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['accepting_token'])
             assert check_regex("^[A-Za-z][A-Za-z0-9_-]*[A-Za-z0-9]$", contract_conditions['selling_token'])
-            if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined" or contract_conditions['priceType']=="dynamic":
+            if contract_conditions['priceType']=="'determined'" or contract_conditions['priceType']=='"determined"' or contract_conditions['priceType']=="determined" or contract_conditions['priceType']=="'predetermined'" or contract_conditions['priceType']=='"predetermined"' or contract_conditions['priceType']=="predetermined":
                 assert float(contract_conditions['price'])>0
+                contract_conditions['oracle_address'] = False
+            elif contract_conditions['priceType']=="dynamic" or contract_conditions['priceType']=="'dynamic'" or contract_conditions['priceType']=='"dynamic"':
+                assert float(contract_conditions['price'])>0
+                contract_conditions['oracle_address'] = find_original_case_regex(contract_conditions['oracle_address'], clean_text) # making sure the Flo Address is in its original case
+                assert check_flo_address(contract_conditions['oracle_address'], is_testnet)
             else:
                 #assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
                 assert contract_conditions['priceType'] == 'statef'
+                contract_conditions['oracle_address'] = False
         except AssertionError: 
             return outputreturn('noise')
-        return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping)
+
+        return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping, f"{contract_conditions['oracle_address']}")
     
     return outputreturn('noise')
