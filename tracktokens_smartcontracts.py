@@ -326,8 +326,8 @@ def processBlock(blockindex=None, blockhash=None):
         'ff355c3384e2568e1dd230d5c9073618b9033c7c8b20f9e8533b5837f76bc65d',
         '8a146e7ccbb6d6eeab49cfd25da805223335c6908e506c5d68aae9184b863e1e',
         'b1a2c463988cdf881779f4bf292b9a0385b78150dccf8562ee8e4d1850ea7dd3']:
-            #pdb.set_trace()
             pass
+            
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -809,7 +809,74 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                         close_expire_contract(contractStructure, 'closed', query.transactionHash, query.blockNumber, blockinfo['hash'], 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                         return
 
-    
+    for query in active_deposits:
+        query_time = convert_datetime_to_arrowobject(query.time)
+        blocktime = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
+        if query.activity == 'contract-deposit':
+            if blocktime > query_time:
+                # find the status of the deposit 
+                # the deposit is unique
+                # find the total sum to be returned from the smart contract's participation table 
+                contract_db = create_database_session_orm('smart_contract', {'contract_name': query.contractName, 'contract_address': query.contractAddress}, ContractBase)
+                deposit_query = contract_db.query(ContractDeposits).filter(ContractDeposits.transactionHash == query.transactionHash).first()
+                depositorAddress = deposit_query.depositorAddress
+                total_deposit_amount = deposit_query.depositAmount
+                amount_participated = contract_db.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
+                if amount_participated is None:
+                    amount_participated = 0 
+                returnAmount = float(total_deposit_amount) - float(amount_participated)
+                # Do a token transfer back to the deposit address 
+                sellingToken = contract_db.query(ContractStructure.value).filter(ContractStructure.attribute == 'selling_token').first()[0]
+                tx_block_string = f"{query.transactionHash}{blockinfo['height']}".encode('utf-8').hex()
+                parsed_data = {}
+                parsed_data['type'] = 'expired_deposit'
+                transaction_data = {}
+                #transaction_data['txid'] = pyflo.sha256(tx_block_string).hex()
+                transaction_data['txid'] = query.transactionHash
+                transaction_data['blockheight'] = blockinfo['height']
+                returnval = transferToken(sellingToken, returnAmount, query.contractAddress, depositorAddress, transaction_data=transaction_data, parsed_data=parsed_data, blockinfo=blockinfo)
+                if returnval is None:
+                    logger.critical("Something went wrong in the token transfer method while return contract deposit. THIS IS CRITICAL ERROR")
+                    return
+                else:
+                    old_depositBalance = contract_db.query(ContractDeposits.depositBalance).order_by(ContractDeposits.id.desc()).first()
+                    if old_depositBalance is None:
+                        logger.info('Something is wrong in the databases. Cannot do a deposit return without any previously available deposits in the database')
+                        return 0
+                    else:
+                        old_depositBalance = old_depositBalance[0]
+
+                    contract_db.add(ContractDeposits(
+                        depositorAddress = deposit_query.depositorAddress,
+                        depositAmount = returnAmount,
+                        depositBalance = old_depositBalance - returnAmount,
+                        expiryTime = deposit_query.expiryTime,
+                        unix_expiryTime = 0,
+                        status = 'deposit-return',
+                        transactionHash = deposit_query.transactionHash,
+                        blockNumber = blockinfo['height'],
+                        blockHash = blockinfo['hash']
+                    ))
+
+                    add_contract_transaction_history(contract_name=query.contractName, contract_address=query.contractAddress, transactionType='smartContractDepositReturn', transactionSubType=None, sourceFloAddress=query.contractAddress, destFloAddress=depositorAddress, transferAmount=returnAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=deposit_query.transactionHash, jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
+
+                    systemdb_session.add(TimeActions(
+                        time = query.time,
+                        activity = query.activity,
+                        status = 'returned',
+                        contractName = query.contractName,
+                        contractAddress = query.contractAddress,
+                        contractType = query.contractType,
+                        tokens_db = query.tokens_db,
+                        parsed_data = query.parsed_data,
+                        transactionHash = query.transactionHash,
+                        blockNumber = blockinfo['height']
+                    ))
+
+                    contract_db.commit()
+                    systemdb_session.commit()
+                    updateLatestTransaction(transaction_data, parsed_data, f"{query.contractName}-{query.contractAddress}")
+
 
 def extract_contractStructure(contractName, contractAddress):
     connection = create_database_connection('smart_contract', {'contract_name':f"{contractName}", 'contract_address':f"{contractAddress}"})
@@ -1226,7 +1293,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 pushData_SSEapi(f"Error| Mismatch in contract address specified in flodata and the output address of the transaction {transaction_data['txid']}")
                                 return 0
                         
-                        pdb.set_trace()
                         if contractStructure['pricetype'] in ['predetermined','determined']:
                             swapPrice = float(contractStructure['price'])
                         elif contractStructure['pricetype'] == 'dynamic':
@@ -1245,7 +1311,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         available_deposit_sum = 0
 
                         for entry in active_contract_deposits:
-                            pdb.set_trace()
                             if entry.id in [consumed_deposit_ids] or arrow.get(entry.unix_expiryTime)<arrow.get(blockinfo['time']):
                                 index = active_contract_deposits.index(entry)
                                 del available_deposits[index]
@@ -1909,6 +1974,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
     elif parsed_data['type'] == 'smartContractDeposit':
         if check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"}):
+            # Reject if the deposit expiry time is greater than incorporated blocktime
+            expiry_time = convert_datetime_to_arrowobject(parsed_data['depositConditions']['expiryTime'])
+            if blockinfo['time'] > expiry_time.timestamp():
+                rejectComment = f"Contract deposit of transaction {transaction_data['txid']} rejected as expiryTime before current block time"
+                logger.warning(rejectComment)
+                rejected_contract_transaction_history(transaction_data, parsed_data, 'deposit', outputlist[0], inputadd, outputlist[0], rejectComment)
+                return 0
+
             # Check if the transaction hash already exists in the contract db (Safety check)
             connection = create_database_connection('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{outputlist[0]}"})
             participantAdd_txhash = connection.execute('SELECT participantAddress, transactionHash FROM contractparticipants').fetchall()
