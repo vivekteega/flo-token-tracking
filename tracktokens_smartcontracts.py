@@ -275,7 +275,6 @@ def fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo):
                             # Check if the contract name and address are right
                             assert floData['price-update']['contract-name'] == contractStructure['contractName']
                             assert floData['price-update']['contract-address'] == contractStructure['contractAddress']
-                            floData['contractName check']
                             return float(floData['price-update']['price'])
                         except:
                             continue
@@ -325,7 +324,8 @@ def processBlock(blockindex=None, blockhash=None):
         'd48590f6907976b63b4d5eac8082fe0bbed3b8a68e30de960e77619d29e32e78',
         'ff355c3384e2568e1dd230d5c9073618b9033c7c8b20f9e8533b5837f76bc65d',
         '8a146e7ccbb6d6eeab49cfd25da805223335c6908e506c5d68aae9184b863e1e',
-        'b1a2c463988cdf881779f4bf292b9a0385b78150dccf8562ee8e4d1850ea7dd3']:
+        'b1a2c463988cdf881779f4bf292b9a0385b78150dccf8562ee8e4d1850ea7dd3',
+        'ec6604d147d99ec41f05dec82f9c241815358015904fad37ace061d7580b178e']:
             pass
             
 
