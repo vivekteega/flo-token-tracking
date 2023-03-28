@@ -1283,6 +1283,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as it already exists in the Smart Contract db. This is unusual, please check your code")
                             return 0
 
+                        
                         # if contractAddress was passed, then check if it matches the output address of this contract
                         if 'contractAddress' in parsed_data:
                             if parsed_data['contractAddress'] != outputlist[0]:
@@ -1296,6 +1297,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         if contractStructure['pricetype'] in ['predetermined','determined']:
                             swapPrice = float(contractStructure['price'])
                         elif contractStructure['pricetype'] == 'dynamic':
+                            # Oracle address cannot be a participant in the contract. Check if the sender address is oracle address
+                            if transaction_data['senderAddress'] == contractStructure['oracle_address']:
+                                logger.warning(f"Transaction {transaction_data['txid']} rejected as the oracle addess {contractStructure['oracle_address']} is attempting to participate. Please report this to the contract owner")
+                                pushData_SSEapi(f"Transaction {transaction_data['txid']} rejected as the oracle addess {contractStructure['oracle_address']} is attempting to participate. Please report this to the contract owner")
+                                return 0
                             swapPrice = fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo)
 
                         swapAmount = float(parsed_data['tokenAmount'])/swapPrice
