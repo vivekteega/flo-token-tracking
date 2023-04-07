@@ -159,7 +159,7 @@ def add_transaction_history(token_name, sourceFloAddress, destFloAddress, transf
                                     transferAmount=transferAmount,
                                     blockNumber=blockNumber,
                                     blockHash=blockHash,
-                                    blocktime=blocktime,
+                                    time=blocktime,
                                     transactionHash=transactionHash,
                                     blockchainReference=blockchainReference,
                                     jsonData=jsonData,
@@ -179,7 +179,7 @@ def add_contract_transaction_history(contract_name, contract_address, transactio
                                             transferAmount=transferAmount,
                                             blockNumber=blockNumber,
                                             blockHash=blockHash,
-                                            blocktime=blocktime,
+                                            time=blocktime,
                                             transactionHash=transactionHash,
                                             blockchainReference=blockchainReference,
                                             jsonData=jsonData,
@@ -197,7 +197,7 @@ def rejected_transaction_history(transaction_data, parsed_data, sourceFloAddress
                                         transferAmount=parsed_data['tokenAmount'],
                                         blockNumber=transaction_data['blockheight'],
                                         blockHash=transaction_data['blockhash'],
-                                        time=transaction_data['blocktime'],
+                                        time=transaction_data['time'],
                                         transactionHash=transaction_data['txid'],
                                         blockchainReference=blockchainReference,
                                         jsonData=json.dumps(transaction_data),
@@ -220,7 +220,7 @@ def rejected_contract_transaction_history(transaction_data, parsed_data, transac
                                                     transferAmount=None,
                                                     blockNumber=transaction_data['blockheight'],
                                                     blockHash=transaction_data['blockhash'],
-                                                    time=transaction_data['blocktime'],
+                                                    time=transaction_data['time'],
                                                     transactionHash=transaction_data['txid'],
                                                     blockchainReference=blockchainReference,
                                                     jsonData=json.dumps(transaction_data),
@@ -325,7 +325,8 @@ def processBlock(blockindex=None, blockhash=None):
         'ff355c3384e2568e1dd230d5c9073618b9033c7c8b20f9e8533b5837f76bc65d',
         '8a146e7ccbb6d6eeab49cfd25da805223335c6908e506c5d68aae9184b863e1e',
         'b1a2c463988cdf881779f4bf292b9a0385b78150dccf8562ee8e4d1850ea7dd3',
-        'ec6604d147d99ec41f05dec82f9c241815358015904fad37ace061d7580b178e']:
+        'ec6604d147d99ec41f05dec82f9c241815358015904fad37ace061d7580b178e',
+        '34b2f4a721a7759d807f99cfbd6c5c703c1673fdd12eda10ddc2f659c1bcd40e']:
             pass
             
 
@@ -1089,7 +1090,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             expirytime_split = expirytime.split(' ')
                             parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
                             expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
-                            blocktime_object = parsing.arrow.get(transaction_data['blocktime']).to('Asia/Kolkata')
+                            blocktime_object = parsing.arrow.get(transaction_data['time']).to('Asia/Kolkata')
 
                             if blocktime_object > expirytime_object:
                                 rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has expired and will not accept any user participation"
@@ -1505,10 +1506,10 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], addressBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
                 session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
-                                        blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
+                                        blockNumber=transaction_data['blockheight'], time=transaction_data['time'],
                                         transactionHash=transaction_data['txid']))            
                 
-                add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=transaction_data['blocktime'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
+                add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=transaction_data['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
                 
                 session.commit()
                 session.close()
@@ -1598,7 +1599,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                          contractAddress=parsed_data['contractAddress'],
                                                          blockNumber=transaction_data['blockheight'],
                                                          blockHash=transaction_data['blockhash'],
-                                                         time=transaction_data['blocktime'],
+                                                         time=transaction_data['time'],
                                                          transactionHash=transaction_data['txid'],
                                                          blockchainReference=blockchainReference,
                                                          jsonData=json.dumps(transaction_data),
@@ -1616,7 +1617,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                 transactionHash=transaction_data['txid'],
                                                 blockNumber=transaction_data['blockheight'],
                                                 blockHash=transaction_data['blockhash'],
-                                                incorporationDate=transaction_data['blocktime']))
+                                                incorporationDate=transaction_data['time']))
                     session.commit()
 
                     session.add(ContractAddressMapping(address=inputadd, addressType='incorporation',
@@ -1704,7 +1705,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                     transferAmount=None,
                                                                     blockNumber=transaction_data['blockheight'],
                                                                     blockHash=transaction_data['blockhash'],
-                                                                    blocktime=transaction_data['blocktime'],
+                                                                    time=transaction_data['time'],
                                                                     transactionHash=transaction_data['txid'],
                                                                     blockchainReference=blockchainReference,
                                                                     jsonData=json.dumps(transaction_data),
@@ -1723,7 +1724,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                         contractAddress=parsed_data['contractAddress'],
                                                                         blockNumber=transaction_data['blockheight'],
                                                                         blockHash=transaction_data['blockhash'],
-                                                                        time=transaction_data['blocktime'],
+                                                                        time=transaction_data['time'],
                                                                         transactionHash=transaction_data['txid'],
                                                                         blockchainReference=blockchainReference,
                                                                         jsonData=json.dumps(transaction_data),
@@ -1741,7 +1742,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                         transactionHash=transaction_data['txid'],
                                                         blockNumber=transaction_data['blockheight'],
                                                         blockHash=transaction_data['blockhash'],
-                                                        incorporationDate=transaction_data['blocktime']))
+                                                        incorporationDate=transaction_data['time']))
                             session.commit()
 
                             # todo - Add a condition for rejected contract transaction on the else loop for this condition 
@@ -1840,7 +1841,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         expirytime_split = expirytime.split(' ')
                         parse_string = '{}/{}/{} {}'.format(expirytime_split[3], parsing.months[expirytime_split[1]], expirytime_split[2], expirytime_split[4])
                         expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
-                        blocktime_object = parsing.arrow.get(transaction_data['blocktime']).to('Asia/Kolkata')
+                        blocktime_object = parsing.arrow.get(transaction_data['time']).to('Asia/Kolkata')
 
                         if blocktime_object <= expirytime_object:
                             rejectComment = f"Transaction {transaction_data['txid']} rejected as Smart contract {parsed_data['contractName']}-{outputlist[0]} has not expired and will not trigger"
@@ -1899,7 +1900,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                transferAmount=None,
                                                                blockNumber=transaction_data['blockheight'],
                                                                blockHash=transaction_data['blockhash'],
-                                                               blocktime=transaction_data['blocktime'],
+                                                               time=transaction_data['time'],
                                                                transactionHash=transaction_data['txid'],
                                                                blockchainReference=blockchainReference,
                                                                jsonData=json.dumps(transaction_data),
@@ -1944,7 +1945,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                        transferAmount=None,
                                                        blockNumber=transaction_data['blockheight'],
                                                        blockHash=transaction_data['blockhash'],
-                                                       blocktime=transaction_data['blocktime'],
+                                                       time=transaction_data['time'],
                                                        transactionHash=transaction_data['txid'],
                                                        blockchainReference=blockchainReference,
                                                        jsonData=json.dumps(transaction_data),
@@ -2035,7 +2036,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                     transferAmount = parsed_data['depositAmount'],
                                                     blockNumber = transaction_data['blockheight'],
                                                     blockHash = transaction_data['blockhash'],
-                                                    blocktime = transaction_data['blocktime'],
+                                                    time = transaction_data['time'],
                                                     transactionHash = transaction_data['txid'],
                                                     blockchainReference = blockchainReference,
                                                     jsonData = json.dumps(transaction_data),
@@ -2079,8 +2080,8 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             if not check_database_existence('token', {'token_name':f"{parsed_data['tokenIdentification']}"}):
                 session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
                 session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], addressBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
-                session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1, blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'], transactionHash=transaction_data['txid']))
-                add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=transaction_data['blocktime'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
+                session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1, blockNumber=transaction_data['blockheight'], time=transaction_data['time'], transactionHash=transaction_data['txid']))
+                add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=transaction_data['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
                 
                 session.commit()
                 session.close()
@@ -2116,7 +2117,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 tokendb_session.add(ActiveTable(address=inputlist[0], parentid=0, transferBalance=parsed_data['tokenAmount'], blockNumber=blockinfo['height']))
                 tokendb_session.add(TransferLogs(sourceFloAddress=inputadd, destFloAddress=outputlist[0],
                                         transferAmount=parsed_data['tokenAmount'], sourceId=0, destinationId=1,
-                                        blockNumber=transaction_data['blockheight'], time=transaction_data['blocktime'],
+                                        blockNumber=transaction_data['blockheight'], time=transaction_data['time'],
                                         transactionHash=transaction_data['txid']))
                 
                 add_transaction_history(token_name=parsed_data['tokenIdentification'], sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=parsed_data['tokenAmount'], blockNumber=transaction_data['blockheight'], blockHash=transaction_data['blockhash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
