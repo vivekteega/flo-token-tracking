@@ -37,7 +37,20 @@ class TestParsing(unittest.TestCase):
         pass
 
     def test_infinite_token_incorporation(self):
-        pass
+        text = 'create usd# as infinite-token'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'mainnet')
+        expected_result = {
+            'type': 'infiniteTokenIncorporation', 
+            'flodata': 'create usd# as infinite-token', 
+            'tokenIdentification': 'usd', 
+            'stateF': False
+            }
+        self.assertEqual(result, expected_result)
+
+        text = 'create usd# as infinite-token send'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'mainnet')
+        expected_result = {'type': 'noise'}
+        self.assertEqual(result, expected_result)
     
     def test_infinite_token_transfer(self):
         pass
