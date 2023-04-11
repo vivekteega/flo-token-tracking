@@ -297,10 +297,10 @@ def processBlock(blockindex=None, blockhash=None):
         blockhash = response['blockHash'] 
 
     blockinfo = newMultiRequest(f"block/{blockhash}")
-    pause_index = [2211699, 2211700, 2211701, 2170000]
+    pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
-        #sys.exit(0)
+        pdb.set_trace()
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
@@ -822,10 +822,11 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                 deposit_query = contract_db.query(ContractDeposits).filter(ContractDeposits.transactionHash == query.transactionHash).first()
                 depositorAddress = deposit_query.depositorAddress
                 total_deposit_amount = deposit_query.depositAmount
-                amount_participated = contract_db.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
+                amount_participated = contract_db.query(func.sum(ContractParticipants.winningAmount)).all()[0][0]
                 if amount_participated is None:
                     amount_participated = 0 
                 returnAmount = float(total_deposit_amount) - float(amount_participated)
+                
                 # Do a token transfer back to the deposit address 
                 sellingToken = contract_db.query(ContractStructure.value).filter(ContractStructure.attribute == 'selling_token').first()[0]
                 tx_block_string = f"{query.transactionHash}{blockinfo['height']}".encode('utf-8').hex()
