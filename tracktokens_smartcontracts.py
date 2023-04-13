@@ -300,7 +300,6 @@ def processBlock(blockindex=None, blockhash=None):
     pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
-        pdb.set_trace()
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
@@ -326,9 +325,12 @@ def processBlock(blockindex=None, blockhash=None):
         '8a146e7ccbb6d6eeab49cfd25da805223335c6908e506c5d68aae9184b863e1e',
         'b1a2c463988cdf881779f4bf292b9a0385b78150dccf8562ee8e4d1850ea7dd3',
         'ec6604d147d99ec41f05dec82f9c241815358015904fad37ace061d7580b178e',
-        '34b2f4a721a7759d807f99cfbd6c5c703c1673fdd12eda10ddc2f659c1bcd40e']:
+        '34b2f4a721a7759d807f99cfbd6c5c703c1673fdd12eda10ddc2f659c1bcd40e',
+        '22dc9327bcb504fedbd07741aa9f32c17cc5e34cab22579acfc5cc412a4c4187',
+        'ef4cf64c0b8f04b2c876545e6d4f558be49b740c24b31b30c62efb1517796546',
+        '22dc9327bcb504fedbd07741aa9f32c17cc5e34cab22579acfc5cc412a4c4187']:
+            print(f'Paused at transaction {transaction}')
             pass
-            
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -648,72 +650,7 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
     for query in active_contracts:
         query_time = convert_datetime_to_arrowobject(query.time)
         blocktime = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
-        if query.activity == 'contract-deposit':
-            if blocktime > query_time:
-                # find the status of the deposit 
-                # the deposit is unique
-                # find the total sum to be returned from the smart contract's participation table 
-                contract_db = create_database_session_orm('smart_contract', {'contract_name': query.contractName, 'contract_address': query.contractAddress}, ContractBase)
-                deposit_query = contract_db.query(ContractDeposits).filter(ContractDeposits.transactionHash == query.transactionHash).first()
-                depositorAddress = deposit_query.depositorAddress
-                total_deposit_amount = deposit_query.depositAmount
-                amount_participated = contract_db.query(func.sum(ContractParticipants.tokenAmount)).all()[0][0]
-                if amount_participated is None:
-                    amount_participated = 0 
-                returnAmount = float(total_deposit_amount) - float(amount_participated)
-                # Do a token transfer back to the deposit address 
-                sellingToken = contract_db.query(ContractStructure.value).filter(ContractStructure.attribute == 'selling_token').first()[0]
-                tx_block_string = f"{query.transactionHash}{blockinfo['height']}".encode('utf-8').hex()
-                parsed_data = {}
-                parsed_data['type'] = 'expired_deposit'
-                transaction_data = {}
-                #transaction_data['txid'] = pyflo.sha256(tx_block_string).hex()
-                transaction_data['txid'] = query.transactionHash
-                transaction_data['blockheight'] = blockinfo['height']
-                returnval = transferToken(sellingToken, returnAmount, query.contractAddress, depositorAddress, transaction_data=transaction_data, parsed_data=parsed_data, blockinfo=blockinfo)
-                if returnval is None:
-                    logger.critical("Something went wrong in the token transfer method while return contract deposit. THIS IS CRITICAL ERROR")
-                    return
-                else:
-                    old_depositBalance = contract_db.query(ContractDeposits.depositBalance).order_by(ContractDeposits.id.desc()).first()
-                    if old_depositBalance is None:
-                        logger.info('Something is wrong in the databases. Cannot do a deposit return without any previously available deposits in the database')
-                        return 0
-                    else:
-                        old_depositBalance = old_depositBalance[0]
-
-                    contract_db.add(ContractDeposits(
-                        depositorAddress = deposit_query.depositorAddress,
-                        depositAmount = returnAmount,
-                        depositBalance = old_depositBalance - returnAmount,
-                        expiryTime = deposit_query.expiryTime,
-                        unix_expiryTime = 0,
-                        status = 'deposit-return',
-                        transactionHash = deposit_query.transactionHash,
-                        blockNumber = blockinfo['height'],
-                        blockHash = blockinfo['hash']
-                    ))
-
-                    add_contract_transaction_history(contract_name=query.contractName, contract_address=query.contractAddress, transactionType='smartContractDepositReturn', transactionSubType=None, sourceFloAddress=query.contractAddress, destFloAddress=depositorAddress, transferAmount=returnAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=deposit_query.transactionHash, jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
-
-                    systemdb_session.add(TimeActions(
-                        time = query.time,
-                        activity = query.activity,
-                        status = 'returned',
-                        contractName = query.contractName,
-                        contractAddress = query.contractAddress,
-                        contractType = query.contractType,
-                        tokens_db = query.tokens_db,
-                        parsed_data = query.parsed_data,
-                        transactionHash = query.transactionHash,
-                        blockNumber = blockinfo['height']
-                    ))
-
-                    contract_db.commit()
-                    systemdb_session.commit()
-                    updateLatestTransaction(transaction_data, parsed_data, f"{query.contractName}-{query.contractAddress}")
-
-        elif query.activity == 'contract-time-trigger':
+        if query.activity == 'contract-time-trigger':
             contractStructure = extract_contractStructure(query.contractName, query.contractAddress)
             connection = create_database_connection('smart_contract', {'contract_name':f"{query.contractName}", 'contract_address':f"{query.contractAddress}"})
             if contractStructure['contractType'] == 'one-time-event':
@@ -819,14 +756,20 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                 # the deposit is unique
                 # find the total sum to be returned from the smart contract's participation table 
                 contract_db = create_database_session_orm('smart_contract', {'contract_name': query.contractName, 'contract_address': query.contractAddress}, ContractBase)
-                deposit_query = contract_db.query(ContractDeposits).filter(ContractDeposits.transactionHash == query.transactionHash).first()
+                
+                '''deposit_query = contract_db.query(ContractDeposits).filter(ContractDeposits.transactionHash == query.transactionHash).first()
                 depositorAddress = deposit_query.depositorAddress
                 total_deposit_amount = deposit_query.depositAmount
                 amount_participated = contract_db.query(func.sum(ContractParticipants.winningAmount)).all()[0][0]
                 if amount_participated is None:
                     amount_participated = 0 
-                returnAmount = float(total_deposit_amount) - float(amount_participated)
-                
+                returnAmount = float(total_deposit_amount) - float(amount_participated)'''
+
+                deposit_query = contract_db.query(ContractDeposits).filter(ContractDeposits.transactionHash == query.transactionHash).first()
+                deposit_last_latest_entry = contract_db.query(ContractDeposits).filter(ContractDeposits.transactionHash == query.transactionHash).order_by(ContractDeposits.id.desc()).first()
+                returnAmount = deposit_last_latest_entry.depositBalance
+                depositorAddress = deposit_last_latest_entry.depositorAddress
+
                 # Do a token transfer back to the deposit address 
                 sellingToken = contract_db.query(ContractStructure.value).filter(ContractStructure.attribute == 'selling_token').first()[0]
                 tx_block_string = f"{query.transactionHash}{blockinfo['height']}".encode('utf-8').hex()
@@ -849,18 +792,18 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                         old_depositBalance = old_depositBalance[0]
 
                     contract_db.add(ContractDeposits(
-                        depositorAddress = deposit_query.depositorAddress,
-                        depositAmount = returnAmount,
+                        depositorAddress = deposit_last_latest_entry.depositorAddress,
+                        depositAmount = -abs(returnAmount),
                         depositBalance = old_depositBalance - returnAmount,
-                        expiryTime = deposit_query.expiryTime,
+                        expiryTime = deposit_last_latest_entry.expiryTime,
                         unix_expiryTime = 0,
                         status = 'deposit-return',
-                        transactionHash = deposit_query.transactionHash,
+                        transactionHash = deposit_last_latest_entry.transactionHash,
                         blockNumber = blockinfo['height'],
                         blockHash = blockinfo['hash']
                     ))
 
-                    add_contract_transaction_history(contract_name=query.contractName, contract_address=query.contractAddress, transactionType='smartContractDepositReturn', transactionSubType=None, sourceFloAddress=query.contractAddress, destFloAddress=depositorAddress, transferAmount=returnAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=deposit_query.transactionHash, jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
+                    add_contract_transaction_history(contract_name=query.contractName, contract_address=query.contractAddress, transactionType='smartContractDepositReturn', transactionSubType=None, sourceFloAddress=query.contractAddress, destFloAddress=depositorAddress, transferAmount=returnAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=deposit_last_latest_entry.transactionHash, jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
 
                     systemdb_session.add(TimeActions(
                         time = query.time,
@@ -1285,7 +1228,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             pushData_SSEapi(f"Error | Transaction {transaction_data['txid']} rejected as it already exists in the Smart Contract db. This is unusual, please check your code")
                             return 0
 
-                        
                         # if contractAddress was passed, then check if it matches the output address of this contract
                         if 'contractAddress' in parsed_data:
                             if parsed_data['contractAddress'] != outputlist[0]:
@@ -1311,19 +1253,28 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         # Check if the swap amount is available in the deposits of the selling token 
                         # if yes do the transfers, otherwise reject the transaction 
                         # 
-                        active_contract_deposits = contract_session.query(ContractDeposits).filter(ContractDeposits.status=='active').all()
+                        '''active_contract_deposits = contract_session.query(ContractDeposits).filter(ContractDeposits.status=='active').all()
 
-                        consumed_deposit_ids = contract_session.query(ConsumedInfo.id_deposittable).all()
+                        SELECT * FROM contractdeposits WHERE id IN ( SELECT MAX(id) FROM contractdeposits GROUP BY transactionHash) AND status = 'active' AND status != 'deposit-return';'''
 
+                        '''SELECT MAX(id) FROM contractdeposits GROUP BY transactionHash'''
+                        subquery = contract_session.query(func.max(ContractDeposits.id)).group_by(ContractDeposits.transactionHash)
+                        active_contract_deposits = contract_session.query(ContractDeposits).filter(ContractDeposits.id.in_(subquery)).filter(ContractDeposits.status != 'deposit-return').filter(ContractDeposits.status != 'consumed').filter(ContractDeposits.status == 'active').all()
+
+                        # todo - what is the role of the next line? cleanup if not useful
                         available_deposits = active_contract_deposits[:]
-                        available_deposit_sum = 0
 
+                        available_deposit_sum = contract_session.query(func.max(ContractDeposits.depositBalance)).filter(ContractDeposits.id.in_(subquery)).filter(ContractDeposits.status != 'deposit-return').filter(ContractDeposits.status == 'active').all()
+                        available_deposit_sum = float(available_deposit_sum[0][0])
+
+                        '''consumed_deposit_ids = contract_session.query(ConsumedInfo.id_deposittable).all()
+                        available_deposit_sum = 0
                         for entry in active_contract_deposits:
                             if entry.id in [consumed_deposit_ids] or arrow.get(entry.unix_expiryTime)<arrow.get(blockinfo['time']):
                                 index = active_contract_deposits.index(entry)
                                 del available_deposits[index]
                             else:
-                                available_deposit_sum = available_deposit_sum + entry.depositBalance 
+                                available_deposit_sum = available_deposit_sum + entry.depositBalance'''
                         
                         if available_deposit_sum >= swapAmount:
                             # accepting token transfer from participant to smart contract address 
@@ -1361,7 +1312,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                             transactionHash= a_deposit.transactionHash,
                                                                             blockNumber= blockinfo['height'],
                                                                             blockHash= blockinfo['hash']))
-                                    
                                     # ConsumedInfoTable 
                                     contract_session.add(ConsumedInfo(  id_deposittable= a_deposit.id,
                                                                         transactionHash= a_deposit.transactionHash,
@@ -1377,34 +1327,40 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                         logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Particiaption deposit swap operation")
                                         return 0
 
-                                    contract_session.add(ContractDeposits(  depositorAddress= a_deposit.depositorAddress,
-                                                                            depositAmount= 0 - a_deposit.depositBalance,
-                                                                            status='deposit-honor',
+                                    if a_deposit.depositBalance < remaining_amount:
+                                        contract_session.add(ContractDeposits(  depositorAddress= a_deposit.depositorAddress,
+                                                                                depositAmount= 0 - a_deposit.depositBalance,
+                                                                                status='deposit-honor',
+                                                                                transactionHash= a_deposit.transactionHash,
+                                                                                blockNumber= blockinfo['height'],
+                                                                                blockHash= blockinfo['hash']))
+                                        # ConsumedInfoTable 
+                                        contract_session.add(ConsumedInfo(  id_deposittable= a_deposit.id,
                                                                             transactionHash= a_deposit.transactionHash,
-                                                                            blockNumber= blockinfo['height'],
-                                                                            blockHash= blockinfo['hash']))
+                                                                            blockNumber= blockinfo['height']))
+                                        remaining_amount = remaining_amount - a_deposit.depositBalance
                                     
-                                    # ConsumedInfoTable 
-                                    contract_session.add(ConsumedInfo(  id_deposittable= a_deposit.id,
-                                                                        transactionHash= a_deposit.transactionHash,
-                                                                        blockNumber= blockinfo['height']))
-                                    remaining_amount = remaining_amount - a_deposit.depositBalance
-
+                                    elif a_deposit.depositBalance == remaining_amount:
+                                        contract_session.add(ContractDeposits(  depositorAddress= a_deposit.depositorAddress,
+                                                                                depositAmount= 0 - a_deposit.depositBalance,
+                                                                                status='consumed',
+                                                                                transactionHash= a_deposit.transactionHash,
+                                                                                blockNumber= blockinfo['height'],
+                                                                                blockHash= blockinfo['hash']))
+                                        # ConsumedInfoTable 
+                                        contract_session.add(ConsumedInfo(  id_deposittable= a_deposit.id,
+                                                                            transactionHash= a_deposit.transactionHash,
+                                                                            blockNumber= blockinfo['height']))
+                                        remaining_amount = remaining_amount - a_deposit.depositBalance
 
                             # token transfer from the contract to participant's address 
                             returnval = transferToken(contractStructure['selling_token'], swapAmount, outputlist[0], inputlist[0], transaction_data=transaction_data, parsed_data=parsed_data, isInfiniteToken=None, blockinfo=blockinfo)
                             if returnval is None:
                                 logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Particiaption")
                                 return 0
-
+                            
                             # ContractParticipationTable 
-                            contract_session.add(ContractParticipants(  participantAddress = parsed_data['contractAddress'], 	
-                                                                        tokenAmount= parsed_data['tokenAmount'],
-                                                                        userChoice= swapPrice,
-                                                                        transactionHash= transaction_data['txid'],
-                                                                        blockNumber= blockinfo['height'],
-                                                                        blockHash= blockinfo['hash'],
-                                                                        winningAmount = swapAmount))
+                            contract_session.add(ContractParticipants(participantAddress = transaction_data['receiverAddress'], tokenAmount= parsed_data['tokenAmount'], userChoice= swapPrice, transactionHash= transaction_data['txid'], blockNumber= blockinfo['height'], blockHash= blockinfo['hash'], winningAmount = swapAmount))
 
                             add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=outputlist[0], transactionType='participation', transactionSubType='swap', sourceFloAddress=inputlist[0], destFloAddress=outputlist[0], transferAmount=swapAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
                             
