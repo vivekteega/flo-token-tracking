@@ -1270,3 +1270,4 @@ def parse_flodata(text, blockinfo, net):
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping, f"{contract_conditions['oracle_address']}")
     
     return outputreturn('noise')
+

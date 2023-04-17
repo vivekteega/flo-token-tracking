@@ -157,6 +157,21 @@ class TestParsing(unittest.TestCase):
             }
         self.assertEqual(result, expected_result)
 
+    def test_tokenswap_deposits(self):
+        text = 'Deposit 1 bioscope# to swap-rupee-bioscope-1@ its FLO address being oTzrcpLPRXsejSdYQ3XN6V4besrAPuJQrk$ with deposit-conditions: (1) expiryTime= Thu Apr 13 2023 21:45:00 GMT+0530'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {
+            'type': 'smartContractDeposit', 
+            'tokenIdentification': 'bioscope', 
+            'depositAmount': 1.0, 
+            'contractName': 'swap-rupee-bioscope-1', 
+            'flodata': 'Deposit 1 bioscope# to swap-rupee-bioscope-1@ its FLO address being oTzrcpLPRXsejSdYQ3XN6V4besrAPuJQrk$ with deposit-conditions: (1) expiryTime= Thu Apr 13 2023 21:45:00 GMT+0530', 
+            'depositConditions': {
+                'expiryTime': 'thu apr 13 2023 21:45:00 gmt+0530'
+                }, 
+            'stateF': False}
+        self.assertEqual(result, expected_result)
+
 
 if __name__ == '__main__':
     unittest.main()

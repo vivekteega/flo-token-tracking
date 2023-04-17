@@ -297,9 +297,10 @@ def processBlock(blockindex=None, blockhash=None):
         blockhash = response['blockHash'] 
 
     blockinfo = newMultiRequest(f"block/{blockhash}")
-    pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108, 2489267]
+    pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108, 2489267, 2449017]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
+    
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
     # Check if any deposits have to be returned 
@@ -704,7 +705,6 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
                         close_expire_contract(contractStructure, 'expired', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], 'query.closeDate', query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
                 
                 elif 'payeeAddress' in contractStructure: # Internal trigger contract type
-
                     tokenAmount_sum = connection.execute('SELECT IFNULL(sum(tokenAmount), 0) FROM contractparticipants').fetchall()[0][0]
                     # maximumsubscription check, if reached then trigger the contract
                     if 'maximumsubscriptionamount' in contractStructure:
@@ -1255,9 +1255,11 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
 
                         # todo - what is the role of the next line? cleanup if not useful
                         available_deposits = active_contract_deposits[:]
-
                         available_deposit_sum = contract_session.query(func.sum(ContractDeposits.depositBalance)).filter(ContractDeposits.id.in_(subquery)).filter(ContractDeposits.status != 'deposit-return').filter(ContractDeposits.status == 'active').all()
-                        available_deposit_sum = float(available_deposit_sum[0][0])
+                        if available_deposit_sum[0][0] is None:
+                            available_deposit_sum = 0
+                        else:
+                            available_deposit_sum = float(available_deposit_sum[0][0])
 
                         '''consumed_deposit_ids = contract_session.query(ConsumedInfo.id_deposittable).all()
                         available_deposit_sum = 0
@@ -1364,7 +1366,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 return 0
                             
                             # ContractParticipationTable 
-                            contract_session.add(ContractParticipants(participantAddress = transaction_data['receiverAddress'], tokenAmount= parsed_data['tokenAmount'], userChoice= swapPrice, transactionHash= transaction_data['txid'], blockNumber= blockinfo['height'], blockHash= blockinfo['hash'], winningAmount = swapAmount))
+                            contract_session.add(ContractParticipants(participantAddress = transaction_data['senderAddress'], tokenAmount= parsed_data['tokenAmount'], userChoice= swapPrice, transactionHash= transaction_data['txid'], blockNumber= blockinfo['height'], blockHash= blockinfo['hash'], winningAmount = swapAmount))
 
                             add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=outputlist[0], transactionType='participation', transactionSubType='swap', sourceFloAddress=inputlist[0], destFloAddress=outputlist[0], transferAmount=swapAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
                             
@@ -1504,7 +1506,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             # todo Rule 49 - If the contract name hasn't been taken before, check if the contract type is an authorized type by the system
             if parsed_data['contractType'] == 'one-time-event':
                 logger.info("Smart contract is of the type one-time-event")
-
                 # either userchoice or payeeAddress condition should be present. Check for it
                 if 'userchoices' not in parsed_data['contractConditions'] and 'payeeAddress' not in parsed_data['contractConditions']:
                     rejectComment = f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
