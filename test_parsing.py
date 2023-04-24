@@ -172,6 +172,15 @@ class TestParsing(unittest.TestCase):
             'stateF': False}
         self.assertEqual(result, expected_result)
 
+    def test_contract_trigger(self):
+        text = 'contract@ triggerCondition:"twitter-survives"'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {
+            'type': 'smartContractPays', 
+            'contractName': 'contract', 
+            'triggerCondition': 'twitter-survives', 
+            'stateF': False}
+        self.assertEqual(result, expected_result)
 
 if __name__ == '__main__':
     unittest.main()
