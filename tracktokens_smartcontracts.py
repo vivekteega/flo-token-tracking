@@ -271,6 +271,7 @@ def fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo):
                         # and receiver address should be contractAddress
                         try:
                             assert transaction_data['receiverAddress'] == contractStructure['contractAddress']
+                            assert transaction_data['senderAddress'] == oracle_address
                             floData = json.loads(floData)
                             # Check if the contract name and address are right
                             assert floData['price-update']['contract-name'] == contractStructure['contractName']
