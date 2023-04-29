@@ -182,5 +182,11 @@ class TestParsing(unittest.TestCase):
             'stateF': False}
         self.assertEqual(result, expected_result)
 
+    def test_deposit_invalid(self):
+        text = 'Deposit 1 bioscope# to swap-rupee-bioscope-1@ its FLO address being oTzrcpLPRXsejSdYQ3XN6V4besrAPuJQrk$ with deposit-conditions: (1) expiryTime= Tue, 25 Apr 2023 13:40:00 GMT'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'noise'}
+        self.assertEqual(result, expected_result)
+
 if __name__ == '__main__':
     unittest.main()
