@@ -886,7 +886,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     addresscounter = 0
     inputcounter = 0
     for obj in transaction_data["vout"]:
-        if obj["scriptPubKey"]["type"] == "pubkeyhash":
+        if 'type' not in obj["scriptPubKey"].keys():
+            continue
+        if obj["scriptPubKey"]["type"] in ["pubkeyhash","scripthash"]:
             addresscounter = addresscounter + 1
             if inputlist[0] == obj["scriptPubKey"]["addresses"][0]:
                 inputcounter = inputcounter + 1
