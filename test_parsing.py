@@ -112,6 +112,26 @@ class TestParsing(unittest.TestCase):
         expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) maximumsubscriptionamount=10 (5) contractAmount=0.1 end-contract-conditions', 'contractConditions': {'contractAmount': '0.1', 'minimumsubscriptionamount': '1.0', 'maximumsubscriptionamount': '10.0', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
         self.assertEqual(result, expected_result)
 
+        # With single payeeAddress with : format
+        text = "Create a smart contract of the name album-fund@ of the type one-time-event* using asset bioscope# at the FLO address ocsiFSsjek3UXKdHpBWF79qrGN6qbpxeMt$ with contract-conditions: (1) expiryTime= Thu May 04 2023 18:57:00 GMT+0530 (India Standard Time) (2) payeeAddress= objfBRUX5zn4W56aHhRn4DgH6xqeRWk6Xc:100    end-contract-conditions"
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'album-fund', 'contractAddress': 'ocsiFSsjek3UXKdHpBWF79qrGN6qbpxeMt', 'flodata': 'Create a smart contract of the name album-fund@ of the type one-time-event* using asset bioscope# at the FLO address ocsiFSsjek3UXKdHpBWF79qrGN6qbpxeMt$ with contract-conditions: (1) expiryTime= Thu May 04 2023 18:57:00 GMT+0530 (India Standard Time) (2) payeeAddress= objfBRUX5zn4W56aHhRn4DgH6xqeRWk6Xc:100 end-contract-conditions', 'contractConditions': {'payeeAddress': {'objfBRUX5zn4W56aHhRn4DgH6xqeRWk6Xc': 100.0}, 'expiryTime': 'thu may 04 2023 18:57:00 gmt+0530 (india standard time)'}}
+        self.assertEqual(result, expected_result)
+        
+        # With single payeeAddress with normal format
+        text = "Create a smart contract of the name album-fund@ of the type one-time-event* using asset bioscope# at the FLO address ocsiFSsjek3UXKdHpBWF79qrGN6qbpxeMt$ with contract-conditions: (1) expiryTime= Thu May 04 2023 18:57:00 GMT+0530 (India Standard Time) (2) payeeAddress= objfBRUX5zn4W56aHhRn4DgH6xqeRWk6Xc   end-contract-conditions"
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'album-fund', 'contractAddress': 'ocsiFSsjek3UXKdHpBWF79qrGN6qbpxeMt', 'flodata': 'Create a smart contract of the name album-fund@ of the type one-time-event* using asset bioscope# at the FLO address ocsiFSsjek3UXKdHpBWF79qrGN6qbpxeMt$ with contract-conditions: (1) expiryTime= Thu May 04 2023 18:57:00 GMT+0530 (India Standard Time) (2) payeeAddress= objfBRUX5zn4W56aHhRn4DgH6xqeRWk6Xc end-contract-conditions', 'contractConditions': {'payeeAddress': {'objfBRUX5zn4W56aHhRn4DgH6xqeRWk6Xc': 100}, 'expiryTime': 'thu may 04 2023 18:57:00 gmt+0530 (india standard time)'}}
+        self.assertEqual(result, expected_result)
+        
+        # With multiple payeeAddress with : format
+        text = "Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) maximumsubscriptionamount=10 (5) contractAmount=0.1 end-contract-conditions"
+
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'smartContractIncorporation', 'contractType': 'one-time-event', 'tokenIdentification': 'bioscope', 'contractName': 'all-crowd-fund-1', 'contractAddress': 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz', 'flodata': 'Create a smart contract of the name all-crowd-fund-1@ of the type one-time-event* using asset bioscope# at the FLO address oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz$ with contract-conditions: (1) expiryTime= Sun Nov 13 2022 19:35:00 GMT+0530 (2) payeeAddress=oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7:10:oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij:20:oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5:30:oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ:40 (3) minimumsubscriptionamount=1 (4) maximumsubscriptionamount=10 (5) contractAmount=0.1 end-contract-conditions', 'contractConditions': {'contractAmount': '0.1', 'minimumsubscriptionamount': '1.0', 'maximumsubscriptionamount': '10.0', 'payeeAddress': {'oQotdnMBAP1wZ6Kiofx54S2jNjKGiFLYD7': 10.0, 'oMunmikKvxsMSTYzShm2X5tGrYDt9EYPij': 20.0, 'oRpvvGEVKwWiMnzZ528fPhiA2cZA3HgXY5': 30.0, 'oWpVCjPDGzaiVfEFHs6QVM56V1uY1HyCJJ': 40.0}, 'expiryTime': 'sun nov 13 2022 19:35:00 gmt+0530'}}
+        self.assertEqual(result, expected_result)
+
+
     def test_onetimeevent_timetrigger_participation(self):
         text = '''send 2.2 bioscope# to all-crowd-fund@'''
         result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
@@ -181,6 +201,14 @@ class TestParsing(unittest.TestCase):
             'triggerCondition': 'twitter-survives', 
             'stateF': False}
         self.assertEqual(result, expected_result)
+
+    def test_deposit_invalid(self):
+        text = 'Deposit 1 bioscope# to swap-rupee-bioscope-1@ its FLO address being oTzrcpLPRXsejSdYQ3XN6V4besrAPuJQrk$ with deposit-conditions: (1) expiryTime= Tue, 25 Apr 2023 13:40:00 GMT'
+        result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
+        expected_result = {'type': 'noise'}
+        self.assertEqual(result, expected_result)
+
+
 
 if __name__ == '__main__':
     unittest.main()
