@@ -8,7 +8,7 @@ import sys
 import pyflo 
 import requests 
 import socketio 
-from sqlalchemy import create_engine, func 
+from sqlalchemy import create_engine, func, and_
 from sqlalchemy.orm import sessionmaker 
 import time 
 import arrow 
@@ -298,9 +298,10 @@ def processBlock(blockindex=None, blockhash=None):
         blockhash = response['blockHash'] 
 
     blockinfo = newMultiRequest(f"block/{blockhash}")
-    pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108, 2489267, 2449017]
+    pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108, 2489267, 2449017, 2509873, 2509874]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
+        pdb.set_trace()
     
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
@@ -331,8 +332,10 @@ def processBlock(blockindex=None, blockhash=None):
         '22dc9327bcb504fedbd07741aa9f32c17cc5e34cab22579acfc5cc412a4c4187',
         'ef4cf64c0b8f04b2c876545e6d4f558be49b740c24b31b30c62efb1517796546',
         '22dc9327bcb504fedbd07741aa9f32c17cc5e34cab22579acfc5cc412a4c4187',
-        '06e0a1195fc36c5d7c568aa9c004d4fcb2e5f0c3f91749ba8f5e8e93192c3bef']:
+        '06e0a1195fc36c5d7c568aa9c004d4fcb2e5f0c3f91749ba8f5e8e93192c3bef',
+        'f31d8bd57798b86787d3f831230f053ca32237d7915994a6313b5561486451c0']:
             print(f'Paused at transaction {transaction}')
+            pdb.set_trace()
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -626,11 +629,8 @@ def close_expire_contract(contractStructure, contractStatus, transactionHash, bl
 
 
 def return_active_contracts(session):
-    # find all the contracts which are active
-    contract_ids = session.query(func.max(TimeActions.id)).group_by(TimeActions.contractName, TimeActions.contractAddress).all()
-    if len(contract_ids) == 0:
-        return []
-    active_contracts = session.query(TimeActions).filter(TimeActions.id.in_(contract_ids[0]), TimeActions.status=='active', TimeActions.activity=='contract-time-trigger').all()
+
+    active_contracts = session.execute('''SELECT t1.* FROM time_actions t1 JOIN ( SELECT contractName, contractAddress, MAX(id) AS max_id FROM time_actions GROUP BY contractName, contractAddress ) t2 ON t1.contractName = t2.contractName AND t1.contractAddress = t2.contractAddress AND t1.id = t2.max_id WHERE t1.status = 'active' AND t1.activity = 'contract-time-trigger' ''').all()
     return active_contracts
 
 
@@ -653,6 +653,8 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
         query_time = convert_datetime_to_arrowobject(query.time)
         blocktime = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
         if query.activity == 'contract-time-trigger':
+            if query.contractName == 'album-fund-1' and query.contractAddress == 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz':
+                print('Breakpoint')
             contractStructure = extract_contractStructure(query.contractName, query.contractAddress)
             connection = create_database_connection('smart_contract', {'contract_name':f"{query.contractName}", 'contract_address':f"{query.contractAddress}"})
             if contractStructure['contractType'] == 'one-time-event':
