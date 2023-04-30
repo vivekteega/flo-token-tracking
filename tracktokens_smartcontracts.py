@@ -1795,6 +1795,12 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     rejected_contract_transaction_history(transaction_data, parsed_data, 'trigger', outputlist[0], inputadd, outputlist[0], rejectComment)
                     pushData_SSEapi(rejectComment)
                     return 0
+                
+                systemdb_session = create_database_session_orm('system_dbs', {'db_name':'system'}, SystemBase)
+                        
+                activecontracts_table_info = systemdb_session.query(ActiveContracts.blockHash, ActiveContracts.incorporationDate, ActiveContracts.expiryDate).filter(ActiveContracts.contractName==parsed_data['contractName'], ActiveContracts.contractAddress==outputlist[0], ActiveContracts.status=='expired').first()  
+                
+                timeactions_table_info = systemdb_session.query(TimeActions.time, TimeActions.activity, TimeActions.contractType, TimeActions.tokens_db, TimeActions.parsed_data).filter(TimeActions.contractName==parsed_data['contractName'], TimeActions.contractAddress==outputlist[0], TimeActions.status=='active').first() 
 
                 # check if minimumsubscriptionamount exists as part of the contract structure
                 if 'minimumsubscriptionamount' in contractStructure:
@@ -1841,14 +1847,9 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                parsedFloData=json.dumps(parsed_data)
                                                                ))
                         session.commit()
-                        session.close()
+                        session.close()                       
 
-                        '''connection = create_database_connection('system_dbs', {'db_name':'system'})
-                        connection.execute('update activecontracts set status="closed" where contractName="{}" and contractAddress="{}"'.format(parsed_data['contractName'], outputlist[0]))
-                        connection.execute('update time_actions set status="{}" where contractName="{}" and contractAddress="{}"'.format(parsed_data['contractName'], outputlist[0]))
-                        connection.close()'''
-                        
-                        close_expire_contract(contractStructure, 'closed', query.transactionHash, query.blockNumber, 'query.blockHash', 'query.incorporationDate', blockinfo['time'], blockinfo['time'], query.time, query.activity, query.contractName, query.contractAddress, query.contractType, query.tokens_db, query.parsed_data, blockinfo['height'])
+                        close_expire_contract(contractStructure, 'closed', transaction_data['txid'], blockinfo['height'], blockinfo['hash'], activecontracts_table_info.incorporationDate, activecontracts_table_info.expiryDate, blockinfo['time'], timeactions_table_info.time, timeactions_table_info.activity, parsed_data['contractName'], outputlist[0], timeactions_table_info.contractType, timeactions_table_info.tokens_db, timeactions_table_info.parsed_data, blockinfo['height'])
 
                         updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}")
                         pushData_SSEapi('Trigger | Minimum subscription amount not reached at contract {}-{} at transaction {}. Tokens will be refunded'.format(parsed_data['contractName'], outputlist[0], transaction_data['txid']))
@@ -1888,12 +1889,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 session.commit()
                 session.close()
 
-                '''connection = create_database_connection('system_dbs', {'db_name':'system'})
-                connection.execute('INSERT INTO activecontracts VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, contractStructure['contractName'], contractStructure['contractAddress'], 'closed', contractStructure['tokenIdentification'], contractStructure['contractType'], transaction_data['txid'], blockinfo['height'], blockinfo['hash'], 'query.incorporationDate', 'query.expiryDate', blockinfo['time']))
-                connection.execute('INSERT INTO time_actions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', (None, blockinfo['time'], 'contract-time-trigger', 'closed', contractStructure['contractName'], contractStructure['contractAddress'], contractStructure['contractType'], 'query.tokens_db', 'query.parsed_data', transaction_data['txid'], blockinfo['height']))
-                connection.close()'''
-
-                close_expire_contract(contractStructure, 'closed', transaction_data['txid'], blockinfo['height'], blockinfo['hash'], 'query.incorporationDate', 'query.expiryDate', blockinfo['time'], blockinfo['time'], 'contract-time-trigger', contractStructure['contractName'], contractStructure['contractAddress'], contractStructure['contractType'], 'query.tokens_db', 'query.parsed_data', blockinfo['height'])                
+                close_expire_contract(contractStructure, 'closed', transaction_data['txid'], blockinfo['height'], blockinfo['hash'], activecontracts_table_info.incorporationDate, activecontracts_table_info.expiryDate, blockinfo['time'], timeactions_table_info['time'], 'contract-time-trigger', contractStructure['contractName'], contractStructure['contractAddress'], contractStructure['contractType'], timeactions_table_info.tokens_db, timeactions_table_info.parsed_data, blockinfo['height'])                
 
                 updateLatestTransaction(transaction_data, parsed_data, f"{contractStructure['contractName']}-{contractStructure['contractAddress']}")
 
