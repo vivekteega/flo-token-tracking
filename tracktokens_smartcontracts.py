@@ -1217,11 +1217,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         # Check if the swap amount is available in the deposits of the selling token 
                         # if yes do the transfers, otherwise reject the transaction 
                         # 
-                        '''active_contract_deposits = contract_session.query(ContractDeposits).filter(ContractDeposits.status=='active').all()
-
-                        SELECT * FROM contractdeposits WHERE id IN ( SELECT MAX(id) FROM contractdeposits GROUP BY transactionHash) AND status = 'active' AND status != 'deposit-return';'''
-
-                        '''SELECT MAX(id) FROM contractdeposits GROUP BY transactionHash'''
                         subquery = contract_session.query(func.max(ContractDeposits.id)).group_by(ContractDeposits.transactionHash)
                         active_contract_deposits = contract_session.query(ContractDeposits).filter(ContractDeposits.id.in_(subquery)).filter(ContractDeposits.status != 'deposit-return').filter(ContractDeposits.status != 'consumed').filter(ContractDeposits.status == 'active').all()
 
@@ -1232,15 +1227,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             available_deposit_sum = 0
                         else:
                             available_deposit_sum = float(available_deposit_sum[0][0])
-
-                        '''consumed_deposit_ids = contract_session.query(ConsumedInfo.id_deposittable).all()
-                        available_deposit_sum = 0
-                        for entry in active_contract_deposits:
-                            if entry.id in [consumed_deposit_ids] or arrow.get(entry.unix_expiryTime)<arrow.get(blockinfo['time']):
-                                index = active_contract_deposits.index(entry)
-                                del available_deposits[index]
-                            else:
-                                available_deposit_sum = available_deposit_sum + entry.depositBalance'''
                         
                         if available_deposit_sum >= swapAmount:
                             # accepting token transfer from participant to smart contract address 
@@ -1475,242 +1461,253 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
     #      if it has been taken then reject the incorporation.
     elif parsed_data['type'] == 'smartContractIncorporation':
         if not check_database_existence('smart_contract', {'contract_name':f"{parsed_data['contractName']}", 'contract_address':f"{parsed_data['contractAddress']}"}):
-            # todo Rule 49 - If the contract name hasn't been taken before, check if the contract type is an authorized type by the system
-            if parsed_data['contractType'] == 'one-time-event':
-                logger.info("Smart contract is of the type one-time-event")
-                # either userchoice or payeeAddress condition should be present. Check for it
-                if 'userchoices' not in parsed_data['contractConditions'] and 'payeeAddress' not in parsed_data['contractConditions']:
-                    rejectComment = f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
-                    logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
-                    delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
-                    return 0
+            # Cannot incorporate on an address with any previous token transaction
+            systemdb_session = create_database_session_orm('system_dbs', {'db_name':'system'}, SystemBase)
+            tokenAddressMapping_of_contractAddress = systemdb_session.query(TokenAddressMapping).filter(TokenAddressMapping.tokenAddress == parsed_data['contractAddress']).all()
+            if len(tokenAddressMapping_of_contractAddress) == 0:
+                # todo Rule 49 - If the contract name hasn't been taken before, check if the contract type is an authorized type by the system
+                if parsed_data['contractType'] == 'one-time-event':
+                    logger.info("Smart contract is of the type one-time-event")
+                    # either userchoice or payeeAddress condition should be present. Check for it
+                    if 'userchoices' not in parsed_data['contractConditions'] and 'payeeAddress' not in parsed_data['contractConditions']:
+                        rejectComment = f"Either userchoice or payeeAddress should be part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                        logger.info(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                        delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
+                        return 0
 
-                # userchoice and payeeAddress conditions cannot come together. Check for it
-                if 'userchoices' in parsed_data['contractConditions'] and 'payeeAddress' in parsed_data['contractConditions']:
-                    rejectComment = f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
-                    logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
-                    delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
-                    return 0
+                    # userchoice and payeeAddress conditions cannot come together. Check for it
+                    if 'userchoices' in parsed_data['contractConditions'] and 'payeeAddress' in parsed_data['contractConditions']:
+                        rejectComment = f"Both userchoice and payeeAddress provided as part of the Contract conditions.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                        logger.info(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                        delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
+                        return 0
 
-                # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
-                #    henceforth we will not consider any flo private key initiated comment as valid from this address
-                #    Unlocking can only be done through smart contract system address
-                if parsed_data['contractAddress'] == inputadd:
-                    session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContractBase)
-                    session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
-                    session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
-                    session.add(ContractStructure(attribute='tokenIdentification', index=0, value=parsed_data['tokenIdentification']))
-                    session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
-                    session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
-                    session.add(ContractStructure(attribute='expiryTime', index=0, value=parsed_data['contractConditions']['expiryTime']))
-                    if 'contractAmount' in parsed_data['contractConditions'].keys():
-                        session.add(ContractStructure(attribute='contractAmount', index=0, value=parsed_data['contractConditions']['contractAmount']))
+                    # todo Rule 50 - Contract address mentioned in flodata field should be same as the receiver FLO address on the output side
+                    #    henceforth we will not consider any flo private key initiated comment as valid from this address
+                    #    Unlocking can only be done through smart contract system address
+                    if parsed_data['contractAddress'] == inputadd:
+                        session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContractBase)
+                        session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
+                        session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
+                        session.add(ContractStructure(attribute='tokenIdentification', index=0, value=parsed_data['tokenIdentification']))
+                        session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
+                        session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
+                        session.add(ContractStructure(attribute='expiryTime', index=0, value=parsed_data['contractConditions']['expiryTime']))
+                        if 'contractAmount' in parsed_data['contractConditions'].keys():
+                            session.add(ContractStructure(attribute='contractAmount', index=0, value=parsed_data['contractConditions']['contractAmount']))
 
-                    if 'minimumsubscriptionamount' in parsed_data['contractConditions']:
-                        session.add(ContractStructure(attribute='minimumsubscriptionamount', index=0, value=parsed_data['contractConditions']['minimumsubscriptionamount']))
-                    if 'maximumsubscriptionamount' in parsed_data['contractConditions']:
-                        session.add(ContractStructure(attribute='maximumsubscriptionamount', index=0, value=parsed_data['contractConditions']['maximumsubscriptionamount']))
-                    if 'userchoices' in parsed_data['contractConditions']:
-                        for key, value in literal_eval(parsed_data['contractConditions']['userchoices']).items():
-                            session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
+                        if 'minimumsubscriptionamount' in parsed_data['contractConditions']:
+                            session.add(ContractStructure(attribute='minimumsubscriptionamount', index=0, value=parsed_data['contractConditions']['minimumsubscriptionamount']))
+                        if 'maximumsubscriptionamount' in parsed_data['contractConditions']:
+                            session.add(ContractStructure(attribute='maximumsubscriptionamount', index=0, value=parsed_data['contractConditions']['maximumsubscriptionamount']))
+                        if 'userchoices' in parsed_data['contractConditions']:
+                            for key, value in literal_eval(parsed_data['contractConditions']['userchoices']).items():
+                                session.add(ContractStructure(attribute='exitconditions', index=key, value=value))
 
-                    if 'payeeAddress' in parsed_data['contractConditions']:
-                        # in this case, expirydate( or maximumamount) is the trigger internally. Keep a track of expiry dates
-                        session.add(ContractStructure(attribute='payeeAddress', index=0, value=json.dumps(parsed_data['contractConditions']['payeeAddress'])))
+                        if 'payeeAddress' in parsed_data['contractConditions']:
+                            # in this case, expirydate( or maximumamount) is the trigger internally. Keep a track of expiry dates
+                            session.add(ContractStructure(attribute='payeeAddress', index=0, value=json.dumps(parsed_data['contractConditions']['payeeAddress'])))
 
-                    # Store transfer as part of ContractTransactionHistory
-                    add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=parsed_data['contractAddress'], transactionType='incorporation', transactionSubType=None, sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=None, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
-                    session.commit()
-                    session.close()
+                        # Store transfer as part of ContractTransactionHistory
+                        add_contract_transaction_history(contract_name=parsed_data['contractName'], contract_address=parsed_data['contractAddress'], transactionType='incorporation', transactionSubType=None, sourceFloAddress=inputadd, destFloAddress=outputlist[0], transferAmount=None, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), parsedFloData=json.dumps(parsed_data))
+                        session.commit()
+                        session.close()
 
-                    # add Smart Contract name in token contract association
-                    blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                    session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
-                    session.add(TokenContractAssociation(tokenIdentification=parsed_data['tokenIdentification'],
-                                                         contractName=parsed_data['contractName'],
-                                                         contractAddress=parsed_data['contractAddress'],
-                                                         blockNumber=transaction_data['blockheight'],
-                                                         blockHash=transaction_data['blockhash'],
-                                                         time=transaction_data['time'],
-                                                         transactionHash=transaction_data['txid'],
-                                                         blockchainReference=blockchainReference,
-                                                         jsonData=json.dumps(transaction_data),
-                                                         transactionType=parsed_data['type'],
-                                                         parsedFloData=json.dumps(parsed_data)))
-                    session.commit()
-                    session.close()
+                        # add Smart Contract name in token contract association
+                        blockchainReference = neturl + 'tx/' + transaction_data['txid']
+                        session = create_database_session_orm('token', {'token_name': f"{parsed_data['tokenIdentification']}"}, TokenBase)
+                        session.add(TokenContractAssociation(tokenIdentification=parsed_data['tokenIdentification'],
+                                                            contractName=parsed_data['contractName'],
+                                                            contractAddress=parsed_data['contractAddress'],
+                                                            blockNumber=transaction_data['blockheight'],
+                                                            blockHash=transaction_data['blockhash'],
+                                                            time=transaction_data['time'],
+                                                            transactionHash=transaction_data['txid'],
+                                                            blockchainReference=blockchainReference,
+                                                            jsonData=json.dumps(transaction_data),
+                                                            transactionType=parsed_data['type'],
+                                                            parsedFloData=json.dumps(parsed_data)))
+                        session.commit()
+                        session.close()
 
-                    # Store smart contract address in system's db, to be ignored during future transfers
-                    session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                    session.add(ActiveContracts(contractName=parsed_data['contractName'],
-                                                contractAddress=parsed_data['contractAddress'], status='active',
-                                                tokenIdentification=parsed_data['tokenIdentification'],
-                                                contractType=parsed_data['contractType'],
+                        # Store smart contract address in system's db, to be ignored during future transfers
+                        session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+                        session.add(ActiveContracts(contractName=parsed_data['contractName'],
+                                                    contractAddress=parsed_data['contractAddress'], status='active',
+                                                    tokenIdentification=parsed_data['tokenIdentification'],
+                                                    contractType=parsed_data['contractType'],
+                                                    transactionHash=transaction_data['txid'],
+                                                    blockNumber=transaction_data['blockheight'],
+                                                    blockHash=transaction_data['blockhash'],
+                                                    incorporationDate=transaction_data['time']))
+                        session.commit()
+
+                        session.add(ContractAddressMapping(address=inputadd, addressType='incorporation',
+                                                        tokenAmount=None,
+                                                        contractName=parsed_data['contractName'],
+                                                        contractAddress=inputadd,
+                                                        transactionHash=transaction_data['txid'],
+                                                        blockNumber=transaction_data['blockheight'],
+                                                        blockHash=transaction_data['blockhash']))
+
+                        session.add(DatabaseTypeMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
+                                                        db_type='smartcontract',
+                                                        keyword='',
+                                                        object_format='',
+                                                        blockNumber=transaction_data['blockheight']))
+
+                        session.add(TimeActions(time=parsed_data['contractConditions']['expiryTime'], 
+                                                activity='contract-time-trigger',
+                                                status='active',
+                                                contractName=parsed_data['contractName'],
+                                                contractAddress=inputadd,
+                                                contractType='one-time-event-trigger',
+                                                tokens_db=json.dumps([parsed_data['tokenIdentification']]),
+                                                parsed_data=json.dumps(parsed_data),
                                                 transactionHash=transaction_data['txid'],
-                                                blockNumber=transaction_data['blockheight'],
-                                                blockHash=transaction_data['blockhash'],
-                                                incorporationDate=transaction_data['time']))
-                    session.commit()
+                                                blockNumber=transaction_data['blockheight']))
 
-                    session.add(ContractAddressMapping(address=inputadd, addressType='incorporation',
-                                                       tokenAmount=None,
-                                                       contractName=parsed_data['contractName'],
-                                                       contractAddress=inputadd,
-                                                       transactionHash=transaction_data['txid'],
-                                                       blockNumber=transaction_data['blockheight'],
-                                                       blockHash=transaction_data['blockhash']))
+                        session.commit()
+                        session.close()
 
-                    session.add(DatabaseTypeMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
-                                                    db_type='smartcontract',
-                                                    keyword='',
-                                                    object_format='',
-                                                    blockNumber=transaction_data['blockheight']))
+                        updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
 
-                    session.add(TimeActions(time=parsed_data['contractConditions']['expiryTime'], 
-                                            activity='contract-time-trigger',
-                                            status='active',
-                                            contractName=parsed_data['contractName'],
-                                            contractAddress=inputadd,
-                                            contractType='one-time-event-trigger',
-                                            tokens_db=json.dumps([parsed_data['tokenIdentification']]),
-                                            parsed_data=json.dumps(parsed_data),
-                                            transactionHash=transaction_data['txid'],
-                                            blockNumber=transaction_data['blockheight']))
+                        pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
+                        return 1
+                    else:
+                        rejectComment = f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different"
+                        logger.info(rejectComment)
+                        rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                        pushData_SSEapi(f"Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {transaction_data['txid']}")
+                        delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
+                        return 0
+            
+                if parsed_data['contractType'] == 'continuous-event' or parsed_data['contractType'] == 'continuos-event':
+                    logger.debug("Smart contract is of the type continuous-event")
+                    # Add checks to reject the creation of contract
+                    if parsed_data['contractAddress'] == inputadd:
+                        session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContractBase)
+                        session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
+                        session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
+                        session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
+                        session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
+                        
+                        if parsed_data['stateF'] != {} and parsed_data['stateF'] is not False:
+                            for key, value in parsed_data['stateF'].items():
+                                session.add(ContractStructure(attribute=f'statef-{key}', index=0, value=value))
+                        
+                        if 'subtype' in parsed_data['contractConditions']:
+                            # todo: Check if the both the tokens mentioned exist if its a token swap
+                            if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})):
+                                session.add(ContractStructure(attribute='subtype', index=0, value=parsed_data['contractConditions']['subtype']))
+                                session.add(ContractStructure(attribute='accepting_token', index=0, value=parsed_data['contractConditions']['accepting_token']))
+                                session.add(ContractStructure(attribute='selling_token', index=0, value=parsed_data['contractConditions']['selling_token']))
 
-                    session.commit()
-                    session.close()
-
-                    updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
-
-                    pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
-                    return 1
-                else:
-                    rejectComment = f"Contract Incorporation on transaction {transaction_data['txid']} rejected as contract address in Flodata and input address are different"
-                    logger.info(rejectComment)
-                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
-                    pushData_SSEapi(f"Error | Contract Incorporation rejected as address in Flodata and input address are different at transaction {transaction_data['txid']}")
-                    delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
-                    return 0
-        
-            if parsed_data['contractType'] == 'continuous-event' or parsed_data['contractType'] == 'continuos-event':
-                logger.debug("Smart contract is of the type continuous-event")
-                # Add checks to reject the creation of contract
-                if parsed_data['contractAddress'] == inputadd:
-                    session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContractBase)
-                    session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
-                    session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
-                    session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
-                    session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
-                    
-                    if parsed_data['stateF'] != {} and parsed_data['stateF'] is not False:
-                        for key, value in parsed_data['stateF'].items():
-                            session.add(ContractStructure(attribute=f'statef-{key}', index=0, value=value))
-                    
-                    if 'subtype' in parsed_data['contractConditions']:
-                        # todo: Check if the both the tokens mentioned exist if its a token swap
-                        if (parsed_data['contractConditions']['subtype'] == 'tokenswap') and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['selling_token'].split('#')[0]}"})) and (check_database_existence('token', {'token_name':f"{parsed_data['contractConditions']['accepting_token'].split('#')[0]}"})):
-                            session.add(ContractStructure(attribute='subtype', index=0, value=parsed_data['contractConditions']['subtype']))
-                            session.add(ContractStructure(attribute='accepting_token', index=0, value=parsed_data['contractConditions']['accepting_token']))
-                            session.add(ContractStructure(attribute='selling_token', index=0, value=parsed_data['contractConditions']['selling_token']))
-
-                            if parsed_data['contractConditions']['pricetype'] not in ['predetermined','statef','dynamic']:
-                                rejectComment = f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
-                                logger.info(rejectComment)
-                                rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
-                                delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
-                                return 0
-                            
-                            # determine price
-                            session.add(ContractStructure(attribute='pricetype', index=0, value=parsed_data['contractConditions']['pricetype']))
-
-                            if parsed_data['contractConditions']['pricetype'] in ['predetermined','statef']:
-                                session.add(ContractStructure(attribute='price', index=0, value=parsed_data['contractConditions']['price']))
-                            elif parsed_data['contractConditions']['pricetype'] in ['dynamic']:
-                                session.add(ContractStructure(attribute='price', index=0, value=parsed_data['contractConditions']['price']))
-                                session.add(ContractStructure(attribute='oracle_address', index=0, value=parsed_data['contractConditions']['oracle_address']))
+                                if parsed_data['contractConditions']['pricetype'] not in ['predetermined','statef','dynamic']:
+                                    rejectComment = f"pricetype is not part of accepted parameters for a continuos event contract of the type token swap.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                                    logger.info(rejectComment)
+                                    rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                                    delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
+                                    return 0
                                 
-                            # Store transfer as part of ContractTransactionHistory 
-                            blockchainReference = neturl + 'tx/' + transaction_data['txid']
-                            session.add(ContractTransactionHistory(transactionType='incorporation',
-                                                                    sourceFloAddress=inputadd,
-                                                                    destFloAddress=outputlist[0],
-                                                                    transferAmount=None,
-                                                                    blockNumber=transaction_data['blockheight'],
-                                                                    blockHash=transaction_data['blockhash'],
-                                                                    time=transaction_data['time'],
-                                                                    transactionHash=transaction_data['txid'],
-                                                                    blockchainReference=blockchainReference,
-                                                                    jsonData=json.dumps(transaction_data),
-                                                                    parsedFloData=json.dumps(parsed_data)
-                                                                    ))
-                            session.commit()
-                            session.close()
+                                # determine price
+                                session.add(ContractStructure(attribute='pricetype', index=0, value=parsed_data['contractConditions']['pricetype']))
 
-                            # add Smart Contract name in token contract association
-                            accepting_sending_tokenlist = [parsed_data['contractConditions']['accepting_token'], parsed_data['contractConditions']['selling_token']]
-                            for token_name in accepting_sending_tokenlist:
-                                token_name = token_name.split('#')[0]
-                                session = create_database_session_orm('token', {'token_name': f"{token_name}"}, TokenBase)
-                                session.add(TokenContractAssociation(tokenIdentification=token_name,
-                                                                        contractName=parsed_data['contractName'],
-                                                                        contractAddress=parsed_data['contractAddress'],
+                                if parsed_data['contractConditions']['pricetype'] in ['predetermined','statef']:
+                                    session.add(ContractStructure(attribute='price', index=0, value=parsed_data['contractConditions']['price']))
+                                elif parsed_data['contractConditions']['pricetype'] in ['dynamic']:
+                                    session.add(ContractStructure(attribute='price', index=0, value=parsed_data['contractConditions']['price']))
+                                    session.add(ContractStructure(attribute='oracle_address', index=0, value=parsed_data['contractConditions']['oracle_address']))
+                                    
+                                # Store transfer as part of ContractTransactionHistory 
+                                blockchainReference = neturl + 'tx/' + transaction_data['txid']
+                                session.add(ContractTransactionHistory(transactionType='incorporation',
+                                                                        sourceFloAddress=inputadd,
+                                                                        destFloAddress=outputlist[0],
+                                                                        transferAmount=None,
                                                                         blockNumber=transaction_data['blockheight'],
                                                                         blockHash=transaction_data['blockhash'],
                                                                         time=transaction_data['time'],
                                                                         transactionHash=transaction_data['txid'],
                                                                         blockchainReference=blockchainReference,
                                                                         jsonData=json.dumps(transaction_data),
-                                                                        transactionType=parsed_data['type'],
-                                                                        parsedFloData=json.dumps(parsed_data)))
+                                                                        parsedFloData=json.dumps(parsed_data)
+                                                                        ))
                                 session.commit()
                                 session.close()
 
-                            # Store smart contract address in system's db, to be ignored during future transfers
-                            session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
-                            session.add(ActiveContracts(contractName=parsed_data['contractName'],
-                                                        contractAddress=parsed_data['contractAddress'], status='active',
-                                                        tokenIdentification=str(accepting_sending_tokenlist),
-                                                        contractType=parsed_data['contractType'],
-                                                        transactionHash=transaction_data['txid'],
-                                                        blockNumber=transaction_data['blockheight'],
-                                                        blockHash=transaction_data['blockhash'],
-                                                        incorporationDate=transaction_data['time']))
-                            session.commit()
+                                # add Smart Contract name in token contract association
+                                accepting_sending_tokenlist = [parsed_data['contractConditions']['accepting_token'], parsed_data['contractConditions']['selling_token']]
+                                for token_name in accepting_sending_tokenlist:
+                                    token_name = token_name.split('#')[0]
+                                    session = create_database_session_orm('token', {'token_name': f"{token_name}"}, TokenBase)
+                                    session.add(TokenContractAssociation(tokenIdentification=token_name,
+                                                                            contractName=parsed_data['contractName'],
+                                                                            contractAddress=parsed_data['contractAddress'],
+                                                                            blockNumber=transaction_data['blockheight'],
+                                                                            blockHash=transaction_data['blockhash'],
+                                                                            time=transaction_data['time'],
+                                                                            transactionHash=transaction_data['txid'],
+                                                                            blockchainReference=blockchainReference,
+                                                                            jsonData=json.dumps(transaction_data),
+                                                                            transactionType=parsed_data['type'],
+                                                                            parsedFloData=json.dumps(parsed_data)))
+                                    session.commit()
+                                    session.close()
 
-                            # todo - Add a condition for rejected contract transaction on the else loop for this condition 
-                            session.add(ContractAddressMapping(address=inputadd, addressType='incorporation',
-                                                                tokenAmount=None,
-                                                                contractName=parsed_data['contractName'],
-                                                                contractAddress=inputadd,
-                                                                transactionHash=transaction_data['txid'],
-                                                                blockNumber=transaction_data['blockheight'],
-                                                                blockHash=transaction_data['blockhash']))
-                            session.add(DatabaseTypeMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
-                                                                db_type='smartcontract',
-                                                                keyword='',
-                                                                object_format='',
-                                                                blockNumber=transaction_data['blockheight']))
-                            session.commit()
-                            session.close()
-                            updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
-                            pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
-                            return 1
-                    
+                                # Store smart contract address in system's db, to be ignored during future transfers
+                                session = create_database_session_orm('system_dbs', {'db_name': "system"}, SystemBase)
+                                session.add(ActiveContracts(contractName=parsed_data['contractName'],
+                                                            contractAddress=parsed_data['contractAddress'], status='active',
+                                                            tokenIdentification=str(accepting_sending_tokenlist),
+                                                            contractType=parsed_data['contractType'],
+                                                            transactionHash=transaction_data['txid'],
+                                                            blockNumber=transaction_data['blockheight'],
+                                                            blockHash=transaction_data['blockhash'],
+                                                            incorporationDate=transaction_data['time']))
+                                session.commit()
+
+                                # todo - Add a condition for rejected contract transaction on the else loop for this condition 
+                                session.add(ContractAddressMapping(address=inputadd, addressType='incorporation',
+                                                                    tokenAmount=None,
+                                                                    contractName=parsed_data['contractName'],
+                                                                    contractAddress=inputadd,
+                                                                    transactionHash=transaction_data['txid'],
+                                                                    blockNumber=transaction_data['blockheight'],
+                                                                    blockHash=transaction_data['blockhash']))
+                                session.add(DatabaseTypeMapping(db_name=f"{parsed_data['contractName']}-{inputadd}",
+                                                                    db_type='smartcontract',
+                                                                    keyword='',
+                                                                    object_format='',
+                                                                    blockNumber=transaction_data['blockheight']))
+                                session.commit()
+                                session.close()
+                                updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{parsed_data['contractAddress']}")
+                                pushData_SSEapi('Contract | Contract incorporated at transaction {} with name {}-{}'.format(transaction_data['txid'], parsed_data['contractName'], parsed_data['contractAddress']))
+                                return 1
+                        
+                            else:
+                                rejectComment = f"One of the token for the swap does not exist.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                                logger.info(rejectComment)
+                                rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                                delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
+                                return 0
+
                         else:
-                            rejectComment = f"One of the token for the swap does not exist.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
+                            rejectComment = f"No subtype provided || mentioned tokens do not exist for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
                             logger.info(rejectComment)
                             rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
                             delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
                             return 0
-
-                    else:
-                        rejectComment = f"No subtype provided || mentioned tokens do not exist for the Contract of type continuos event.\nSmart contract incorporation on transaction {transaction_data['txid']} rejected"
-                        logger.info(rejectComment)
-                        rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
-                        delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
-                        return 0
+            
+            else:
+                rejectComment = f"Smart contract creation transaction {transaction_data['txid']} rejected as token transactions already exist on the address {parsed_data['contractAddress']}"
+                logger.info(rejectComment)
+                rejected_contract_transaction_history(transaction_data, parsed_data, 'incorporation', inputadd, inputadd, outputlist[0], rejectComment)
+                delete_contract_database({'contract_name': parsed_data['contractName'], 'contract_address': parsed_data['contractAddress']})
+                return 0
 
         else:
             rejectComment = f"Transaction {transaction_data['txid']} rejected as a Smart Contract with the name {parsed_data['contractName']} at address {parsed_data['contractAddress']} already exists"
@@ -1953,11 +1950,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
             # Push the deposit transaction into deposit database contract database 
             session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{outputlist[0]}"}, ContractBase)
             blockchainReference = neturl + 'tx/' + transaction_data['txid']
-            '''old_depositBalance = session.query(ContractDeposits.depositBalance).order_by(ContractDeposits.id.desc()).first()
-            if old_depositBalance is None:
-                old_depositBalance = 0 
-            else:
-                old_depositBalance = old_depositBalance[0]'''
             session.add(ContractDeposits(depositorAddress = inputadd, depositAmount = parsed_data['depositAmount'], depositBalance = parsed_data['depositAmount'], expiryTime = parsed_data['depositConditions']['expiryTime'], unix_expiryTime = convert_datetime_to_arrowobject(parsed_data['depositConditions']['expiryTime']).timestamp(), status = 'active', transactionHash = transaction_data['txid'], blockNumber = transaction_data['blockheight'], blockHash = transaction_data['blockhash']))
             session.add(ContractTransactionHistory(transactionType = 'smartContractDeposit',
                                                     transactionSubType = None,
