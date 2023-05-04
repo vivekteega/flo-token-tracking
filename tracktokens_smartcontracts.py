@@ -13,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 import time 
 import arrow 
 import parsing 
+import re
 from config import * 
 from datetime import datetime 
 from ast import literal_eval 
@@ -92,6 +93,63 @@ def refresh_committee_list(admin_flo_id, api_url, blocktime):
                 except:
                     continue
     return committee_list
+
+
+def find_sender_receiver(transaction_data):
+    # Create vinlist and outputlist
+    vinlist = []
+    querylist = []
+
+    #totalinputval = 0
+    #inputadd = ''
+
+    # todo Rule 40 - For each vin, find the feeding address and the fed value. Make an inputlist containing [inputaddress, n value]
+    for vin in transaction_data["vin"]:
+        vinlist.append([vin["addr"], float(vin["value"])])
+
+    totalinputval = float(transaction_data["valueIn"])
+
+    # todo Rule 41 - Check if all the addresses in a transaction on the input side are the same
+    for idx, item in enumerate(vinlist):
+        if idx == 0:
+            temp = item[0]
+            continue
+        if item[0] != temp:
+            print(f"System has found more than one address as part of vin. Transaction {transaction_data['txid']} is rejected")
+            return 0
+
+    inputlist = [vinlist[0][0], totalinputval]
+    inputadd = vinlist[0][0]
+
+    # todo Rule 42 - If the number of vout is more than 2, reject the transaction
+    if len(transaction_data["vout"]) > 2:
+        print(f"System has found more than 2 address as part of vout. Transaction {transaction_data['txid']} is rejected")
+        return 0
+
+    # todo Rule 43 - A transaction accepted by the system has two vouts, 1. The FLO address of the receiver
+    #      2. Flo address of the sender as change address.  If the vout address is change address, then the other adddress
+    #     is the recevier address
+
+    outputlist = []
+    addresscounter = 0
+    inputcounter = 0
+    for obj in transaction_data["vout"]:
+        if obj["scriptPubKey"]["type"] == "pubkeyhash":
+            addresscounter = addresscounter + 1
+            if inputlist[0] == obj["scriptPubKey"]["addresses"][0]:
+                inputcounter = inputcounter + 1
+                continue
+            outputlist.append([obj["scriptPubKey"]["addresses"][0], obj["value"]])
+
+    if addresscounter == inputcounter:
+        outputlist = [inputlist[0]]
+    elif len(outputlist) != 1:
+        print(f"Transaction's change is not coming back to the input address. Transaction {transaction_data['txid']} is rejected")
+        return 0
+    else:
+        outputlist = outputlist[0]
+
+    return inputlist[0], outputlist[0]
 
 
 def check_database_existence(type, parameters):
@@ -236,6 +294,17 @@ def convert_datetime_to_arrowobject(expiryTime):
     expirytime_object = parsing.arrow.get(parse_string, 'YYYY/M/D HH:mm:ss').replace(tzinfo=expirytime_split[5][3:])
     return expirytime_object
 
+def convert_datetime_to_arrowobject_regex(expiryTime):
+    datetime_re = re.compile(r'(\w{3}\s\w{3}\s\d{1,2}\s\d{4}\s\d{2}:\d{2}:\d{2})\s(gmt[+-]\d{4})')
+    match = datetime_re.search(expiryTime)
+    if match:
+        datetime_str = match.group(1)
+        timezone_offset = match.group(2)[3:]
+        dt = arrow.get(datetime_str, 'ddd MMM DD YYYY HH:mm:ss').replace(tzinfo=timezone_offset)
+        return dt
+    else:
+        return None
+
 
 def is_a_contract_address(floAddress):
     # check contract address mapping db if the address is present, and return True or False based on that 
@@ -271,7 +340,7 @@ def fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo):
                         # and receiver address should be contractAddress
                         try:
                             assert transaction_data['receiverAddress'] == contractStructure['contractAddress']
-                            assert transaction_data['senderAddress'] == oracle_address
+                            assert find_sender_receiver(transaction)[0] == oracle_address
                             floData = json.loads(floData)
                             # Check if the contract name and address are right
                             assert floData['price-update']['contract-name'] == contractStructure['contractName']
@@ -298,10 +367,9 @@ def processBlock(blockindex=None, blockhash=None):
         blockhash = response['blockHash'] 
 
     blockinfo = newMultiRequest(f"block/{blockhash}")
-    pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108, 2489267, 2449017, 2509873, 2509874, 2291729]
+    pause_index = [2211699, 2211700, 2211701, 2170000, 2468107, 2468108, 2489267, 2449017, 2509873, 2509874, 2291729, 2467929]
     if blockindex in pause_index:
         print(f'Paused at {blockindex}')
-        
     
     # Check smartContracts which will be triggered locally, and not by the contract committee
     #checkLocaltriggerContracts(blockinfo)
@@ -321,22 +389,13 @@ def processBlock(blockindex=None, blockhash=None):
         logger.info(f"Transaction {transaction_counter} : {transaction}")
         current_index = -1
         
-        if transaction in ['a9dedd024ee40239caf30c782abd4561c291c95fef3229e640ca8ec0dc7081d6', '2bcdd259f642cf5a901a814b5dafddec62dcdd0848732e7384ba087939c915ac', 'e9a305b20eaa3a4e6e778ec51c4137061ed8e630bdec271944760bd0b9fcc6a8', '606fcad4e73311cc441a494c7e35ad5f8c900f9107bcba3da5076ffa8e243913', '5ef8b7229956b8dceefbdc6087d17012e6555c67de06ba503e19f6f6bf563a76', '732c184d240ee173e08ab8cdbe7a2a19714fe14ae0d868a88041cff12586e9d3',
-        '11571ce7e5eed0bce30e24de89bb1ba6cc432df7b5b40bbc9f0225b98968cb47',
-        'd48590f6907976b63b4d5eac8082fe0bbed3b8a68e30de960e77619d29e32e78',
-        'ff355c3384e2568e1dd230d5c9073618b9033c7c8b20f9e8533b5837f76bc65d',
-        '8a146e7ccbb6d6eeab49cfd25da805223335c6908e506c5d68aae9184b863e1e',
-        'b1a2c463988cdf881779f4bf292b9a0385b78150dccf8562ee8e4d1850ea7dd3',
+        if transaction in ['ff355c3384e2568e1dd230d5c9073618b9033c7c8b20f9e8533b5837f76bc65d', 'dd35c592fa7ba76718c894b5b3195e1151e79c5fb91472c06f416c99c7827e6d',
+        '39ef49e0e06438bda462c794955735e7ea3ae81cb576ec5c97b528c8a257614c',
+        'c58bebd583a5b24a9d342712efb9e4b2eac33fe36d8ebe9119126c02f766986c',
         'ec6604d147d99ec41f05dec82f9c241815358015904fad37ace061d7580b178e',
-        '34b2f4a721a7759d807f99cfbd6c5c703c1673fdd12eda10ddc2f659c1bcd40e',
-        '22dc9327bcb504fedbd07741aa9f32c17cc5e34cab22579acfc5cc412a4c4187',
-        'ef4cf64c0b8f04b2c876545e6d4f558be49b740c24b31b30c62efb1517796546',
-        '22dc9327bcb504fedbd07741aa9f32c17cc5e34cab22579acfc5cc412a4c4187',
-        '06e0a1195fc36c5d7c568aa9c004d4fcb2e5f0c3f91749ba8f5e8e93192c3bef',
-        'f31d8bd57798b86787d3f831230f053ca32237d7915994a6313b5561486451c0',
-        '8eed51ae47575fd78413f9be5a7909cf2653b6fedacf093e35b592319e478b21']:
+        '39ef49e0e06438bda462c794955735e7ea3ae81cb576ec5c97b528c8a257614c',
+        'd36b744d6b9d8a694a93476dbd1134dbdc8223cf3d1a604447acb09221aa3b49']:
             print(f'Paused at transaction {transaction}')
-
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -1210,6 +1269,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 logger.warning(f"Transaction {transaction_data['txid']} rejected as the oracle addess {contractStructure['oracle_address']} is attempting to participate. Please report this to the contract owner")
                                 pushData_SSEapi(f"Transaction {transaction_data['txid']} rejected as the oracle addess {contractStructure['oracle_address']} is attempting to participate. Please report this to the contract owner")
                                 return 0
+                            
                             swapPrice = fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo)
 
                         swapAmount = float(parsed_data['tokenAmount'])/swapPrice
@@ -2095,6 +2155,7 @@ def scanBlockchain():
             logger.info("Current block height is %s" % str(current_index))
             break
     
+    pdb.set_trace()
     for blockindex in range(startblock, current_index):
         if blockindex in IGNORE_BLOCK_LIST:
             continue
