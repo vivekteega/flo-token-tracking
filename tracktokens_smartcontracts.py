@@ -2155,7 +2155,6 @@ def scanBlockchain():
             logger.info("Current block height is %s" % str(current_index))
             break
     
-    pdb.set_trace()
     for blockindex in range(startblock, current_index):
         if blockindex in IGNORE_BLOCK_LIST:
             continue
