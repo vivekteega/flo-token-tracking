@@ -137,7 +137,7 @@ def apply_rule1(*argv):
         return a
 
 
-def extract_substing_between(test_str, sub1, sub2):
+def extract_substring_between(test_str, sub1, sub2):
     # getting index of substrings
     idx1 = test_str.index(sub1)
     idx2 = test_str.index(sub2)
@@ -152,7 +152,7 @@ def extract_substing_between(test_str, sub1, sub2):
 # StateF functions 
 def isStateF(text):
     try:
-        statef_string = extract_substing_between(text, 'statef', 'end-statef').strip()
+        statef_string = extract_substring_between(text, 'statef', 'end-statef').strip()
         i=iter(statef_string.split(":"))
         statef_list = [":".join(x) for x in zip(i,i)]
         statef = {}
@@ -221,9 +221,10 @@ def outputreturn(*argv):
                 'minimumsubscriptionamount' : argv[6],
                 'maximumsubscriptionamount' : argv[7],
                 'userchoices' : argv[8],
-                'expiryTime' : argv[9]
+                'expiryTime' : argv[9],
+                'unix_expiryTime': argv[10]
             },
-            'stateF': argv[10]
+            'stateF': argv[11]
         }
         return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'one-time-event-userchoice-smartcontract-participation':
@@ -261,9 +262,10 @@ def outputreturn(*argv):
                 'minimumsubscriptionamount' : argv[6],
                 'maximumsubscriptionamount' : argv[7],
                 'payeeAddress' : argv[8],
-                'expiryTime' : argv[9]
+                'expiryTime' : argv[9],
+                'unix_expiryTime' : argv[10]
             },
-            'stateF': argv[10]
+            'stateF': argv[11]
         }
         return remove_empty_from_dict(parsed_data)
     elif argv[0] == 'continuos-event-token-swap-incorporation':
@@ -350,7 +352,7 @@ def extract_specialcharacter_words(rawstring, special_characters):
 
 def extract_contract_conditions(text, contract_type, marker=None, blocktime=None):
     try:
-        rulestext = extract_substing_between(text, 'contract-conditions', 'end-contract-conditions')
+        rulestext = extract_substring_between(text, 'contract-conditions', 'end-contract-conditions')
     except:
         return False
     if rulestext.strip()[0] == ':':
@@ -391,6 +393,7 @@ def extract_contract_conditions(text, contract_type, marker=None, blocktime=None
                         logger.info('Expirytime of the contract is earlier than the block it is incorporated in. This incorporation will be rejected ')
                         return False
                     extractedRules['expiryTime'] = expirytime
+                    extractedRules['unix_expiryTime'] = expirytime_object.timestamp()
                 except:
                     logger.info('Error parsing expiry time')
                     return False
@@ -1094,7 +1097,7 @@ def parse_flodata(text, blockinfo, net):
                     return outputreturn('noise')
 
             if 'userchoices' in contract_conditions.keys():
-                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}", stateF_mapping)
+                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}", f"{contract_conditions['unix_expiryTime']}", stateF_mapping)
             elif 'payeeAddress' in contract_conditions.keys():
                 contract_conditions['payeeAddress'] = find_word_index_fromstring(clean_text,contract_conditions['payeeAddress'])
                 # check if colon exists in the payeeAddress string
@@ -1123,13 +1126,13 @@ def parse_flodata(text, blockinfo, net):
                         return outputreturn('noise')
                     else:
                         contract_conditions['payeeAddress'] = payeeAddress_split_dictionary
-                        return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", contract_conditions['payeeAddress'], f"{contract_conditions['expiryTime']}", stateF_mapping)
+                        return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", contract_conditions['payeeAddress'], f"{contract_conditions['expiryTime']}", contract_conditions['unix_expiryTime'], stateF_mapping)
                 else:  
                     if not check_flo_address(contract_conditions['payeeAddress'], is_testnet):
                         return outputreturn('noise')
                     else:
                         contract_conditions['payeeAddress'] = {f"{contract_conditions['payeeAddress']}":100}
-                        return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", contract_conditions['payeeAddress'], f"{contract_conditions['expiryTime']}", stateF_mapping)
+                        return outputreturn('one-time-event-time-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", contract_conditions['payeeAddress'], f"{contract_conditions['expiryTime']}", contract_conditions['unix_expiryTime'], stateF_mapping)
 
     if first_classification['categorization'] == 'smart-contract-participation-deposit-C':
         # either participation of one-time-event contract or 
