@@ -397,7 +397,6 @@ def processBlock(blockindex=None, blockhash=None):
         'd36b744d6b9d8a694a93476dbd1134dbdc8223cf3d1a604447acb09221aa3b49',
         '64abe801d12224d10422de88070a76ad8c6d17b533ba5288fb0961b4cbf6adf4']:
             print(f'Paused at transaction {transaction}')
-            pdb.set_trace()
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -1557,7 +1556,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                         session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
                         session.add(ContractStructure(attribute='flodata', index=0, value=parsed_data['flodata']))
                         session.add(ContractStructure(attribute='expiryTime', index=0, value=parsed_data['contractConditions']['expiryTime']))
-                        pdb.set_trace()
                         session.add(ContractStructure(attribute='unix_expiryTime', index=0, value=parsed_data['contractConditions']['unix_expiryTime']))
                         if 'contractAmount' in parsed_data['contractConditions'].keys():
                             session.add(ContractStructure(attribute='contractAmount', index=0, value=parsed_data['contractConditions']['contractAmount']))
