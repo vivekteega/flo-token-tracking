@@ -212,6 +212,7 @@ def outputreturn(*argv):
         parsed_data = {
             'type': 'smartContractIncorporation', 
             'contractType': 'one-time-event',
+            'subtype': 'external-trigger',
             'tokenIdentification': argv[1], #hashList[0][:-1] 
             'contractName': argv[2], #atList[0][:-1]
             'contractAddress': argv[3], #contractaddress[:-1] 
@@ -253,6 +254,7 @@ def outputreturn(*argv):
         parsed_data = {
             'type': 'smartContractIncorporation', 
             'contractType': 'one-time-event',
+            'subtype': 'time-trigger',
             'tokenIdentification': argv[1], #hashList[0][:-1] 
             'contractName': argv[2], #atList[0][:-1]
             'contractAddress': argv[3], #contractaddress[:-1] 
@@ -1097,7 +1099,7 @@ def parse_flodata(text, blockinfo, net):
                     return outputreturn('noise')
 
             if 'userchoices' in contract_conditions.keys():
-                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}", f"{contract_conditions['unix_expiryTime']}", stateF_mapping)
+                return outputreturn('one-time-event-userchoice-smartcontract-incorporation',f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contractAmount}", f"{minimum_subscription_amount}" , f"{maximum_subscription_amount}", f"{contract_conditions['userchoices']}", f"{contract_conditions['expiryTime']}", contract_conditions['unix_expiryTime'], stateF_mapping)
             elif 'payeeAddress' in contract_conditions.keys():
                 contract_conditions['payeeAddress'] = find_word_index_fromstring(clean_text,contract_conditions['payeeAddress'])
                 # check if colon exists in the payeeAddress string
@@ -1264,7 +1266,6 @@ def parse_flodata(text, blockinfo, net):
                 contract_conditions['oracle_address'] = find_original_case_regex(contract_conditions['oracle_address'], clean_text) # making sure the Flo Address is in its original case
                 assert check_flo_address(contract_conditions['oracle_address'], is_testnet)
             else:
-                #assert check_flo_address(find_original_case(contract_conditions['priceType'], clean_text), is_testnet)
                 assert contract_conditions['priceType'] == 'statef'
                 contract_conditions['oracle_address'] = False
         except AssertionError: 
@@ -1273,4 +1274,3 @@ def parse_flodata(text, blockinfo, net):
         return outputreturn('continuos-event-token-swap-incorporation', f"{contract_token}", f"{contract_name}", f"{contract_address}", f"{clean_text}", f"{contract_conditions['subtype']}", f"{contract_conditions['accepting_token']}", f"{contract_conditions['selling_token']}", f"{contract_conditions['priceType']}", f"{contract_conditions['price']}", stateF_mapping, f"{contract_conditions['oracle_address']}")
     
     return outputreturn('noise')
-

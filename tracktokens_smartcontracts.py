@@ -77,7 +77,7 @@ def refresh_committee_list(admin_flo_id, api_url, blocktime):
     if response.status_code == 200:
         response = response.json()
     else:
-        print('Response from the API failed')
+        print('Response from the Flosight API failed')
         sys.exit(0)
 
     committee_list = []
@@ -716,8 +716,6 @@ def checkLocal_expiry_trigger_deposit(blockinfo):
         query_time = convert_datetime_to_arrowobject(query.time)
         blocktime = parsing.arrow.get(blockinfo['time']).to('Asia/Kolkata')
         if query.activity == 'contract-time-trigger':
-            if query.contractName == 'album-fund-1' and query.contractAddress == 'oQkpZCBcAWc945viKqFmJVbVG4aKY4V3Gz':
-                print('Breakpoint')
             contractStructure = extract_contractStructure(query.contractName, query.contractAddress)
             connection = create_database_connection('smart_contract', {'contract_name':f"{query.contractName}", 'contract_address':f"{query.contractAddress}"})
             if contractStructure['contractType'] == 'one-time-event':
@@ -1478,7 +1476,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                 pushData_SSEapi(rejectComment)
                 return 0
 
-
     # todo Rule 47 - If the parsed data type is token incorporation, then check if the name hasn't been taken already
     #  if it has been taken then reject the incorporation. Else incorporate it
     elif parsed_data['type'] == 'tokenIncorporation':
@@ -1551,6 +1548,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                     if parsed_data['contractAddress'] == inputadd:
                         session = create_database_session_orm('smart_contract', {'contract_name': f"{parsed_data['contractName']}", 'contract_address': f"{parsed_data['contractAddress']}"}, ContractBase)
                         session.add(ContractStructure(attribute='contractType', index=0, value=parsed_data['contractType']))
+                        session.add(ContractStructure(attribute='subtype', index=0, value=parsed_data['subtype']))
                         session.add(ContractStructure(attribute='contractName', index=0, value=parsed_data['contractName']))
                         session.add(ContractStructure(attribute='tokenIdentification', index=0, value=parsed_data['tokenIdentification']))
                         session.add(ContractStructure(attribute='contractAddress', index=0, value=parsed_data['contractAddress']))
