@@ -72,7 +72,7 @@ def process_committee_flodata(flodata):
         return flo_address_list
 
 
-def refresh_committee_list(admin_flo_id, api_url, blocktime):
+def refresh_committee_list_old(admin_flo_id, api_url, blocktime):
     response = requests.get(f'{api_url}api/addr/{admin_flo_id}')
     if response.status_code == 200:
         response = response.json()
@@ -92,6 +92,45 @@ def refresh_committee_list(admin_flo_id, api_url, blocktime):
                     committee_list += process_committee_flodata(tx_flodata)
                 except:
                     continue
+    return committee_list
+
+
+def refresh_committee_list(admin_flo_id, api_url, blocktime):
+    committee_list = []
+    latest_param = 'true'
+    mempool_param = 'false'
+    init_id = None
+
+    def process_transaction(transaction_info):
+        if 'isCoinBase' in transaction_info or transaction_info['vin'][0]['addr'] != admin_flo_id or transaction_info['blocktime'] > blocktime:
+            return
+        try:
+            tx_flodata = json.loads(transaction_info['floData'])
+            committee_list.extend(process_committee_flodata(tx_flodata))
+        except:
+            pass
+
+    def send_api_request(url):
+        response = requests.get(url)
+        if response.status_code == 200:
+            return response.json()
+        else:
+            print('Response from the Flosight API failed')
+            sys.exit(0)
+
+    url = f'{api_url}api/addrs/{admin_flo_id}/txs?latest=true&mempool=false'
+    response = send_api_request(url)
+    for transaction_info in response.get('items', []):
+        process_transaction(transaction_info)
+
+    while 'incomplete' in response:
+        url = f'{api_url}api/addrs/{admin_flo_id}/txs?latest={latest_param}&mempool={mempool_param}&before={init_id}'
+        response = send_api_request(url)
+        for transaction_info in response.get('items', []):
+            process_transaction(transaction_info)
+        if 'incomplete' in response:
+            init_id = response['initItem']
+
     return committee_list
 
 
@@ -316,7 +355,7 @@ def is_a_contract_address(floAddress):
         return True
 
 
-def fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo):
+def fetchDynamicSwapPrice_old(contractStructure, transaction_data, blockinfo):
     oracle_address = contractStructure['oracle_address']
     # fetch transactions from the blockchain where from address : oracle-address... to address: contract address
     # find the first contract transaction which adheres to price change format
@@ -357,6 +396,80 @@ def fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo):
     else:
         logger.info('API error fetchDynamicSwapPrice')
         sys.exit(0)
+
+
+def fetchDynamicSwapPrice(contractStructure, blockinfo):
+    oracle_address = contractStructure['oracle_address']
+    # fetch transactions from the blockchain where from address : oracle-address... to address: contract address
+    # find the first contract transaction which adheres to price change format
+    # {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
+    is_incomplete_key_present = False
+    latest_param = 'true'
+    mempool_param = 'false'
+    init_id = None
+    response = requests.get(f'{api_url}api/addrs/{oracle_address}/txs?latest={latest_param}&mempool={mempool_param}')
+    if response.status_code == 200:
+        response = response.json()
+        if len(response['items']) == 0: 
+            return float(contractStructure['price'])
+        else:
+            for transaction in response['items']:
+                floData = transaction['floData']
+                # If the blocktime of the transaction is < than the current block time
+                if transaction['time'] < blockinfo['time']:
+                    # Check if flodata is in the format we are looking for
+                    # ie. {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
+                    # and receiver address should be contractAddress
+                    try:
+                        sender_address, receiver_address = find_sender_receiver(transaction)
+                        assert sender_address == oracle_address
+                        assert receiver_address == contractStructure['contractAddress']
+                        floData = json.loads(floData)
+                        # Check if the contract name and address are right
+                        assert floData['price-update']['contract-name'] == contractStructure['contractName']
+                        assert floData['price-update']['contract-address'] == contractStructure['contractAddress']
+                        return float(floData['price-update']['price'])
+                    except:
+                        continue
+                else:
+                    continue
+    else:
+        logger.info('API error fetchDynamicSwapPrice')
+        sys.exit(0)
+    
+    # Chain query
+    if 'incomplete' in response.keys():
+        is_incomplete_key_present = True
+        init_id = response['initItem']
+
+    while(is_incomplete_key_present == True):
+        response = requests.get(f'{api_url}api/addrs/{oracle_address}/txs?latest={latest_param}&mempool={mempool_param}&before={init_id}')
+        if response.status_code == 200:
+            response = response.json()
+            for transaction in response['items']:
+                floData = transaction['floData']
+                # If the blocktime of the transaction is < than the current block time
+                if transaction['time'] < blockinfo['time']:
+                    # Check if flodata is in the format we are looking for
+                    # ie. {"price-update":{"contract-name": "", "contract-address": "", "price": 3}}
+                    # and receiver address should be contractAddress
+                    try:
+                        sender_address, receiver_address = find_sender_receiver(transaction)
+                        assert sender_address == oracle_address
+                        assert receiver_address == contractStructure['contractAddress']
+                        floData = json.loads(floData)
+                        # Check if the contract name and address are right
+                        assert floData['price-update']['contract-name'] == contractStructure['contractName']
+                        assert floData['price-update']['contract-address'] == contractStructure['contractAddress']
+                        return float(floData['price-update']['price'])
+                    except:
+                        continue
+                else:
+                    continue
+        else:
+            logger.info('API error fetchDynamicSwapPrice')
+            sys.exit(0)
+    return float(contractStructure['price'])
 
 
 def processBlock(blockindex=None, blockhash=None):
@@ -663,6 +776,7 @@ def process_minimum_subscriptionamount(contractStructure, connection, blockinfo,
 
 def process_maximum_subscriptionamount(contractStructure, connection, status, blockinfo, transaction_data, parsed_data):
     maximumsubscriptionamount = float(contractStructure['maximumsubscriptionamount'])
+    tokenAmount_sum = connection.execute('SELECT IFNULL(sum(tokenAmount), 0) FROM contractparticipants').fetchall()[0][0]
     if tokenAmount_sum >= maximumsubscriptionamount:
         # Trigger the contract
         if status == 'close':
@@ -1269,7 +1383,7 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                 pushData_SSEapi(f"Transaction {transaction_data['txid']} rejected as the oracle addess {contractStructure['oracle_address']} is attempting to participate. Please report this to the contract owner")
                                 return 0
                             
-                            swapPrice = fetchDynamicSwapPrice(contractStructure, transaction_data, blockinfo)
+                            swapPrice = fetchDynamicSwapPrice(contractStructure, blockinfo)
 
                         swapAmount = float(parsed_data['tokenAmount'])/swapPrice
 
