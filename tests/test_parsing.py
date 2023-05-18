@@ -1,4 +1,6 @@
 import unittest
+import sys
+sys.path.append("..")
 import parsing
 
 class TestParsing(unittest.TestCase):
@@ -211,7 +213,6 @@ class TestParsing(unittest.TestCase):
         result = parsing.parse_flodata(text, TestParsing.blockinfo_stub, 'testnet')
         expected_result = {'type': 'noise'}
         self.assertEqual(result, expected_result)
-
 
 
 if __name__ == '__main__':

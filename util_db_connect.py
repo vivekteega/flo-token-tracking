@@ -13,12 +13,11 @@ from sqlalchemy.orm import sessionmaker
 import time 
 import arrow 
 import parsing 
-from config import * 
 from datetime import datetime 
 from ast import literal_eval 
 from models import SystemData, TokenBase, ActiveTable, ConsumedTable, TransferLogs, TransactionHistory, TokenContractAssociation, RejectedTransactionHistory, ContractBase, ContractStructure, ContractParticipants, ContractTransactionHistory, ContractDeposits, ConsumedInfo, ContractWinners, ContinuosContractBase, ContractStructure2, ContractParticipants2, ContractDeposits2, ContractTransactionHistory2, SystemBase, ActiveContracts, SystemData, ContractAddressMapping, TokenAddressMapping, DatabaseTypeMapping, TimeActions, RejectedContractTransactionHistory, RejectedTransactionHistory, LatestCacheBase, LatestTransactions, LatestBlocks
 from statef_processing import process_stateF 
-import pdb 
+
 
 # Configuration of required variables 
 config = configparser.ConfigParser()
@@ -79,13 +78,15 @@ def create_database_session_orm(type, parameters, base):
 
 
 # Connect to system.db with a session 
-session = create_database_session_orm('system_dbs', {'db_name':'system1'}, SystemBase)
-
-
+'''session = create_database_session_orm('system_dbs', {'db_name':'system1'}, SystemBase)
 subquery_filter = session.query(TimeActions.id).group_by(TimeActions.transactionHash).having(func.count(TimeActions.transactionHash)==1).subquery()
 contract_deposits = session.query(TimeActions).filter(TimeActions.id.in_(subquery_filter), TimeActions.status=='active', TimeActions.activity=='contract-deposit').all()
 
 for contract in contract_deposits:
-    print(contract.transactionHash)
+    print(contract.transactionHash)'''
 
-#SELECT * from (SELECT * FROM time_actions GROUP BY transactionHash HAVING COUNT(transactionHash)==1)time_action WHERE status='active' AND activity='contract-deposit';
+systemdb_session = create_database_session_orm('system_dbs', {'db_name':'system'}, SystemBase)
+query = systemdb_session.query(TokenAddressMapping).filter(TokenAddressMapping.tokenAddress == 'contractAddress')
+results = query.all()
+pdb.set_trace()
+print('Lets investigate this now')
