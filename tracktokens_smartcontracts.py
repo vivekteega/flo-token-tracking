@@ -508,7 +508,7 @@ def processBlock(blockindex=None, blockhash=None):
         '39ef49e0e06438bda462c794955735e7ea3ae81cb576ec5c97b528c8a257614c',
         'd36b744d6b9d8a694a93476dbd1134dbdc8223cf3d1a604447acb09221aa3b49',
         '64abe801d12224d10422de88070a76ad8c6d17b533ba5288fb0961b4cbf6adf4',
-        'e0f728ec71bef67d17c94d66e051ae4a611ec28454443337b268e5efc0a5f12f']:
+        'ec9a852aa8a27877ba79ae99cc1359c0e04f6e7f3097521279bcc68e3883d760']:
             print(f'Paused at transaction {transaction}')
             pdb.set_trace()
 
@@ -589,16 +589,16 @@ def process_pids(entries, session, piditem):
 
 def transferToken(tokenIdentification, tokenAmount, inputAddress, outputAddress, transaction_data=None, parsed_data=None, isInfiniteToken=None, blockinfo=None):
     session = create_database_session_orm('token', {'token_name': f"{tokenIdentification}"}, TokenBase)
-
+    tokenAmount = float(tokenAmount)
     if isInfiniteToken == True:
         # Make new entry 
         receiverAddress_details = session.query(ActiveTable).filter(ActiveTable.address==outputAddress, ActiveTable.addressBalance!=None).first()
         if receiverAddress_details is None:
-            addressBalance = commentTransferAmount
+            addressBalance = tokenAmount
         else:
-            addressBalance =  receiverAddress_details.addressBalance + commentTransferAmount
+            addressBalance =  receiverAddress_details.addressBalance + tokenAmount
             receiverAddress_details.addressBalance = None
-        session.add(ActiveTable(address=outputAddress, consumedpid='1', transferBalance=float(tokenAmount), addressBalance=addressBalance, blockNumber=blockinfo['height']))
+        session.add(ActiveTable(address=outputAddress, consumedpid='1', transferBalance=tokenAmount, addressBalance=addressBalance, blockNumber=blockinfo['height']))
 
         add_transaction_history(token_name=tokenIdentification, sourceFloAddress=inputAddress, destFloAddress=outputAddress, transferAmount=tokenAmount, blockNumber=blockinfo['height'], blockHash=blockinfo['hash'], blocktime=blockinfo['time'], transactionHash=transaction_data['txid'], jsonData=json.dumps(transaction_data), transactionType=parsed_data['type'], parsedFloData=json.dumps(parsed_data))
         session.commit()
