@@ -508,9 +508,10 @@ def processBlock(blockindex=None, blockhash=None):
         '39ef49e0e06438bda462c794955735e7ea3ae81cb576ec5c97b528c8a257614c',
         'd36b744d6b9d8a694a93476dbd1134dbdc8223cf3d1a604447acb09221aa3b49',
         '64abe801d12224d10422de88070a76ad8c6d17b533ba5288fb0961b4cbf6adf4',
-        'ec9a852aa8a27877ba79ae99cc1359c0e04f6e7f3097521279bcc68e3883d760']:
+        'ec9a852aa8a27877ba79ae99cc1359c0e04f6e7f3097521279bcc68e3883d760',
+        '16e836ceb973447a5fd71e969d7d4cde23330547a855731003c7fc53c86937e4']:
             print(f'Paused at transaction {transaction}')
-            pdb.set_trace()
+        
 
         # TODO CLEANUP - REMOVE THIS WHILE SECTION, WHY IS IT HERE?
         while(current_index == -1):
@@ -1353,6 +1354,13 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                                                 blockNumber=transaction_data['blockheight'],
                                                                 blockHash=transaction_data['blockhash']))
                             session.commit()
+
+                            # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+                            connection = create_database_connection('system_dbs', {'db_name':'system'})
+                            firstInteractionCheck = connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{outputlist[0]}' AND token='{parsed_data['tokenIdentification']}'").fetchall()
+                            if len(firstInteractionCheck) == 0:
+                                connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+                            connection.close()
                             updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='ote-internaltrigger-participation')
                             return 1
 
@@ -1415,6 +1423,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             if returnval is None:
                                 logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Particiaption")
                                 return 0
+                            
+                            # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+                            systemdb_connection = create_database_connection('system_dbs', {'db_name':'system'})
+                            firstInteractionCheck = systemdb_connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{outputlist[0]}' AND token='{parsed_data['tokenIdentification']}'").fetchall()
+                            if len(firstInteractionCheck) == 0:
+                                systemdb_connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+                            systemdb_connection.close()
+
 
                             # ContractDepositTable 
                             # For each unique deposit( address, expirydate, blocknumber) there will be 2 entries added to the table 
@@ -1428,6 +1444,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     if returnval is None:
                                         logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Particiaption deposit swap operation")
                                         return 0
+
+                                    # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+                                    systemdb_connection = create_database_connection('system_dbs', {'db_name':'system'})
+                                    firstInteractionCheck = systemdb_connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{a_deposit.depositorAddress}' AND token='{contractStructure['accepting_token']}'").fetchall()
+                                    if len(firstInteractionCheck) == 0:
+                                        systemdb_connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{a_deposit.depositorAddress}', '{contractStructure['accepting_token']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+                                    systemdb_connection.close()
+
 
                                     contract_session.add(ContractDeposits(  depositorAddress= a_deposit.depositorAddress,
                                                                             depositAmount= 0 - remaining_amount,
@@ -1459,6 +1483,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     if returnval is None:
                                         logger.info("CRITICAL ERROR | Something went wrong in the token transfer method while doing local Smart Contract Particiaption deposit swap operation")
                                         return 0
+
+                                    # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+                                    systemdb_connection = create_database_connection('system_dbs', {'db_name':'system'})
+                                    firstInteractionCheck = systemdb_connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{a_deposit.depositorAddress}' AND token='{contractStructure['accepting_token']}'").fetchall()
+                                    if len(firstInteractionCheck) == 0:
+                                        systemdb_connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{a_deposit.depositorAddress}', '{contractStructure['accepting_token']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+                                    systemdb_connection.close()
+
                                     
                                     contract_session.add(ContractDeposits(  depositorAddress= a_deposit.depositorAddress,
                                                                             depositAmount= 0 - a_deposit.depositBalance,
@@ -1511,6 +1543,13 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             
                             contract_session.commit()
                             contract_session.close()
+
+                            # If this is the first interaction of the participant's address with the given token name, add it to token mapping
+                            systemdb_connection = create_database_connection('system_dbs', {'db_name':'system'})
+                            firstInteractionCheck = systemdb_connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{inputlist[0]}' AND token='{contractStructure['selling_token']}'").fetchall()
+                            if len(firstInteractionCheck) == 0:
+                                systemdb_connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputlist[0]}', '{contractStructure['selling_token']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+                            systemdb_connection.close()
 
                             updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transaction_type='tokenswap-participation')
                             pushData_SSEapi(f"Token swap successfully performed at contract {parsed_data['contractName']}-{outputlist[0]} with the transaction {transaction_data['txid']}")
@@ -2162,6 +2201,14 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                                     blockNumber=transaction_data['blockheight']))
             session.commit()
             pushData_SSEapi(f"Deposit Smart Contract Transaction {transaction_data['txid']} for the Smart contract named {parsed_data['contractName']} at the address {outputlist[0]}")
+
+            # If this is the first interaction of the outputlist's address with the given token name, add it to token mapping
+            systemdb_connection = create_database_connection('system_dbs', {'db_name':'system'})
+            firstInteractionCheck = connection.execute(f"SELECT * FROM tokenAddressMapping WHERE tokenAddress='{outputlist[0]}' AND token='{parsed_data['tokenIdentification']}'").fetchall()
+            if len(firstInteractionCheck) == 0:
+                connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{outputlist[0]}', '{parsed_data['tokenIdentification']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
+            connection.close()
+            
             updateLatestTransaction(transaction_data, parsed_data , f"{parsed_data['contractName']}-{outputlist[0]}")
             return 1
 
@@ -2372,6 +2419,7 @@ elif config['DEFAULT']['NET'] == 'testnet':
     APP_ADMIN = 'oWooGLbBELNnwq8Z5YmjoVjw8GhBGH3qSP'
 serverlist = serverlist.split(',')
 neturl = config['DEFAULT']['FLOSIGHT_NETURL']
+api_url = neturl
 tokenapi_sse_url = config['DEFAULT']['TOKENAPI_SSE_URL']
 
 IGNORE_BLOCK_LIST = config['DEFAULT']['IGNORE_BLOCK_LIST'].split(',')
