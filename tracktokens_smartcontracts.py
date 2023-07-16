@@ -534,7 +534,6 @@ def processBlock(blockindex=None, blockhash=None):
         parsed_data = parsing.parse_flodata(text, blockinfo, config['DEFAULT']['NET'])
         if parsed_data['type'] != 'noise':
             logger.info(f"Processing transaction {transaction}")
-            pdb.set_trace()
             logger.info(f"flodata {text} is parsed to {parsed_data}")
             returnval = processTransaction(transaction_data, parsed_data, blockinfo)
 
@@ -1557,7 +1556,6 @@ def processTransaction(transaction_data, parsed_data, blockinfo):
                             if len(firstInteractionCheck) == 0:
                                 systemdb_connection.execute(f"INSERT INTO tokenAddressMapping (tokenAddress, token, transactionHash, blockNumber, blockHash) VALUES ('{inputlist[0]}', '{contractStructure['selling_token']}', '{transaction_data['txid']}', '{transaction_data['blockheight']}', '{transaction_data['blockhash']}')")
                             systemdb_connection.close()
-                            pdb.set_trace()
 
                             updateLatestTransaction(transaction_data, parsed_data, f"{parsed_data['contractName']}-{outputlist[0]}", transactionType='tokenswapParticipation')
                             pushData_SSEapi(f"Token swap successfully performed at contract {parsed_data['contractName']}-{outputlist[0]} with the transaction {transaction_data['txid']}")
